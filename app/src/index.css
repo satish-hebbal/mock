@@ -1,0 +1,45 @@
+@import "tailwindcss";
+
+:root {
+  --panel: #131316;
+  --panel2: #0e0e11;
+  --line: rgba(255, 255, 255, 0.1);
+  --tx: #e8e8ea;
+  --tx2: #a1a1aa;
+  --tx3: #71717a;
+}
+
+:root.light {
+  --panel: #ffffff;
+  --panel2: #ececf1;
+  --line: rgba(0, 0, 0, 0.12);
+  --tx: #18181b;
+  --tx2: #52525b;
+  --tx3: #8e8e98;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  background: var(--panel2);
+  color: var(--tx);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* hide number input spinners for compact numeric fields */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}

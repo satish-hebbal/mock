@@ -126,14 +126,21 @@ export const GRADIENT_PRESETS: { from: string; to: string; angle: number }[] = [
   { from: '#f5f7fa', to: '#c3cfe2', angle: 135 },
 ]
 
-// ————— Overlay fonts (system-safe so exports match previews) —————
+// ————— Overlay fonts (curated Google Fonts + system fallbacks, PRD §6.7/§10.4).
+// The Google families are loaded via a stylesheet in index.html; exports wait on
+// document.fonts before rasterizing text so previews and files match. —————
 export const OVERLAY_FONTS = [
+  'Inter',
+  'Poppins',
+  'Montserrat',
+  'Roboto',
+  'DM Sans',
+  'Space Grotesk',
+  'Playfair Display',
+  'Lora',
+  'Roboto Mono',
   'system-ui',
-  'Arial',
-  'Arial Black',
   'Georgia',
-  'Times New Roman',
-  'Courier New',
   'Impact',
 ]
 

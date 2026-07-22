@@ -26,6 +26,15 @@ export async function loadProjectJSON<T>(): Promise<T | undefined> {
   return (await db()).get(PROJECT_STORE, PROJECT_KEY)
 }
 
+/** Generic JSON slot (used by the Shots editor's separate document). */
+export async function saveJSON(key: string, json: unknown) {
+  await (await db()).put(PROJECT_STORE, json, key)
+}
+
+export async function loadJSON<T>(key: string): Promise<T | undefined> {
+  return (await db()).get(PROJECT_STORE, key)
+}
+
 export async function saveAsset(id: string, blob: Blob) {
   await (await db()).put(ASSET_STORE, blob, id)
 }

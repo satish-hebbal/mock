@@ -1,0 +1,13 @@
+{
+  "name": "Mockup Studio",
+  "short_name": "Mockup Studio",
+  "description": "Cinematic 3D device mockups & motion video — 100% in your browser.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0b0b0f",
+  "theme_color": "#f97316",
+  "icons": [
+    { "src": "/frog-logo.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

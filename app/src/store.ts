@@ -8,12 +8,12 @@ import type {
   AssetMeta,
   AssetRuntime,
   BackgroundState,
-  BlurState,
   CameraState,
   DeviceInstance,
   EasingName,
   EffectsState,
   EnvironmentState,
+  GradeState,
   GroundState,
   Keyframe,
   Overlay,
@@ -23,7 +23,7 @@ import type {
 
 const uid = () => crypto.randomUUID()
 
-export type DialogKind = 'export' | 'templates' | 'shortcuts' | 'upgrade' | null
+export type DialogKind = 'export' | 'templates' | 'shortcuts' | null
 
 export interface ExportProgress {
   label: string
@@ -73,8 +73,13 @@ export function defaultProject(): ProjectDoc {
       },
       environment: { keyIntensity: 1.6, fillIntensity: 0.5, rimIntensity: 0.35, ambient: 0.65 },
       ground: { shadow: true, shadowOpacity: 0.45, shadowBlur: 2.4 },
-      blur: { style: 'none', focus: 0.16, strength: 0.35 },
-      effects: { bloom: 0, noise: 0, vignette: 0, chromatic: 0 },
+      effects: {
+        bloom: 0,
+        noise: 0,
+        vignette: 0,
+        chromatic: 0,
+        grade: { exposure: 1, contrast: 1, saturation: 1, temperature: 0 },
+      },
     },
     overlays: [],
     keyframes: [],
@@ -82,10 +87,16 @@ export function defaultProject(): ProjectDoc {
   }
 }
 
+export type AppMode = 'studio' | 'shots'
+
 interface StudioState {
   hydrated: boolean
-  pro: boolean
   theme: 'dark' | 'light'
+  mode: AppMode
+  /** left tool rail expanded to labels */
+  railOpen: boolean
+  /** right inspector panel visible */
+  panelOpen: boolean
   project: ProjectDoc
   assets: Record<string, AssetRuntime>
   selectedDeviceId: string | null
@@ -118,8 +129,8 @@ interface StudioState {
   setBackground: (patch: Partial<BackgroundState>) => void
   setEnvironment: (patch: Partial<EnvironmentState>) => void
   setGround: (patch: Partial<GroundState>) => void
-  setBlur: (patch: Partial<BlurState>) => void
   setEffects: (patch: Partial<EffectsState>) => void
+  setGrade: (patch: Partial<GradeState>) => void
 
   // devices
   addDevice: (modelId: string) => void
@@ -133,6 +144,7 @@ interface StudioState {
 
   // media
   importMedia: (file: Blob, mime?: string) => Promise<void>
+  importMediaFromURL: (url: string) => Promise<void>
 
   // overlays
   addOverlay: (o: Overlay) => void
@@ -145,6 +157,8 @@ interface StudioState {
   addKeyframeAt: (target: string, timeMs?: number) => void
   removeKeyframes: (ids: string[]) => void
   moveKeyframe: (id: string, timeMs: number) => void
+  /** shift a whole selection, keeping relative spacing and staying in range */
+  moveKeyframesBy: (ids: string[], deltaMs: number) => void
   setKeyframeEasing: (ids: string[], easing: EasingName) => void
   clearAllKeyframes: () => void
   selectKeyframes: (ids: string[]) => void
@@ -163,7 +177,9 @@ interface StudioState {
   setDialog: (d: DialogKind) => void
   setExportProgress: (p: ExportProgress | null) => void
   setTheme: (t: 'dark' | 'light') => void
-  setPro: (pro: boolean) => void
+  setMode: (m: AppMode) => void
+  setRailOpen: (v: boolean) => void
+  setPanelOpen: (v: boolean) => void
 
   hydrate: () => Promise<void>
 }
@@ -211,8 +227,10 @@ async function metaForBlob(blob: Blob, mime: string): Promise<Pick<AssetMeta, 'k
 export const useStudio = create<StudioState>()(
   immer((set, get) => ({
     hydrated: false,
-    pro: false,
     theme: 'dark',
+    mode: 'studio',
+    railOpen: localStorage.getItem('ms-rail') === 'open',
+    panelOpen: localStorage.getItem('ms-panel') !== 'closed',
     project: defaultProject(),
     assets: {},
     selectedDeviceId: null,
@@ -326,36 +344,63 @@ export const useStudio = create<StudioState>()(
               value,
               easing: 'smooth',
             })
-        } else {
-          setTargetValue(s.project.scene, target, value)
         }
+        // Always write the live scene value too — a keyframe just landed exactly
+        // at the current time, so this matches what re-sampling would produce,
+        // and it keeps the slider/viewport from freezing on tracked properties.
+        setTargetValue(s.project.scene, target, value)
       })
     },
 
     setCamera: (patch, label = 'camera') => {
       get().commit(label)
-      set((s) => Object.assign(s.project.scene.camera, patch))
+      set((s) => {
+        Object.assign(s.project.scene.camera, patch)
+        // If any of these camera properties are animated, applyAtTime() would
+        // re-sample the keyframe and clobber the value we just wrote (making
+        // presets look dead). Land a keyframe at the playhead for tracked props.
+        const t = s.timeMs
+        for (const key of Object.keys(patch)) {
+          const target = `camera.${key}`
+          const kfs = s.project.keyframes.filter((k) => k.target === target)
+          if (kfs.length === 0) continue
+          const value = (patch as Record<string, number>)[key]
+          const existing = kfs.find((k) => Math.abs(k.timeMs - t) <= 1)
+          if (existing) existing.value = value
+          else s.project.keyframes.push({ id: `kf_${uid()}`, target, timeMs: t, value, easing: 'smooth' })
+        }
+      })
     },
 
     setBackground: (patch) => {
       get().commit('background')
-      set((s) => Object.assign(s.project.scene.background, patch))
+      set((s) => {
+        Object.assign(s.project.scene.background, patch)
+      })
     },
     setEnvironment: (patch) => {
       get().commit('environment')
-      set((s) => Object.assign(s.project.scene.environment, patch))
+      set((s) => {
+        Object.assign(s.project.scene.environment, patch)
+      })
     },
     setGround: (patch) => {
       get().commit('ground')
-      set((s) => Object.assign(s.project.scene.ground, patch))
-    },
-    setBlur: (patch) => {
-      get().commit('blur')
-      set((s) => Object.assign(s.project.scene.blur, patch))
+      set((s) => {
+        Object.assign(s.project.scene.ground, patch)
+      })
     },
     setEffects: (patch) => {
       get().commit('effects')
-      set((s) => Object.assign(s.project.scene.effects, patch))
+      set((s) => {
+        Object.assign(s.project.scene.effects, patch)
+      })
+    },
+    setGrade: (patch) => {
+      get().commit('grade')
+      set((s) => {
+        Object.assign(s.project.scene.effects.grade, patch)
+      })
     },
 
     addDevice: (modelId) => {
@@ -473,6 +518,14 @@ export const useStudio = create<StudioState>()(
       })
     },
 
+    importMediaFromURL: async (url) => {
+      const res = await fetch(url, { mode: 'cors' })
+      if (!res.ok) throw new Error(`Fetch failed (${res.status})`)
+      const blob = await res.blob()
+      if (!/^(image|video)\//.test(blob.type)) throw new Error('URL is not an image or video')
+      await get().importMedia(blob, blob.type)
+    },
+
     addOverlay: (o) => {
       get().commit('add-overlay')
       set((s) => {
@@ -551,6 +604,21 @@ export const useStudio = create<StudioState>()(
       set((s) => {
         const kf = s.project.keyframes.find((k) => k.id === id)
         if (kf) kf.timeMs = Math.min(s.project.durationMs, Math.max(0, Math.round(timeMs)))
+      })
+    },
+
+    moveKeyframesBy: (ids, deltaMs) => {
+      if (ids.length === 0 || deltaMs === 0) return
+      get().commit('move-kf')
+      set((s) => {
+        const moving = s.project.keyframes.filter((k) => ids.includes(k.id))
+        if (moving.length === 0) return
+        // clamp the delta against the group's own bounds so the shape of a
+        // multi-keyframe selection survives a drag into either end
+        const lo = Math.min(...moving.map((k) => k.timeMs))
+        const hi = Math.max(...moving.map((k) => k.timeMs))
+        const d = Math.round(Math.min(s.project.durationMs - hi, Math.max(-lo, deltaMs)))
+        for (const k of moving) k.timeMs += d
       })
     },
 
@@ -642,18 +710,26 @@ export const useStudio = create<StudioState>()(
       localStorage.setItem('ms-theme', t)
       set((s) => void (s.theme = t))
     },
-    setPro: (pro) => {
-      localStorage.setItem('ms-pro', pro ? '1' : '')
-      set((s) => void (s.pro = pro))
+    setMode: (m) => {
+      localStorage.setItem('ms-mode', m)
+      set((s) => void (s.mode = m))
+    },
+    setRailOpen: (v) => {
+      localStorage.setItem('ms-rail', v ? 'open' : '')
+      set((s) => void (s.railOpen = v))
+    },
+    setPanelOpen: (v) => {
+      localStorage.setItem('ms-panel', v ? 'open' : 'closed')
+      set((s) => void (s.panelOpen = v))
     },
 
     hydrate: async () => {
       try {
         const theme = localStorage.getItem('ms-theme') === 'light' ? 'light' : 'dark'
-        const pro = localStorage.getItem('ms-pro') === '1'
+        const mode: AppMode = localStorage.getItem('ms-mode') === 'shots' ? 'shots' : 'studio'
         set((s) => {
           s.theme = theme
-          s.pro = pro
+          s.mode = mode
         })
         const saved = await loadProjectJSON<ProjectDoc & { version: number }>()
         if (saved && saved.version === 2) {
@@ -667,6 +743,11 @@ export const useStudio = create<StudioState>()(
             }
           }
           saved.assets = alive
+          // migration: backfill color grade on projects saved before §6.6 landed
+          if (!saved.scene.effects.grade)
+            saved.scene.effects.grade = { exposure: 1, contrast: 1, saturation: 1, temperature: 0 }
+          // drop the removed depth-of-field state from older saves
+          delete (saved.scene as { blur?: unknown }).blur
           for (const dev of saved.scene.devices)
             if (dev.screen.assetId && !runtime[dev.screen.assetId]) dev.screen.assetId = null
           if (saved.scene.background.imageAssetId && !runtime[saved.scene.background.imageAssetId])
@@ -744,6 +825,9 @@ export async function importProjectFile(file: File) {
   const text = await file.text()
   const parsed = JSON.parse(text) as { project: ProjectDoc; blobs: Record<string, string> }
   if (parsed.project?.version !== 2) throw new Error('Unsupported project file')
+  if (!parsed.project.scene.effects.grade)
+    parsed.project.scene.effects.grade = { exposure: 1, contrast: 1, saturation: 1, temperature: 0 }
+  delete (parsed.project.scene as { blur?: unknown }).blur
   const runtime: Record<string, AssetRuntime> = {}
   for (const meta of parsed.project.assets) {
     const dataUrl = parsed.blobs[meta.id]

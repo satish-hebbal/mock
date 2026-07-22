@@ -1,12 +1,38 @@
 import { useState } from 'react'
 import { pickMediaFile, useStudio } from '../store'
-import { ColorRow, MiniButton, Section, Segments, SliderRow } from './controls'
+import { ColorRow, Dropdown, MiniButton, Section, Segments, SliderRow, SubHeading } from './controls'
+import { Box, Camera, CircleMinus, Disc, FileImage, Image, Palette, Sparkles, Sun, Type } from 'lucide-react'
 import { CAMERA_PRESETS, GRADIENT_PRESETS, OVERLAY_FONTS } from '../lib/presets'
 import { DEVICES, DEVICE_CATEGORIES, getDevice } from '../lib/registry'
 import { MESH_PALETTES, meshGradientDataURL } from '../lib/meshGradient'
+import { ui } from '../lib/ui'
 import type { Overlay, TextOverlay } from '../types'
 
 const uid = () => crypto.randomUUID()
+
+/** Glyphs for section headers and sub-headings. */
+const secIcon = { size: 13, strokeWidth: 1.75 } as const
+const subIcon = { size: 11, strokeWidth: 1.75 } as const
+
+// Capture "my device isn't here" requests into a local backlog (PRD §6.2).
+async function requestDevice() {
+  const name = await ui.prompt({
+    title: 'Request a device',
+    label: 'Which device should we add?',
+    placeholder: 'e.g. Pixel Tablet, Galaxy Fold',
+    confirmLabel: 'Send request',
+  })
+  if (!name) return
+  try {
+    const key = 'ms-device-requests'
+    const list = JSON.parse(localStorage.getItem(key) || '[]') as string[]
+    list.push(name)
+    localStorage.setItem(key, JSON.stringify(list))
+  } catch {
+    // ignore storage failures
+  }
+  ui.toast('Thanks — your request was logged.', 'success')
+}
 
 // ————— Source —————
 
@@ -20,10 +46,25 @@ function SourceSection() {
     device?.screen.assetId ? s.assets[device.screen.assetId] : undefined,
   )
   const importMedia = useStudio((s) => s.importMedia)
+  const importMediaFromURL = useStudio((s) => s.importMediaFromURL)
   const updateDeviceScreen = useStudio((s) => s.updateDeviceScreen)
 
+  const fromURL = async () => {
+    const url = await ui.prompt({
+      title: 'Load from URL',
+      label: 'Paste an image or video URL. It must allow cross-origin requests.',
+      placeholder: 'https://…',
+    })
+    if (!url) return
+    try {
+      await importMediaFromURL(url)
+    } catch (err) {
+      ui.error(`Couldn't load that URL: ${(err as Error).message}`)
+    }
+  }
+
   return (
-    <Section title="Source">
+    <Section title="Source" icon={<FileImage {...secIcon} />}>
       <button
         onClick={() => pickMediaFile((f) => void importMedia(f))}
         className="flex w-full flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-(--line) bg-(--panel2) px-3 py-5 transition-colors hover:border-(--tx3)"
@@ -45,6 +86,10 @@ function SourceSection() {
           </>
         )}
       </button>
+      <div className="mt-1.5 flex gap-1">
+        <MiniButton onClick={() => pickMediaFile((f) => void importMedia(f))}>Upload…</MiniButton>
+        <MiniButton onClick={fromURL}>From URL…</MiniButton>
+      </div>
       {device && asset && (
         <>
           <div className="mt-2 flex gap-1">
@@ -110,7 +155,7 @@ function CameraSection() {
   )
 
   return (
-    <Section title="Camera">
+    <Section title="Camera" icon={<Camera {...secIcon} />}>
       <Segments
         options={[
           { id: 'manual', label: 'Manual' },
@@ -156,39 +201,6 @@ function CameraSection() {
   )
 }
 
-// ————— Blur / DoF —————
-
-function BlurSection() {
-  const blur = useStudio((s) => s.project.scene.blur)
-  const setBlur = useStudio((s) => s.setBlur)
-  return (
-    <Section title="Blur · Depth of Field" defaultOpen={false}>
-      <Segments
-        options={[
-          { id: 'none', label: 'Off' },
-          { id: 'lens', label: 'Lens' },
-          { id: 'tiltshift', label: 'Tilt-shift' },
-        ]}
-        value={blur.style}
-        onChange={(style) => setBlur({ style })}
-      />
-      {blur.style !== 'none' && (
-        <>
-          {blur.style === 'lens' && (
-            <SliderRow label="Focus" value={blur.focus} min={0} max={1} onChange={(focus) => setBlur({ focus })} />
-          )}
-          <SliderRow
-            label="Amount"
-            value={blur.strength}
-            min={0}
-            max={1}
-            onChange={(strength) => setBlur({ strength })}
-          />
-        </>
-      )}
-    </Section>
-  )
-}
 
 // ————— Scene (background / environment / ground) —————
 
@@ -218,7 +230,7 @@ function SceneSection() {
     }, false)
 
   return (
-    <Section title="Scene">
+    <Section title="Scene" icon={<Image {...secIcon} />}>
       <Segments
         options={[
           { id: 'solid', label: 'Solid' },
@@ -327,7 +339,7 @@ function SceneSection() {
       )}
 
       <div className="mt-3 border-t border-(--line) pt-3">
-        <p className="mb-1 text-[9px] font-semibold tracking-[0.18em] text-(--tx3) uppercase">Lighting</p>
+        <SubHeading icon={<Sun {...subIcon} />}>Lighting</SubHeading>
         <SliderRow label="Key" value={env.keyIntensity} min={0} max={4} onChange={(keyIntensity) => setEnvironment({ keyIntensity })} />
         <SliderRow label="Fill" value={env.fillIntensity} min={0} max={2} onChange={(fillIntensity) => setEnvironment({ fillIntensity })} />
         <SliderRow label="Rim" value={env.rimIntensity} min={0} max={2} onChange={(rimIntensity) => setEnvironment({ rimIntensity })} />
@@ -335,7 +347,7 @@ function SceneSection() {
       </div>
 
       <div className="mt-3 border-t border-(--line) pt-3">
-        <p className="mb-1 text-[9px] font-semibold tracking-[0.18em] text-(--tx3) uppercase">Ground shadow</p>
+        <SubHeading icon={<Disc {...subIcon} />}>Ground shadow</SubHeading>
         <div className="mb-1">
           <MiniButton active={ground.shadow} onClick={() => setGround({ shadow: !ground.shadow })}>
             {ground.shadow ? 'On' : 'Off'}
@@ -357,12 +369,31 @@ function SceneSection() {
 function EffectsSection() {
   const fx = useStudio((s) => s.project.scene.effects)
   const setEffects = useStudio((s) => s.setEffects)
+  const setGrade = useStudio((s) => s.setGrade)
+  const g = fx.grade
   return (
-    <Section title="Effects" defaultOpen={false}>
+    <Section title="Effects" icon={<Sparkles {...secIcon} />} defaultOpen={false}>
       <SliderRow label="Bloom" value={fx.bloom} min={0} max={1} onChange={(bloom) => setEffects({ bloom })} />
       <SliderRow label="Grain" value={fx.noise} min={0} max={1} onChange={(noise) => setEffects({ noise })} />
       <SliderRow label="Vignette" value={fx.vignette} min={0} max={1} onChange={(vignette) => setEffects({ vignette })} />
       <SliderRow label="Fringe" value={fx.chromatic} min={0} max={1} onChange={(chromatic) => setEffects({ chromatic })} hint="Chromatic aberration" />
+
+      <div className="mt-3 border-t border-(--line) pt-3">
+        <div className="mb-1 flex items-center justify-between">
+          <p className="flex items-center gap-1.5 text-[10px] text-(--tx2)">
+            <Palette {...subIcon} /> Color grade
+          </p>
+          <MiniButton
+            onClick={() => setGrade({ exposure: 1, contrast: 1, saturation: 1, temperature: 0 })}
+          >
+            Reset
+          </MiniButton>
+        </div>
+        <SliderRow label="Exposure" value={g.exposure} min={0.4} max={1.8} onChange={(exposure) => setGrade({ exposure })} />
+        <SliderRow label="Contrast" value={g.contrast} min={0.5} max={1.8} onChange={(contrast) => setGrade({ contrast })} />
+        <SliderRow label="Saturate" value={g.saturation} min={0} max={2} onChange={(saturation) => setGrade({ saturation })} />
+        <SliderRow label="Temp" value={g.temperature} min={-1} max={1} onChange={(temperature) => setGrade({ temperature })} hint="Warm ↔ cool" />
+      </div>
     </Section>
   )
 }
@@ -372,7 +403,6 @@ function EffectsSection() {
 function DevicesSection() {
   const devices = useStudio((s) => s.project.scene.devices)
   const selectedId = useStudio((s) => s.selectedDeviceId)
-  const pro = useStudio((s) => s.pro)
   const st = useStudio.getState
   const [adding, setAdding] = useState(false)
 
@@ -380,7 +410,7 @@ function DevicesSection() {
   const spec = selected ? getDevice(selected.modelId) : null
 
   return (
-    <Section title="3D Devices">
+    <Section title="3D Devices" icon={<Box {...secIcon} />}>
       <div className="mb-2 flex flex-col gap-1">
         {devices.map((d, i) => {
           const dSpec = getDevice(d.modelId)
@@ -388,7 +418,7 @@ function DevicesSection() {
             <div
               key={d.id}
               className={`flex cursor-pointer items-center justify-between rounded border px-2 py-1.5 ${
-                d.id === selected?.id ? 'border-orange-500/60 bg-orange-600/10' : 'border-(--line)'
+                d.id === selected?.id ? 'border-(--line2) bg-(--panel3)' : 'border-(--line)'
               }`}
               onClick={() => st().selectDevice(d.id)}
             >
@@ -408,14 +438,15 @@ function DevicesSection() {
                 </button>
                 {devices.length > 1 && (
                   <button
-                    title="Delete"
-                    className="text-[11px] text-(--tx3) hover:text-red-400"
+                    title="Remove device"
+                    aria-label="Remove device"
+                    className="text-(--tx3) hover:text-(--danger)"
                     onClick={(e) => {
                       e.stopPropagation()
                       st().removeDevice(d.id)
                     }}
                   >
-                    ✕
+                    <CircleMinus size={13} strokeWidth={1.75} />
                   </button>
                 )}
               </span>
@@ -439,6 +470,9 @@ function DevicesSection() {
 
       {adding && (
         <div className="mb-3 max-h-56 overflow-y-auto rounded border border-(--line) p-2">
+          <div className="mb-2 flex justify-end">
+            <MiniButton onClick={requestDevice}>＋ Request a device</MiniButton>
+          </div>
           {DEVICE_CATEGORIES.map((cat) => {
             const list = DEVICES.filter((d) => d.category === cat)
             if (list.length === 0) return null
@@ -450,16 +484,11 @@ function DevicesSection() {
                     <MiniButton
                       key={d.id}
                       onClick={() => {
-                        if (d.pro && !pro) {
-                          st().setDialog('upgrade')
-                          return
-                        }
                         st().addDevice(d.id)
                         setAdding(false)
                       }}
                     >
                       {d.name}
-                      {d.pro && !pro ? ' ◆' : ''}
                     </MiniButton>
                   ))}
                 </div>
@@ -482,7 +511,7 @@ function DevicesSection() {
                   title={c.name}
                   onClick={() => st().updateDevice(selected.id, { colorVariant: c.id })}
                   className={`h-6 w-6 rounded-full border-2 transition-transform hover:scale-110 ${
-                    selected.colorVariant === c.id ? 'border-orange-500' : 'border-(--line)'
+                    selected.colorVariant === c.id ? 'border-(--tx)' : 'border-(--line)'
                   }`}
                   style={{ background: c.value }}
                 />
@@ -603,7 +632,7 @@ function OverlaysSection() {
     }, false)
 
   return (
-    <Section title="Text · Logo · Shapes" defaultOpen={false}>
+    <Section title="Text · Logo · Shapes" icon={<Type {...secIcon} />} defaultOpen={false}>
       <div className="mb-2 flex gap-1">
         <MiniButton onClick={addText}>+ Text</MiniButton>
         <MiniButton onClick={addShape}>+ Shape</MiniButton>
@@ -616,20 +645,22 @@ function OverlaysSection() {
               key={o.id}
               onClick={() => st().selectOverlay(o.id)}
               className={`flex cursor-pointer items-center justify-between rounded border px-2 py-1 ${
-                o.id === selectedId ? 'border-orange-500/60 bg-orange-600/10' : 'border-(--line)'
+                o.id === selectedId ? 'border-(--line2) bg-(--panel3)' : 'border-(--line)'
               }`}
             >
               <span className="max-w-40 truncate text-[11px] text-(--tx)">
                 {o.type === 'text' ? `T · ${o.text}` : o.type === 'shape' ? `▢ · ${o.shape}` : '🖼 · logo'}
               </span>
               <button
-                className="text-[11px] text-(--tx3) hover:text-red-400"
+                title="Remove layer"
+                aria-label="Remove layer"
+                className="text-(--tx3) hover:text-(--danger)"
                 onClick={(e) => {
                   e.stopPropagation()
                   st().removeOverlay(o.id)
                 }}
               >
-                ✕
+                <CircleMinus size={13} strokeWidth={1.75} />
               </button>
             </div>
           ))}
@@ -646,28 +677,20 @@ function OverlaysSection() {
                 className="mb-1 w-full rounded border border-(--line) bg-transparent px-2 py-1 text-[12px] text-(--tx)"
               />
               <div className="mb-1 flex items-center gap-2">
-                <select
+                <Dropdown
+                  className="flex-1"
                   value={selected.font}
-                  onChange={(e) => st().updateOverlay(selected.id, { font: e.target.value })}
-                  className="flex-1 rounded border border-(--line) bg-(--panel) px-1 py-1 text-[11px] text-(--tx)"
-                >
-                  {OVERLAY_FONTS.map((f) => (
-                    <option key={f} value={f}>
-                      {f}
-                    </option>
-                  ))}
-                </select>
-                <select
+                  onChange={(font) => st().updateOverlay(selected.id, { font })}
+                  options={OVERLAY_FONTS.map((f) => ({ value: f, label: f }))}
+                />
+                <Dropdown
+                  className="w-20"
+                  align="right"
+                  title="Font weight"
                   value={selected.weight}
-                  onChange={(e) => st().updateOverlay(selected.id, { weight: Number(e.target.value) })}
-                  className="rounded border border-(--line) bg-(--panel) px-1 py-1 text-[11px] text-(--tx)"
-                >
-                  {[400, 500, 600, 700, 800, 900].map((w) => (
-                    <option key={w} value={w}>
-                      {w}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(weight) => st().updateOverlay(selected.id, { weight })}
+                  options={[400, 500, 600, 700, 800, 900].map((w) => ({ value: w, label: String(w) }))}
+                />
               </div>
               <SliderRow
                 label="Size"
@@ -732,14 +755,13 @@ function OverlaysSection() {
 
 export function Inspector() {
   return (
-    <aside className="flex w-76 shrink-0 flex-col overflow-y-auto border-l border-(--line) bg-(--panel)">
+    <>
       <SourceSection />
       <CameraSection />
-      <BlurSection />
       <SceneSection />
       <EffectsSection />
       <DevicesSection />
       <OverlaysSection />
-    </aside>
+    </>
   )
 }

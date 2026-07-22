@@ -53,7 +53,7 @@ export function OverlayLayer({ width, height }: { width: number; height: number 
           <div
             key={o.id}
             style={base}
-            className={`pointer-events-auto select-none ${selected ? 'ring-1 ring-orange-500/80' : ''}`}
+            className={`pointer-events-auto select-none ${selected ? 'ring-1 ring-white/70' : ''}`}
             onPointerDown={(e) => onPointerDown(e, o)}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}

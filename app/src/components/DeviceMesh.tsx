@@ -125,14 +125,29 @@ function dimsFor(spec: DeviceSpec, orientation: 'portrait' | 'landscape'): Dims 
         bevel: 0.012,
       }
     }
+    case 'tv': {
+      const width = 4.0
+      return {
+        screenW: width,
+        screenH: width / aspect,
+        screenR: 0.015,
+        bodyW: width + 0.08,
+        bodyH: width / aspect + 0.08,
+        bodyR: 0.03,
+        bodyD: 0.06,
+        bevel: 0.008,
+      }
+    }
     case 'watch': {
+      // round face (aspect ~1) gets a fully circular screen/body radius
+      const round = Math.abs(aspect - 1) < 0.05
       return {
         screenW: 0.62,
         screenH: 0.62 / aspect,
-        screenR: 0.2,
+        screenR: round ? 0.31 : 0.2,
         bodyW: 0.72,
         bodyH: 0.62 / aspect + 0.1,
-        bodyR: 0.26,
+        bodyR: round ? 0.36 : 0.26,
         bodyD: 0.1,
         bevel: 0.018,
       }
@@ -321,7 +336,10 @@ export function DeviceMesh({ device }: { device: DeviceInstance }) {
     [dims.screenW, dims.screenH, dims.screenR],
   )
 
-  const screenZ = dims.bodyD / 2 + dims.bevel + 0.002
+  // Seat the screen flush on the body's flat front face (just proud of it to
+  // avoid z-fighting) so the frame's beveled edge wraps around it like a real
+  // device. Floating it in front of the bevel opens a visible gap at steep tilt.
+  const screenZ = dims.bodyD / 2 + 0.001
 
   const chromeTex = useMemo(
     () => (spec.kind === 'browser' ? browserChromeTexture(spec.id.includes('dark')) : null),
@@ -389,6 +407,27 @@ export function DeviceMesh({ device }: { device: DeviceInstance }) {
           </mesh>
           <mesh position={[0, -1.27, 0.12]} rotation-x={-Math.PI / 2}>
             <cylinderGeometry args={[0.42, 0.42, 0.03, 32]} />
+            {bodyMat}
+          </mesh>
+        </group>
+      )
+    }
+    case 'tv': {
+      return (
+        <group ref={setGroup} onPointerDown={onPick}>
+          <mesh geometry={body ?? undefined} position-y={0.35}>
+            {bodyMat}
+          </mesh>
+          <mesh geometry={screen} position={[0, 0.35, screenZ]}>
+            {screenMat}
+          </mesh>
+          {/* pedestal stand */}
+          <mesh position={[0, dims.bodyH / -2 + 0.35 - 0.5, -0.04]}>
+            <boxGeometry args={[0.5, 0.5, 0.08]} />
+            {bodyMat}
+          </mesh>
+          <mesh position={[0, dims.bodyH / -2 + 0.35 - 0.75, 0.16]} rotation-x={-Math.PI / 2}>
+            <boxGeometry args={[1.5, 0.5, 0.04]} />
             {bodyMat}
           </mesh>
         </group>

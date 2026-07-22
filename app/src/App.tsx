@@ -1,6 +1,9 @@
 import { useEffect } from 'react'
-import { pickMediaFile, useStudio } from './store'
-import { TopBar } from './components/TopBar'
+import { exportProjectFile, importProjectFile, pickMediaFile, useStudio } from './store'
+import { useShots } from './shots/store'
+import { ShotsEditor } from './shots/ShotsEditor'
+import { LeftRail } from './components/LeftRail'
+import { RightPanel } from './components/RightPanel'
 import { Inspector } from './components/Inspector'
 import { Viewport } from './components/Viewport'
 import { Timeline } from './components/Timeline'
@@ -9,8 +12,8 @@ import {
   ExportProgressOverlay,
   ShortcutsDialog,
   TemplatesDialog,
-  UpgradeDialog,
 } from './components/dialogs'
+import { UILayer } from './components/ui'
 
 /** rAF playback driver (PRD §5.4). */
 function usePlayback() {
@@ -40,39 +43,187 @@ function usePlayback() {
   }, [playing])
 }
 
+/** Open a .mockup.json from disk (Ctrl+O). */
+function pickProjectFile() {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = 'application/json,.json'
+  input.onchange = () => {
+    const f = input.files?.[0]
+    if (f) void importProjectFile(f)
+  }
+  input.click()
+}
+
 function useGlobalShortcuts() {
   useEffect(() => {
     const isTyping = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement
       return t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable
     }
-    const onKey = (e: KeyboardEvent) => {
+
+    /** Shortcuts that mean the same thing in every mode. Returns true if handled. */
+    const handleGlobal = (e: KeyboardEvent): boolean => {
       const s = useStudio.getState()
-      if (isTyping(e)) return
-      if (e.code === 'Space') {
+      const mod = e.ctrlKey || e.metaKey
+      const key = e.key.toLowerCase()
+
+      // Alt, not Ctrl: Ctrl+1/2 are browser tab switches and can't be cancelled
+      if (e.altKey && (key === '1' || key === '2')) {
+        s.setMode(key === '1' ? 'studio' : 'shots')
+        return true
+      }
+      if (key === '/' || key === '?') {
+        s.setDialog(s.dialog === 'shortcuts' ? null : 'shortcuts')
+        return true
+      }
+      if (!mod && key === '[') {
+        s.setRailOpen(!s.railOpen)
+        return true
+      }
+      if (!mod && key === ']') {
+        s.setPanelOpen(!s.panelOpen)
+        return true
+      }
+      if (!mod && e.shiftKey && key === 'd') {
+        s.setTheme(s.theme === 'dark' ? 'light' : 'dark')
+        return true
+      }
+      return false
+    }
+
+    const handleShots = (e: KeyboardEvent) => {
+      const sh = useShots.getState()
+      const mod = e.ctrlKey || e.metaKey
+      const key = e.key.toLowerCase()
+      const img = sh.doc.images.find((i) => i.id === sh.doc.selectedId)
+      const step = e.shiftKey ? 0.05 : 0.01
+
+      if (mod && key === 'z') {
         e.preventDefault()
-        s.setPlaying(!s.playing)
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        if (e.shiftKey) sh.redo()
+        else sh.undo()
+      } else if (mod && key === 'y') {
+        e.preventDefault()
+        sh.redo()
+      } else if (mod) {
+        return
+      } else if (key === 'e') {
+        sh.setDialog(sh.dialog === 'export' ? null : 'export')
+      } else if (e.key === 'Escape') {
+        sh.setDialog(null)
+      } else if (key >= '1' && key <= '5') {
+        const target = sh.doc.images[Number(key) - 1]
+        if (target) sh.selectImage(target.id)
+      } else if (key === 'u') {
+        pickMediaFile((f) => void sh.importMedia(f))
+      } else if (key === 'r') {
+        sh.randomizeBackground()
+      } else if (key === 'm') {
+        sh.applyMagicBackground(Math.floor(Math.random() * 4))
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        sh.removeImage()
+      } else if (img && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        e.preventDefault()
+        sh.setImage({ offsetX: img.offsetX + (e.key === 'ArrowRight' ? step : -step) })
+      } else if (img && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+        e.preventDefault()
+        sh.setImage({ offsetY: img.offsetY + (e.key === 'ArrowDown' ? step : -step) })
+      } else if (img && (e.key === '+' || e.key === '=' || e.key === '-')) {
+        sh.setImage({ scale: img.scale + (e.key === '-' ? -0.05 : 0.05) })
+      } else if (img && (e.key === ',' || e.key === '.')) {
+        sh.setImage({ rotate: img.rotate + (e.key === ',' ? -1 : 1) })
+      }
+    }
+
+    const handleStudio = (e: KeyboardEvent) => {
+      const s = useStudio.getState()
+      const mod = e.ctrlKey || e.metaKey
+      const key = e.key.toLowerCase()
+      const frame = 1000 / s.project.fps
+      const hasKfSelection = s.selectedKeyframeIds.length > 0
+
+      if (mod && key === 'z') {
         e.preventDefault()
         if (e.shiftKey) s.redo()
         else s.undo()
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+      } else if (mod && key === 'y') {
         e.preventDefault()
         s.redo()
+      } else if (mod && key === 'a') {
+        e.preventDefault()
+        s.selectKeyframes(s.project.keyframes.map((k) => k.id))
+      } else if (e.altKey && key === 'n') {
+        // Ctrl+N would open a browser window instead
+        e.preventDefault()
+        s.newProject()
+      } else if (mod && key === 'o') {
+        e.preventDefault()
+        pickProjectFile()
+      } else if (mod && key === 's') {
+        e.preventDefault()
+        void exportProjectFile()
+      } else if (mod && key === 'l') {
+        e.preventDefault()
+        s.makeLoopFriendly()
+      } else if (mod) {
+        return // leave every other Ctrl combo to the browser (incl. Ctrl+V paste)
+      } else if (e.code === 'Space' || key === 'k') {
+        e.preventDefault()
+        s.setPlaying(!s.playing)
+      } else if (e.key === 'Home') {
+        s.setTime(0)
+      } else if (e.key === 'End') {
+        s.setTime(s.project.durationMs)
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        // with keyframes selected the Timeline nudges them instead
+        if (hasKfSelection) return
+        e.preventDefault()
+        const d = (e.shiftKey ? 10 : 1) * frame * (e.key === 'ArrowRight' ? 1 : -1)
+        s.setTime(Math.min(s.project.durationMs, Math.max(0, s.timeMs + d)))
+      } else if (key === 'l') {
+        s.setLoop(!s.loop)
+      } else if (key === 'i') {
+        for (const prop of ['tiltX', 'tiltY', 'zoom', 'panX', 'panY'] as const)
+          s.addKeyframeAt(`camera.${prop}`)
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (s.selectedKeyframeIds.length > 0) s.removeKeyframes(s.selectedKeyframeIds)
+        if (hasKfSelection) s.removeKeyframes(s.selectedKeyframeIds)
         else if (s.selectedOverlayId) s.removeOverlay(s.selectedOverlayId)
         else if (s.selectedDeviceId && s.project.scene.devices.length > 1)
           s.removeDevice(s.selectedDeviceId)
-      } else if (e.key === '?') {
-        s.setDialog(s.dialog === 'shortcuts' ? null : 'shortcuts')
-      } else if (e.key.toLowerCase() === 'e' && !e.ctrlKey && !e.metaKey) {
+      } else if (key === 'e') {
         s.setDialog(s.dialog === 'export' ? null : 'export')
-      } else if (e.key.toLowerCase() === 't' && !e.ctrlKey && !e.metaKey) {
+      } else if (key === 't') {
         s.setDialog(s.dialog === 'templates' ? null : 'templates')
       } else if (e.key === 'Escape') {
-        s.setDialog(null)
+        if (s.dialog) s.setDialog(null)
+        else s.selectKeyframes([])
       }
+    }
+
+    const onKey = (e: KeyboardEvent) => {
+      // Escape closes an open dialog even while a field inside it has focus,
+      // so it must run before the typing guard.
+      if (e.key === 'Escape') {
+        const s = useStudio.getState()
+        if (s.dialog) {
+          e.preventDefault()
+          s.setDialog(null)
+          return
+        }
+        if (useShots.getState().dialog) {
+          e.preventDefault()
+          useShots.getState().setDialog(null)
+          return
+        }
+      }
+      if (isTyping(e)) return
+      if (handleGlobal(e)) {
+        e.preventDefault()
+        return
+      }
+      if (useStudio.getState().mode === 'shots') handleShots(e)
+      else handleStudio(e)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -82,17 +233,21 @@ function useGlobalShortcuts() {
 function useMediaDropPaste() {
   useEffect(() => {
     const onDragOver = (e: DragEvent) => e.preventDefault()
+    const importTo = (file: Blob) => {
+      if (useStudio.getState().mode === 'shots') void useShots.getState().importMedia(file)
+      else void useStudio.getState().importMedia(file)
+    }
     const onDrop = (e: DragEvent) => {
       e.preventDefault()
       const file = Array.from(e.dataTransfer?.files ?? []).find(
         (f) => f.type.startsWith('image/') || f.type.startsWith('video/'),
       )
-      if (file) void useStudio.getState().importMedia(file)
+      if (file) importTo(file)
     }
     const onPaste = (e: ClipboardEvent) => {
       const item = Array.from(e.clipboardData?.items ?? []).find((i) => i.type.startsWith('image/'))
       const file = item?.getAsFile()
-      if (file) void useStudio.getState().importMedia(file)
+      if (file) importTo(file)
     }
     window.addEventListener('dragover', onDragOver)
     window.addEventListener('drop', onDrop)
@@ -105,16 +260,50 @@ function useMediaDropPaste() {
   }, [])
 }
 
-export default function App() {
+function StudioLayout() {
   const hydrated = useStudio((s) => s.hydrated)
-  const theme = useStudio((s) => s.theme)
-  const dialog = useStudio((s) => s.dialog)
   const hasMedia = useStudio((s) => s.project.scene.devices.some((d) => d.screen.assetId))
+  return (
+    <>
+      <main className="flex min-h-0 flex-1">
+        <div className="relative min-w-0 flex-1">
+          {hydrated && <Viewport />}
+          {hydrated && !hasMedia && (
+            <div className="pointer-events-none absolute inset-x-0 bottom-10 z-10 flex justify-center">
+              <div className="pointer-events-auto flex items-center gap-3 rounded-full border border-(--line) bg-(--panel) py-2 pr-2 pl-5 shadow-xl">
+                <span className="text-[13px] text-(--tx2)">
+                  Upload media to get started — or paste / drop.
+                </span>
+                <button
+                  onClick={() => pickMediaFile((f) => void useStudio.getState().importMedia(f))}
+                  className="rounded-full bg-(--accent-fill) px-4 py-1.5 text-[11px] font-semibold tracking-[0.14em] text-(--accent-tx) uppercase transition-opacity hover:opacity-90"
+                >
+                  Upload
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+        <RightPanel>
+          <Inspector />
+        </RightPanel>
+      </main>
+      <Timeline />
+    </>
+  )
+}
+
+export default function App() {
+  const theme = useStudio((s) => s.theme)
+  const mode = useStudio((s) => s.mode)
+  const dialog = useStudio((s) => s.dialog)
   const hydrate = useStudio((s) => s.hydrate)
+  const hydrateShots = useShots((s) => s.hydrate)
 
   useEffect(() => {
     void hydrate()
-  }, [hydrate])
+    void hydrateShots()
+  }, [hydrate, hydrateShots])
 
   useEffect(() => {
     document.documentElement.classList.toggle('light', theme === 'light')
@@ -125,36 +314,17 @@ export default function App() {
   useMediaDropPaste()
 
   return (
-    <div className="flex h-full flex-col bg-(--panel2) text-(--tx)">
-      <TopBar />
-      <main className="flex min-h-0 flex-1">
-        <div className="relative min-w-0 flex-1">
-          {hydrated && <Viewport />}
-          {hydrated && !hasMedia && (
-            <div className="pointer-events-none absolute inset-x-0 bottom-10 z-10 flex justify-center">
-              <div className="pointer-events-auto flex items-center gap-3 rounded-full bg-black/80 py-2 pr-2 pl-5 shadow-xl backdrop-blur">
-                <span className="text-[13px] text-neutral-200">
-                  Upload media to get started — or paste / drop.
-                </span>
-                <button
-                  onClick={() => pickMediaFile((f) => void useStudio.getState().importMedia(f))}
-                  className="rounded-full bg-white px-4 py-1.5 text-[11px] font-semibold tracking-[0.14em] text-black uppercase transition-colors hover:bg-neutral-200"
-                >
-                  Upload
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-        <Inspector />
-      </main>
-      <Timeline />
+    <div className="flex h-full bg-(--panel2) text-(--tx)">
+      <LeftRail />
+      <div className="flex min-w-0 flex-1 flex-col">
+        {mode === 'studio' ? <StudioLayout /> : <ShotsEditor />}
+      </div>
 
       {dialog === 'export' && <ExportDialog />}
       {dialog === 'templates' && <TemplatesDialog />}
       {dialog === 'shortcuts' && <ShortcutsDialog />}
-      {dialog === 'upgrade' && <UpgradeDialog />}
       <ExportProgressOverlay />
+      <UILayer />
     </div>
   )
 }

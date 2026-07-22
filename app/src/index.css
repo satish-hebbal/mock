@@ -1,21 +1,67 @@
 @import "tailwindcss";
 
+/*
+ * Editor chrome drawn from the frog mark: amber #FFC300 (the eye) is the only
+ * chromatic color and means "active"; olive #658900 backs it for on-states that
+ * need a second step. Surfaces are warm-neutral greys so they sit under the
+ * mark rather than fighting it.
+ */
 :root {
-  --panel: #131316;
-  --panel2: #0e0e11;
-  --line: rgba(255, 255, 255, 0.1);
-  --tx: #e8e8ea;
-  --tx2: #a1a1aa;
-  --tx3: #71717a;
+  --panel2: #171614; /* app backdrop (darkest) */
+  --panel: #1e1d1a; /* raised panels & rails */
+  --panel3: #2c2a26; /* hover surfaces / insets */
+  --sel: #38352f; /* selected / active surface */
+  --field: #2c2a26; /* inline input chips */
+  --field-h: #38352f; /* input chip hover */
+  --line: rgba(255, 240, 200, 0.08);
+  --line2: rgba(255, 240, 200, 0.16);
+  --tx: #fdfbf5; /* primary text & values */
+  --tx2: #b5b0a3; /* labels, icons */
+  --tx3: #7e7a6f; /* tertiary / placeholders */
+  /*
+   * Two accent roles, because amber can't do both jobs in both themes:
+   * `--accent` is INK (text, icons, 1px lines) and must contrast the panel;
+   * `--accent-fill` is a filled SURFACE and always stays logo amber, with
+   * `--accent-tx` as the ink on top of it.
+   */
+  --accent: #ffc300;
+  --accent-fill: #ffc300;
+  --accent-tx: #1e1d1a;
+  --accent-soft: rgba(255, 195, 0, 0.16);
+  --accent2: #7c9c14; /* logo olive, for secondary on-states */
+  --danger: #f87171;
 }
 
 :root.light {
+  --panel2: #f4f2ec;
   --panel: #ffffff;
-  --panel2: #ececf1;
-  --line: rgba(0, 0, 0, 0.12);
-  --tx: #18181b;
-  --tx2: #52525b;
-  --tx3: #8e8e98;
+  --panel3: #eae7dd;
+  --sel: #d6d0be; /* darker than the field so slider fills stay readable */
+  --field: #efece3;
+  --field-h: #e4e0d4;
+  --line: rgba(40, 34, 10, 0.10);
+  --line2: rgba(40, 34, 10, 0.20);
+  --tx: #1c1a14;
+  --tx2: #5c574a;
+  --tx3: #8b8578;
+  --accent: #8a6a00; /* darkened amber so accent ink stays legible on white */
+  --accent-fill: #ffc300; /* …but filled buttons keep the bright logo amber */
+  --accent-tx: #1c1a14; /* dark ink on that amber fill */
+  --accent-soft: rgba(255, 195, 0, 0.28);
+  --accent2: #5b7a01;
+  --danger: #dc2626;
+}
+
+/*
+ * Squircle corners app-wide. `corner-shape` (CSS Borders 4) reshapes an existing
+ * border-radius, so every rounded-* utility gets the continuous curve for free
+ * and degrades to a plain arc where the property is unsupported. Pills and dots
+ * (rounded-full) stay true circles.
+ */
+@supports (corner-shape: squircle) {
+  [class*="rounded"]:not([class*="rounded-full"]) {
+    corner-shape: squircle;
+  }
 }
 
 html,
@@ -42,4 +88,26 @@ input[type="number"]::-webkit-inner-spin-button {
 input[type="number"] {
   -moz-appearance: textfield;
   appearance: textfield;
+}
+
+input[type="range"],
+input[type="checkbox"] {
+  accent-color: var(--accent);
+}
+
+/* thin, unobtrusive scrollbars for the dark chrome */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line2) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--line2);
+  border-radius: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
 }

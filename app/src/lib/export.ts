@@ -1,6 +1,7 @@
 import { Vector2 } from 'three'
 import { applyAtTime, renderFrame, rt } from './runtime'
 import { paintMeshGradient } from './meshGradient'
+import { gradeFilter } from './grade'
 import type { AssetRuntime, BackgroundState, Overlay, ProjectDoc } from '../types'
 
 // ————— Background compositing (preview CSS ⇄ export canvas parity) —————
@@ -104,7 +105,7 @@ async function drawOverlays(
     ctx.rotate((o.rotation * Math.PI) / 180)
     if (o.type === 'text') {
       const px = o.size * h
-      ctx.font = `${o.weight} ${px}px ${o.font}`
+      ctx.font = `${o.weight} ${px}px "${o.font}", system-ui, sans-serif`
       ctx.textAlign = o.align
       ctx.textBaseline = 'middle'
       const lines = o.text.split('\n')
@@ -155,21 +156,19 @@ async function drawOverlays(
   }
 }
 
-function drawWatermark(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  const px = Math.max(12, h * 0.02)
-  ctx.save()
-  ctx.font = `600 ${px}px system-ui`
-  ctx.textAlign = 'right'
-  ctx.textBaseline = 'bottom'
-  const text = '◆ Mockup Studio'
-  const tw = ctx.measureText(text).width
-  const pad = px * 0.55
-  ctx.fillStyle = 'rgba(0,0,0,0.42)'
-  rr(ctx, w - tw - pad * 3, h - px - pad * 3, tw + pad * 2, px + pad * 1.6, px)
-  ctx.fill()
-  ctx.fillStyle = 'rgba(255,255,255,0.92)'
-  ctx.fillText(text, w - pad * 2, h - pad * 1.9)
-  ctx.restore()
+/** Ensure every text overlay's font+weight is loaded before rasterizing (PRD §6.7). */
+async function preloadOverlayFonts(overlays: Overlay[]) {
+  if (!('fonts' in document)) return
+  const jobs: Promise<unknown>[] = []
+  for (const o of overlays) {
+    if (o.type !== 'text') continue
+    try {
+      jobs.push(document.fonts.load(`${o.weight} 32px "${o.font}"`))
+    } catch {
+      // ignore unknown families — canvas falls back to system-ui
+    }
+  }
+  await Promise.all(jobs).catch(() => {})
 }
 
 // ————— Renderer size management —————
@@ -253,10 +252,11 @@ export async function exportImage(
   project: ProjectDoc,
   assets: Record<string, AssetRuntime>,
   opts: ImageExportOptions,
-  pro: boolean,
   timeMs: number,
+  filename?: string,
 ) {
   if (!rt.gl || !rt.camera) throw new Error('Renderer not ready')
+  await preloadOverlayFonts(project.overlays)
   rt.setFrameloop?.('never')
   await pauseVideos()
   const backup = resizeRenderer(opts.width, opts.height)
@@ -269,15 +269,27 @@ export async function exportImage(
     out.width = opts.width
     out.height = opts.height
     const ctx = out.getContext('2d')!
-    await paintBackground(ctx, opts.width, opts.height, project.scene.background, assets, opts.transparent)
-    ctx.drawImage(rt.gl.domElement, 0, 0, opts.width, opts.height)
+
+    // Stage: background + 3D, composited then color-graded as one unit so the
+    // grade matches the preview wrapper (overlays/watermark stay ungraded).
+    const stage = document.createElement('canvas')
+    stage.width = opts.width
+    stage.height = opts.height
+    const sctx = stage.getContext('2d')!
+    await paintBackground(sctx, opts.width, opts.height, project.scene.background, assets, opts.transparent)
+    sctx.drawImage(rt.gl.domElement, 0, 0, opts.width, opts.height)
+
+    const gf = gradeFilter(project.scene.effects.grade)
+    if (gf) ctx.filter = gf
+    ctx.drawImage(stage, 0, 0)
+    ctx.filter = 'none'
+
     await drawOverlays(ctx, project.overlays, assets, opts.width, opts.height)
-    if (!pro) drawWatermark(ctx, opts.width, opts.height)
 
     const mime = opts.format === 'png' ? 'image/png' : opts.format === 'jpg' ? 'image/jpeg' : 'image/webp'
     const blob = await new Promise<Blob | null>((res) => out.toBlob(res, mime, opts.quality))
     if (!blob) throw new Error('Encoding failed')
-    downloadBlob(blob, `${safeName(project.name)}.${opts.format}`)
+    downloadBlob(blob, `${filename ?? safeName(project.name)}.${opts.format}`)
   } finally {
     if (backup) restoreRenderer(backup)
     resumeVideos()
@@ -295,18 +307,21 @@ export interface VideoExportOptions {
   /** bits per second */
   bitrate: number
   transparent: boolean
+  /** temporal samples per frame for motion blur (1 = off) */
+  motionBlurSamples?: number
 }
 
 export async function exportVideo(
   project: ProjectDoc,
   assets: Record<string, AssetRuntime>,
   opts: VideoExportOptions,
-  pro: boolean,
   onProgress: (done: number, total: number) => void,
 ) {
   if (!rt.gl || !rt.camera) throw new Error('Renderer not ready')
   if (typeof VideoEncoder === 'undefined')
     throw new Error('WebCodecs is not supported in this browser — try Chrome or Edge.')
+
+  await preloadOverlayFonts(project.overlays)
 
   const { Output, BufferTarget, Mp4OutputFormat, WebMOutputFormat, CanvasSource } = await import(
     'mediabunny'
@@ -317,6 +332,18 @@ export async function exportVideo(
   canvas.width = opts.width
   canvas.height = opts.height
   const ctx = canvas.getContext('2d')!
+
+  // Stage (background + graded 3D) and, for motion blur, a GL accumulation buffer.
+  const stage = document.createElement('canvas')
+  stage.width = opts.width
+  stage.height = opts.height
+  const sctx = stage.getContext('2d')!
+  const gf = gradeFilter(project.scene.effects.grade)
+  const mbSamples = Math.max(1, Math.round(opts.motionBlurSamples ?? 1))
+  const acc = mbSamples > 1 ? document.createElement('canvas') : null
+  const accCtx = acc ? (() => { acc.width = opts.width; acc.height = opts.height; return acc.getContext('2d')! })() : null
+  const frameMs = 1000 / opts.fps
+  const shutter = 0.6 // fraction of the frame interval the "shutter" is open
 
   const output = new Output({
     format: opts.format === 'mp4' ? new Mp4OutputFormat({ fastStart: 'in-memory' }) : new WebMOutputFormat(),
@@ -340,15 +367,38 @@ export async function exportVideo(
     for (let i = 0; i < total; i++) {
       if (rt.exportCancelled) break
       const t = (i * 1000) / opts.fps
-      applyAtTime(project, t)
-      await seekVideos(t)
-      renderFrame()
+
+      // Compose background + 3D into the stage (grade is applied on blit below).
+      sctx.clearRect(0, 0, opts.width, opts.height)
+      await paintBackground(sctx, opts.width, opts.height, project.scene.background, assets, transparent)
+
+      if (accCtx && acc) {
+        // Motion blur: average `mbSamples` renders across the open-shutter window
+        // via a running mean (alpha = 1/(k+1)) into the accumulation buffer.
+        accCtx.clearRect(0, 0, opts.width, opts.height)
+        for (let k = 0; k < mbSamples; k++) {
+          const frac = mbSamples === 1 ? 0 : k / (mbSamples - 1) - 0.5
+          const st = t + shutter * frameMs * frac
+          applyAtTime(project, st)
+          await seekVideos(st)
+          renderFrame()
+          accCtx.globalAlpha = 1 / (k + 1)
+          accCtx.drawImage(rt.gl.domElement, 0, 0, opts.width, opts.height)
+        }
+        accCtx.globalAlpha = 1
+        sctx.drawImage(acc, 0, 0)
+      } else {
+        applyAtTime(project, t)
+        await seekVideos(t)
+        renderFrame()
+        sctx.drawImage(rt.gl.domElement, 0, 0, opts.width, opts.height)
+      }
 
       ctx.clearRect(0, 0, opts.width, opts.height)
-      await paintBackground(ctx, opts.width, opts.height, project.scene.background, assets, transparent)
-      ctx.drawImage(rt.gl.domElement, 0, 0, opts.width, opts.height)
+      if (gf) ctx.filter = gf
+      ctx.drawImage(stage, 0, 0)
+      ctx.filter = 'none'
       await drawOverlays(ctx, project.overlays, assets, opts.width, opts.height)
-      if (!pro) drawWatermark(ctx, opts.width, opts.height)
 
       await source.add(i / opts.fps, 1 / opts.fps)
       onProgress(i + 1, total)
@@ -376,9 +426,46 @@ export function cancelExport() {
   rt.exportCancelled = true
 }
 
+// ————— Batch image export —————
+
+export interface BatchSize {
+  name: string
+  width: number
+  height: number
+}
+
+/** Render the current scene across several output sizes, one file each. */
+export async function exportImageBatch(
+  project: ProjectDoc,
+  assets: Record<string, AssetRuntime>,
+  sizes: BatchSize[],
+  format: 'png' | 'jpg' | 'webp',
+  quality: number,
+  transparent: boolean,
+  timeMs: number,
+  onProgress: (done: number, total: number, label: string) => void,
+) {
+  rt.exportCancelled = false
+  for (let i = 0; i < sizes.length; i++) {
+    if (rt.exportCancelled) break
+    const size = sizes[i]
+    onProgress(i, sizes.length, `Exporting ${size.name}…`)
+    await exportImage(
+      project,
+      assets,
+      { width: size.width, height: size.height, format, quality, transparent },
+      timeMs,
+      safeName(`${project.name}_${size.name}`),
+    )
+    onProgress(i + 1, sizes.length, `Exporting ${size.name}…`)
+    // small gap so the browser accepts consecutive downloads
+    await new Promise((r) => setTimeout(r, 350))
+  }
+}
+
 // ————— Quick capture at viewport state —————
 
-export async function quickCapture(project: ProjectDoc, assets: Record<string, AssetRuntime>, pro: boolean, timeMs: number) {
+export async function quickCapture(project: ProjectDoc, assets: Record<string, AssetRuntime>, timeMs: number) {
   await exportImage(
     project,
     assets,
@@ -389,7 +476,6 @@ export async function quickCapture(project: ProjectDoc, assets: Record<string, A
       quality: 1,
       transparent: project.scene.background.type === 'transparent',
     },
-    pro,
     timeMs,
   )
 }

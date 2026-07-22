@@ -80,14 +80,13 @@ export interface GroundState {
   shadowBlur: number
 }
 
-export type BlurStyle = 'none' | 'lens' | 'tiltshift'
-
-export interface BlurState {
-  style: BlurStyle
-  /** normalized focus distance 0..1 */
-  focus: number
-  /** blur amount 0..1 */
-  strength: number
+/** Color grade (PRD §6.6). Neutral = { exposure:1, contrast:1, saturation:1, temperature:0 }. */
+export interface GradeState {
+  exposure: number
+  contrast: number
+  saturation: number
+  /** -1 (cool) … 0 (neutral) … 1 (warm) */
+  temperature: number
 }
 
 export interface EffectsState {
@@ -95,6 +94,7 @@ export interface EffectsState {
   noise: number
   vignette: number
   chromatic: number
+  grade: GradeState
 }
 
 interface OverlayBase {
@@ -154,7 +154,6 @@ export interface SceneState {
   background: BackgroundState
   environment: EnvironmentState
   ground: GroundState
-  blur: BlurState
   effects: EffectsState
 }
 

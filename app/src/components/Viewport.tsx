@@ -3,10 +3,8 @@ import { ContactShadows } from '@react-three/drei'
 import {
   Bloom,
   ChromaticAberration,
-  DepthOfField,
   EffectComposer,
   Noise,
-  TiltShift2,
   Vignette,
 } from '@react-three/postprocessing'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -14,6 +12,7 @@ import * as THREE from 'three'
 import type { EffectComposer as EffectComposerImpl } from 'postprocessing'
 import { rt, applyAtTime } from '../lib/runtime'
 import { meshGradientDataURL } from '../lib/meshGradient'
+import { gradeFilter } from '../lib/grade'
 import { useStudio } from '../store'
 import { DeviceMesh } from './DeviceMesh'
 import { OverlayLayer } from './OverlayLayer'
@@ -83,23 +82,18 @@ function SceneRoot({ children }: { children: React.ReactNode }) {
 }
 
 function EffectsStack() {
-  const blur = useStudio((s) => s.project.scene.blur)
   const effects = useStudio((s) => s.project.scene.effects)
   const composerRef = useRef<EffectComposerImpl>(null)
 
   const enabled =
-    blur.style !== 'none' ||
-    effects.bloom > 0 ||
-    effects.noise > 0 ||
-    effects.vignette > 0 ||
-    effects.chromatic > 0
+    effects.bloom > 0 || effects.noise > 0 || effects.vignette > 0 || effects.chromatic > 0
 
   useEffect(() => {
     rt.composer = enabled && composerRef.current ? composerRef.current : undefined
     return () => {
       rt.composer = undefined
     }
-  }, [enabled, blur, effects])
+  }, [enabled, effects])
 
   const chromaticOffset = useMemo(
     () => new THREE.Vector2(effects.chromatic * 0.004, effects.chromatic * 0.004),
@@ -109,16 +103,6 @@ function EffectsStack() {
   if (!enabled) return null
 
   const items: React.ReactElement[] = []
-  if (blur.style === 'lens')
-    items.push(
-      <DepthOfField
-        key="dof"
-        focusDistance={blur.focus}
-        focalLength={0.02 + (1 - blur.strength) * 0.08}
-        bokehScale={1 + blur.strength * 9}
-      />,
-    )
-  if (blur.style === 'tiltshift') items.push(<TiltShift2 key="ts" blur={blur.strength * 0.6} />)
   if (effects.bloom > 0)
     items.push(<Bloom key="bloom" intensity={effects.bloom * 1.6} luminanceThreshold={0.72} mipmapBlur />)
   if (effects.chromatic > 0)
@@ -252,22 +236,42 @@ export function Viewport() {
   )
   const devices = useStudio((s) => s.project.scene.devices)
   const env = useStudio((s) => s.project.scene.environment)
+  const grade = useStudio((s) => s.project.scene.effects.grade)
   const ground = useStudio((s) => s.project.scene.ground)
   const exportSize = useStudio((s) => s.project.exportSize)
   const selectDevice = useStudio((s) => s.selectDevice)
   const selectOverlay = useStudio((s) => s.selectOverlay)
-  const pro = useStudio((s) => s.pro)
 
   const outerRef = useRef<HTMLDivElement>(null)
   const frameRef = useRef<HTMLDivElement>(null)
   const rect = useFitRect(outerRef, exportSize.width / exportSize.height)
   useCameraGestures(frameRef)
 
+  const [hintsVisible, setHintsVisible] = useState(() => localStorage.getItem('ms-hints-seen') !== '1')
+  const [hintsFading, setHintsFading] = useState(false)
+  useEffect(() => {
+    if (!hintsVisible) return
+    const el = frameRef.current
+    if (!el) return
+    const dismiss = () => {
+      localStorage.setItem('ms-hints-seen', '1')
+      setHintsFading(true)
+      setTimeout(() => setHintsVisible(false), 300)
+    }
+    el.addEventListener('pointerdown', dismiss)
+    el.addEventListener('wheel', dismiss, { passive: true })
+    return () => {
+      el.removeEventListener('pointerdown', dismiss)
+      el.removeEventListener('wheel', dismiss)
+    }
+  }, [hintsVisible])
+
   const bgStyle = useMemo(() => cssBackground(background, bgImageUrl), [background, bgImageUrl])
   const bgFilter =
     background.type === 'image' || background.type === 'mesh'
       ? `blur(${(background.blur * rect.width) / 1280}px) brightness(${background.brightness})`
       : undefined
+  const gradeCss = useMemo(() => gradeFilter(grade) || undefined, [grade])
 
   return (
     <div ref={outerRef} className="relative flex h-full w-full items-center justify-center overflow-hidden">
@@ -281,54 +285,58 @@ export function Viewport() {
           }
         }}
       >
-        {/* background layer (CSS preview; export repaints identically) */}
-        <div className="absolute inset-0" style={{ ...bgStyle, filter: bgFilter, transform: 'scale(1.06)' }} />
+        {/* graded layer: background + 3D canvas share the color grade so preview
+            matches the export composite (overlays/watermark stay ungraded) */}
+        <div className="absolute inset-0" style={{ filter: gradeCss }}>
+          {/* background layer (CSS preview; export repaints identically) */}
+          <div className="absolute inset-0" style={{ ...bgStyle, filter: bgFilter, transform: 'scale(1.06)' }} />
 
-        <Canvas
-          className="absolute inset-0"
-          gl={{ preserveDrawingBuffer: true, antialias: true, alpha: true }}
-          camera={{ position: [1.8, 0.8, 4.5], fov: 26, near: 0.1, far: 40 }}
-          dpr={[1, 2]}
-          onPointerMissed={() => selectDevice(null)}
-        >
-          <RuntimeBridge />
-          <ambientLight intensity={env.ambient} />
-          <directionalLight position={[4, 6, 5]} intensity={env.keyIntensity} />
-          <directionalLight position={[-5, 2, -4]} intensity={env.fillIntensity} />
-          <directionalLight position={[0, -3, 3]} intensity={env.rimIntensity} color="#bcd4ff" />
-          <SceneRoot>
-            {devices.map((d) => (
-              <DeviceMesh key={`${d.id}-${d.modelId}-${d.orientation}`} device={d} />
-            ))}
-          </SceneRoot>
-          {ground.shadow && (
-            <ContactShadows
-              position={[0, -1.3, 0]}
-              opacity={ground.shadowOpacity}
-              scale={10}
-              blur={ground.shadowBlur}
-              far={3}
-              resolution={512}
-            />
-          )}
-          <EffectsStack />
-        </Canvas>
+          <Canvas
+            className="absolute inset-0"
+            gl={{ preserveDrawingBuffer: true, antialias: true, alpha: true }}
+            camera={{ position: [1.8, 0.8, 4.5], fov: 26, near: 0.1, far: 40 }}
+            dpr={[1, 2]}
+            onPointerMissed={() => selectDevice(null)}
+          >
+            <RuntimeBridge />
+            <ambientLight intensity={env.ambient} />
+            <directionalLight position={[4, 6, 5]} intensity={env.keyIntensity} />
+            <directionalLight position={[-5, 2, -4]} intensity={env.fillIntensity} />
+            <directionalLight position={[0, -3, 3]} intensity={env.rimIntensity} color="#bcd4ff" />
+            <SceneRoot>
+              {devices.map((d) => (
+                <DeviceMesh key={`${d.id}-${d.modelId}-${d.orientation}`} device={d} />
+              ))}
+            </SceneRoot>
+            {ground.shadow && (
+              <ContactShadows
+                position={[0, -1.3, 0]}
+                opacity={ground.shadowOpacity}
+                scale={10}
+                blur={ground.shadowBlur}
+                far={3}
+                resolution={512}
+              />
+            )}
+            <EffectsStack />
+          </Canvas>
+        </div>
 
         <OverlayLayer width={rect.width} height={rect.height} />
-
-        {!pro && (
-          <div className="pointer-events-none absolute right-3 bottom-3 rounded-full bg-black/45 px-3 py-1 text-[10px] font-semibold tracking-wide text-white/90">
-            ◆ Mockup Studio
-          </div>
-        )}
       </div>
 
-      {/* gesture hints */}
-      <div className="pointer-events-none absolute bottom-3 left-4 flex gap-2 text-[9px] tracking-widest text-(--tx3)">
-        <span className="rounded bg-(--panel) px-1.5 py-0.5">DRAG · ORBIT</span>
-        <span className="rounded bg-(--panel) px-1.5 py-0.5">SCROLL · ZOOM</span>
-        <span className="rounded bg-(--panel) px-1.5 py-0.5">R-DRAG · PAN</span>
-      </div>
+      {/* gesture hints — shown until the user's first orbit/zoom/pan, then never again */}
+      {hintsVisible && (
+        <div
+          className={`pointer-events-none absolute bottom-3 left-4 flex gap-2 text-[9px] tracking-widest text-(--tx3) transition-opacity duration-300 ${
+            hintsFading ? 'opacity-0' : 'opacity-100'
+          }`}
+        >
+          <span className="rounded bg-(--panel) px-1.5 py-0.5">DRAG · ORBIT</span>
+          <span className="rounded bg-(--panel) px-1.5 py-0.5">SCROLL · ZOOM</span>
+          <span className="rounded bg-(--panel) px-1.5 py-0.5">R-DRAG · PAN</span>
+        </div>
+      )}
     </div>
   )
 }

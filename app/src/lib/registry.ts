@@ -4,6 +4,7 @@ export type DeviceKind =
   | 'tablet'
   | 'laptop'
   | 'monitor'
+  | 'tv'
   | 'watch'
   | 'browser'
   | 'card'
@@ -19,14 +20,13 @@ export interface DeviceColor {
 export interface DeviceSpec {
   id: string
   name: string
-  category: 'Phones' | 'Tablets' | 'Laptops' | 'Desktops' | 'Watches' | 'Frames'
+  category: 'Phones' | 'Tablets' | 'Laptops' | 'Desktops' | 'TV' | 'Watches' | 'Frames'
   kind: DeviceKind
   /** natural screen aspect (w/h) in default orientation */
   screenAspect: number
   canRotate: boolean
   mask: ScreenMask
   colors: DeviceColor[]
-  pro?: boolean
 }
 
 const PHONE_COLORS: DeviceColor[] = [
@@ -63,7 +63,16 @@ export const DEVICES: DeviceSpec[] = [
     canRotate: true,
     mask: 'island',
     colors: PHONE_COLORS,
-    pro: true,
+  },
+  {
+    id: 'phone_pro_prev',
+    name: 'Pro Phone (prev-gen)',
+    category: 'Phones',
+    kind: 'phone',
+    screenAspect: 1179 / 2556,
+    canRotate: true,
+    mask: 'island',
+    colors: PHONE_COLORS,
   },
   {
     id: 'phone_android',
@@ -71,6 +80,16 @@ export const DEVICES: DeviceSpec[] = [
     category: 'Phones',
     kind: 'phone',
     screenAspect: 1080 / 2400,
+    canRotate: true,
+    mask: 'punch',
+    colors: PHONE_COLORS,
+  },
+  {
+    id: 'phone_pixel',
+    name: 'Pixel Phone',
+    category: 'Phones',
+    kind: 'phone',
+    screenAspect: 1080 / 2424,
     canRotate: true,
     mask: 'punch',
     colors: PHONE_COLORS,
@@ -104,7 +123,16 @@ export const DEVICES: DeviceSpec[] = [
     canRotate: true,
     mask: 'none',
     colors: METAL_COLORS,
-    pro: true,
+  },
+  {
+    id: 'tablet_android',
+    name: 'Android Tablet',
+    category: 'Tablets',
+    kind: 'tablet',
+    screenAspect: 1600 / 2560,
+    canRotate: true,
+    mask: 'none',
+    colors: METAL_COLORS,
   },
   {
     id: 'laptop_pro',
@@ -127,6 +155,34 @@ export const DEVICES: DeviceSpec[] = [
     colors: METAL_COLORS,
   },
   {
+    id: 'laptop_windows',
+    name: 'Windows Laptop',
+    category: 'Laptops',
+    kind: 'laptop',
+    screenAspect: 16 / 10,
+    canRotate: false,
+    mask: 'none',
+    colors: [
+      { id: 'graphite', name: 'Graphite', value: '#4a4a50' },
+      { id: 'silver', name: 'Silver', value: '#c8cace' },
+    ],
+  },
+  {
+    id: 'imac',
+    name: 'iMac 24″',
+    category: 'Desktops',
+    kind: 'monitor',
+    screenAspect: 4480 / 2520,
+    canRotate: false,
+    mask: 'none',
+    colors: [
+      { id: 'silver', name: 'Silver', value: '#d7d8da' },
+      { id: 'blue', name: 'Blue', value: '#6c8fb8' },
+      { id: 'green', name: 'Green', value: '#7fae8f' },
+      { id: 'pink', name: 'Pink', value: '#e0a3ad' },
+    ],
+  },
+  {
     id: 'monitor_studio',
     name: 'Studio Monitor 5K',
     category: 'Desktops',
@@ -135,7 +191,6 @@ export const DEVICES: DeviceSpec[] = [
     canRotate: false,
     mask: 'none',
     colors: METAL_COLORS,
-    pro: true,
   },
   {
     id: 'monitor_generic',
@@ -148,6 +203,16 @@ export const DEVICES: DeviceSpec[] = [
     colors: [{ id: 'black', name: 'Black', value: '#26262a' }],
   },
   {
+    id: 'tv_4k',
+    name: '4K TV 16:9',
+    category: 'TV',
+    kind: 'tv',
+    screenAspect: 16 / 9,
+    canRotate: false,
+    mask: 'none',
+    colors: [{ id: 'black', name: 'Black', value: '#141416' }],
+  },
+  {
     id: 'watch_pro',
     name: 'Smart Watch',
     category: 'Watches',
@@ -156,6 +221,19 @@ export const DEVICES: DeviceSpec[] = [
     canRotate: false,
     mask: 'none',
     colors: METAL_COLORS,
+  },
+  {
+    id: 'watch_wear',
+    name: 'Wear Watch (round)',
+    category: 'Watches',
+    kind: 'watch',
+    screenAspect: 1 / 1,
+    canRotate: false,
+    mask: 'none',
+    colors: [
+      { id: 'black', name: 'Black', value: '#2a2a2e' },
+      { id: 'steel', name: 'Steel', value: '#c4c6ca' },
+    ],
   },
   {
     id: 'browser_light',
@@ -193,7 +271,7 @@ export function getDevice(id: string): DeviceSpec {
   return DEVICES.find((d) => d.id === id) ?? DEVICES[0]
 }
 
-export const DEVICE_CATEGORIES = ['Phones', 'Tablets', 'Laptops', 'Desktops', 'Watches', 'Frames'] as const
+export const DEVICE_CATEGORIES = ['Phones', 'Tablets', 'Laptops', 'Desktops', 'TV', 'Watches', 'Frames'] as const
 
 /** Effective screen aspect (w/h) for a device instance orientation. */
 export function screenAspectFor(spec: DeviceSpec, orientation: 'portrait' | 'landscape'): number {

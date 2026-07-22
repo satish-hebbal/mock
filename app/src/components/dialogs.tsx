@@ -1,21 +1,45 @@
 import { useState, type ReactNode } from 'react'
 import { useStudio } from '../store'
-import { cancelExport, exportImage, exportVideo } from '../lib/export'
+import { cancelExport, exportImage, exportImageBatch, exportVideo } from '../lib/export'
 import { SIZE_PRESETS } from '../lib/presets'
 import { TEMPLATES } from '../lib/presets'
-import { MiniButton, Segments, SliderRow } from './controls'
+import { SHORTCUT_GROUPS } from '../lib/shortcuts'
+import { CircleMinus } from 'lucide-react'
+import { ui } from '../lib/ui'
+import { Dropdown, MiniButton, Segments, SliderRow } from './controls'
 
-function Modal({ title, onClose, children, wide }: { title: string; onClose: () => void; children: ReactNode; wide?: boolean }) {
+function Modal({
+  title,
+  onClose,
+  children,
+  wide,
+  aside,
+}: {
+  title: string
+  onClose: () => void
+  children: ReactNode
+  wide?: boolean
+  /** small note rendered next to the title (e.g. the key that toggles it) */
+  aside?: ReactNode
+}) {
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-6" onMouseDown={onClose}>
       <div
         className={`max-h-[85vh] w-full ${wide ? 'max-w-2xl' : 'max-w-md'} overflow-y-auto rounded-xl border border-(--line) bg-(--panel) p-5 shadow-2xl`}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-[12px] font-semibold tracking-[0.2em] text-(--tx) uppercase">{title}</h2>
-          <button onClick={onClose} className="text-(--tx3) hover:text-(--tx)">
-            ✕
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <h2 className="text-[12px] font-semibold tracking-[0.2em] text-(--tx) uppercase">{title}</h2>
+            {aside}
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            title="Close"
+            className="flex h-7 w-7 items-center justify-center rounded-full text-(--tx3) hover:bg-(--panel3) hover:text-(--tx)"
+          >
+            <CircleMinus size={18} strokeWidth={1.75} />
           </button>
         </div>
         {children}
@@ -28,10 +52,9 @@ function Modal({ title, onClose, children, wide }: { title: string; onClose: () 
 
 export function ExportDialog() {
   const project = useStudio((s) => s.project)
-  const pro = useStudio((s) => s.pro)
   const st = useStudio.getState
 
-  const [mode, setMode] = useState<'image' | 'video'>('image')
+  const [mode, setMode] = useState<'image' | 'video' | 'batch'>('image')
   const [sizeIdx, setSizeIdx] = useState(0)
   const [customW, setCustomW] = useState(project.exportSize.width)
   const [customH, setCustomH] = useState(project.exportSize.height)
@@ -41,6 +64,8 @@ export function ExportDialog() {
   const [quality, setQuality] = useState(0.92)
   const [bitrateMbps, setBitrateMbps] = useState(12)
   const [transparent, setTransparent] = useState(false)
+  const [motionBlur, setMotionBlur] = useState(false)
+  const [batchIdxs, setBatchIdxs] = useState<number[]>([0, 2, 3])
   const [error, setError] = useState<string | null>(null)
 
   const custom = sizeIdx === -1
@@ -49,20 +74,12 @@ export function ExportDialog() {
   const outW = Math.round(baseW * (mode === 'image' ? scale : 1))
   const outH = Math.round(baseH * (mode === 'image' ? scale : 1))
 
-  const gated = (msg: string) => {
-    setError(msg)
-    st().setDialog('upgrade')
-  }
-
   const run = async () => {
     setError(null)
-    if (!pro && Math.max(outW, outH) > 2000) return gated('Exports above 1080p-class need Pro.')
-    if (mode === 'video' && !pro && project.durationMs > 5000)
-      return gated('Videos longer than 5s need Pro.')
     if (mode === 'video' && transparent && vFormat === 'mp4') setVFormat('webm')
 
     // sync export canvas aspect with the viewport frame
-    st().setExportSize(baseW, baseH)
+    if (mode !== 'batch') st().setExportSize(baseW, baseH)
     st().setDialog(null)
     const s = st()
     try {
@@ -72,8 +89,19 @@ export function ExportDialog() {
           s.project,
           s.assets,
           { width: outW, height: outH, format, quality, transparent },
-          s.pro,
           s.timeMs,
+        )
+      } else if (mode === 'batch') {
+        const sizes = batchIdxs.map((i) => SIZE_PRESETS[i])
+        await exportImageBatch(
+          s.project,
+          s.assets,
+          sizes,
+          format,
+          quality,
+          transparent,
+          s.timeMs,
+          (done, total, label) => s.setExportProgress({ label, done, total }),
         )
       } else {
         s.setExportProgress({ label: 'Encoding video…', done: 0, total: 1 })
@@ -87,13 +115,13 @@ export function ExportDialog() {
             format: transparent ? 'webm' : vFormat,
             bitrate: bitrateMbps * 1_000_000,
             transparent,
+            motionBlurSamples: motionBlur ? 6 : 1,
           },
-          s.pro,
           (done, total) => s.setExportProgress({ label: 'Encoding video…', done, total }),
         )
       }
     } catch (err) {
-      alert(`Export failed: ${(err as Error).message}`)
+      ui.error(`Export failed: ${(err as Error).message}`)
     } finally {
       useStudio.getState().setExportProgress(null)
     }
@@ -105,51 +133,85 @@ export function ExportDialog() {
         options={[
           { id: 'image', label: 'Image' },
           { id: 'video', label: 'Video' },
+          { id: 'batch', label: 'Batch' },
         ]}
         value={mode}
         onChange={setMode}
       />
 
-      <label className="mb-2 block text-[10px] tracking-[0.15em] text-(--tx3) uppercase">Size</label>
-      <select
-        value={sizeIdx}
-        onChange={(e) => setSizeIdx(Number(e.target.value))}
-        className="mb-2 w-full rounded border border-(--line) bg-(--panel) px-2 py-1.5 text-[12px] text-(--tx)"
-      >
-        {SIZE_PRESETS.map((p, i) => (
-          <option key={p.name} value={i}>
-            {p.name}
-          </option>
-        ))}
-        <option value={-1}>Custom…</option>
-      </select>
-      {custom && (
-        <div className="mb-2 flex items-center gap-2">
-          <input
-            type="number"
-            value={customW}
-            onChange={(e) => setCustomW(Number(e.target.value))}
-            className="w-24 rounded border border-(--line) bg-transparent px-2 py-1 font-mono text-[12px] text-(--tx)"
-          />
-          <span className="text-(--tx3)">×</span>
-          <input
-            type="number"
-            value={customH}
-            onChange={(e) => setCustomH(Number(e.target.value))}
-            className="w-24 rounded border border-(--line) bg-transparent px-2 py-1 font-mono text-[12px] text-(--tx)"
-          />
-        </div>
-      )}
-
-      {mode === 'image' ? (
+      {mode === 'batch' ? (
         <>
-          <div className="mb-2 flex gap-1">
-            {([1, 2, 3] as const).map((s) => (
-              <MiniButton key={s} active={scale === s} onClick={() => setScale(s)}>
-                {s}×
-              </MiniButton>
+          <label className="mb-2 block text-[10px] tracking-[0.15em] text-(--tx3) uppercase">
+            Sizes to export
+          </label>
+          <div className="mb-2 max-h-48 overflow-y-auto rounded border border-(--line) p-1">
+            {SIZE_PRESETS.map((p, i) => (
+              <label
+                key={p.name}
+                className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-[11px] text-(--tx2) hover:bg-(--panel2)"
+              >
+                <input
+                  type="checkbox"
+                                   checked={batchIdxs.includes(i)}
+                  onChange={(e) =>
+                    setBatchIdxs((prev) =>
+                      e.target.checked ? [...prev, i].sort((a, b) => a - b) : prev.filter((x) => x !== i),
+                    )
+                  }
+                />
+                {p.name}
+              </label>
             ))}
           </div>
+          <p className="mb-2 text-[10px] text-(--tx3)">
+            {batchIdxs.length} size{batchIdxs.length === 1 ? '' : 's'} · one file each, downloaded in
+            sequence.
+          </p>
+        </>
+      ) : (
+        <>
+          <label className="mb-2 block text-[10px] tracking-[0.15em] text-(--tx3) uppercase">Size</label>
+          <div className="mb-2">
+            <Dropdown
+              value={sizeIdx}
+              onChange={setSizeIdx}
+              options={[
+                ...SIZE_PRESETS.map((p, i) => ({ value: i, label: p.name })),
+                { value: -1, label: 'Custom…' },
+              ]}
+            />
+          </div>
+          {custom && (
+            <div className="mb-2 flex items-center gap-2">
+              <input
+                type="number"
+                value={customW}
+                onChange={(e) => setCustomW(Number(e.target.value))}
+                className="w-24 rounded border border-(--line) bg-transparent px-2 py-1 font-mono text-[12px] text-(--tx)"
+              />
+              <span className="text-(--tx3)">×</span>
+              <input
+                type="number"
+                value={customH}
+                onChange={(e) => setCustomH(Number(e.target.value))}
+                className="w-24 rounded border border-(--line) bg-transparent px-2 py-1 font-mono text-[12px] text-(--tx)"
+              />
+            </div>
+          )}
+        </>
+      )}
+
+      {mode !== 'video' ? (
+        <>
+          {mode === 'image' && (
+            <div className="mb-2 flex gap-1">
+              {([1, 2, 3] as const).map((s) => (
+                <MiniButton key={s} active={scale === s} onClick={() => setScale(s)}>
+                  {s}×
+                </MiniButton>
+              ))}
+            </div>
+          )}
           <Segments
             options={[
               { id: 'png', label: 'PNG' },
@@ -174,6 +236,14 @@ export function ExportDialog() {
             onChange={setVFormat}
           />
           <SliderRow label="Mbps" value={bitrateMbps} min={2} max={40} step={1} onChange={setBitrateMbps} />
+          <label className="mb-2 flex items-center gap-2 text-[11px] text-(--tx2)">
+            <input
+              type="checkbox"
+              checked={motionBlur}
+              onChange={(e) => setMotionBlur(e.target.checked)}
+                         />
+            Motion blur (smoother fast moves)
+          </label>
           <p className="mb-2 text-[10px] text-(--tx3)">
             {(project.durationMs / 1000).toFixed(1)}s · {project.fps} fps ·{' '}
             {Math.round((project.durationMs / 1000) * project.fps)} frames — rendered offline in your
@@ -183,30 +253,24 @@ export function ExportDialog() {
       )}
 
       <label className="mb-3 flex items-center gap-2 text-[11px] text-(--tx2)">
-        <input type="checkbox" checked={transparent} onChange={(e) => setTransparent(e.target.checked)} className="accent-orange-500" />
+        <input type="checkbox" checked={transparent} onChange={(e) => setTransparent(e.target.checked)} />
         Transparent background {mode === 'video' ? '(forces WebM alpha)' : '(PNG alpha)'}
-        {!pro && mode === 'video' && <span className="text-orange-400">◆ Pro</span>}
       </label>
 
-      {error && <p className="mb-2 text-[11px] text-red-400">{error}</p>}
+      {error && <p className="mb-2 text-[11px] text-(--danger)">{error}</p>}
 
       <button
         onClick={() => {
-          if (mode === 'video' && transparent && !pro) {
-            st().setDialog('upgrade')
+          if (mode === 'batch' && batchIdxs.length === 0) {
+            setError('Pick at least one size to export.')
             return
           }
           void run()
         }}
-        className="w-full rounded-md bg-orange-600 py-2 text-[12px] font-semibold tracking-[0.14em] text-white uppercase hover:bg-orange-500"
+        className="w-full rounded-md bg-(--accent-fill) py-2 text-[12px] font-semibold tracking-[0.14em] text-(--accent-tx) uppercase hover:opacity-90"
       >
-        Export {mode} · {outW}×{outH}
+        {mode === 'batch' ? `Export ${batchIdxs.length} images` : `Export ${mode} · ${outW}×${outH}`}
       </button>
-      {!pro && (
-        <p className="mt-2 text-center text-[10px] text-(--tx3)">
-          Free exports include a small watermark · <button className="text-orange-400 underline" onClick={() => st().setDialog('upgrade')}>remove with Pro</button>
-        </p>
-      )}
     </Modal>
   )
 }
@@ -222,7 +286,7 @@ export function TemplatesDialog() {
           <button
             key={t.id}
             onClick={() => st().applyTemplate(t.id)}
-            className="group overflow-hidden rounded-lg border border-(--line) text-left transition-colors hover:border-orange-500/60"
+            className="group overflow-hidden rounded-lg border border-(--line) text-left transition-colors hover:border-(--line2)"
           >
             <div className="h-20 w-full" style={{ background: t.swatch }} />
             <div className="p-2">
@@ -238,72 +302,92 @@ export function TemplatesDialog() {
 
 // ————— Shortcuts dialog —————
 
-const SHORTCUTS: [string, string][] = [
-  ['Space', 'Play / pause'],
-  ['Ctrl+Z / Ctrl+Shift+Z', 'Undo / redo'],
-  ['Delete', 'Delete selected keyframes / overlay / device'],
-  ['E', 'Export dialog'],
-  ['T', 'Templates'],
-  ['?', 'This dialog'],
-  ['Drag on canvas', 'Orbit camera'],
-  ['Scroll on canvas', 'Zoom'],
-  ['Right-drag on canvas', 'Pan'],
-  ['Ctrl+V', 'Paste screenshot into the selected device'],
-]
-
-export function ShortcutsDialog() {
-  const st = useStudio.getState
+/**
+ * Render "Ctrl+Shift+Z" as individual keycaps. A slash only separates when it
+ * is spaced ("← / →") so that "/" can itself be a key.
+ */
+function Keys({ combo }: { combo: string }) {
+  // one capture group → separators always land on odd indices, so a key that is
+  // itself "+" or "/" still renders as a cap
+  const parts = combo.split(/(\s*\+\s*|\s+\/\s+)/)
   return (
-    <Modal title="Keyboard shortcuts" onClose={() => st().setDialog(null)}>
-      <table className="w-full text-[12px]">
-        <tbody>
-          {SHORTCUTS.map(([k, desc]) => (
-            <tr key={k} className="border-b border-(--line) last:border-0">
-              <td className="py-1.5 pr-3 font-mono text-[11px] whitespace-nowrap text-orange-400">{k}</td>
-              <td className="py-1.5 text-(--tx2)">{desc}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </Modal>
+    <span className="flex flex-wrap items-center gap-0.5">
+      {parts.map((p, i) =>
+        i % 2 === 1 ? (
+          <span key={i} className="px-0.5 text-[10px] text-(--tx3)">
+            {p.trim()}
+          </span>
+        ) : (
+          <kbd
+            key={i}
+            className="rounded-[4px] border border-(--line2) bg-(--panel3) px-1.5 py-0.5 text-[10px] whitespace-nowrap text-(--tx)"
+          >
+            {p}
+          </kbd>
+        ),
+      )}
+    </span>
   )
 }
 
-// ————— Upgrade dialog (demo gating — PRD §6.13, no real billing wired) —————
-
-export function UpgradeDialog() {
+export function ShortcutsDialog() {
   const st = useStudio.getState
-  const perks = [
-    'No watermark on exports',
-    '4K image & video export',
-    'Videos longer than 5 seconds',
-    'Transparent WebM (alpha) video',
-    'All premium devices',
-  ]
+  const mode = useStudio((s) => s.mode)
+  const [query, setQuery] = useState('')
+
+  const q = query.trim().toLowerCase()
+  const groups = SHORTCUT_GROUPS.map((g) => ({
+    ...g,
+    items: q
+      ? g.items.filter((i) => i.desc.toLowerCase().includes(q) || i.keys.toLowerCase().includes(q))
+      : g.items,
+  })).filter((g) => g.items.length > 0)
+
   return (
-    <Modal title="Mockup Studio Pro" onClose={() => st().setDialog(null)}>
-      <ul className="mb-4 flex flex-col gap-1.5">
-        {perks.map((p) => (
-          <li key={p} className="flex items-center gap-2 text-[12px] text-(--tx2)">
-            <span className="text-orange-500">◆</span> {p}
-          </li>
+    <Modal
+      wide
+      title="Keyboard shortcuts"
+      onClose={() => st().setDialog(null)}
+      aside={
+        <Keys combo="Shift + /" />
+      }
+    >
+      <input
+        autoFocus
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search shortcuts…"
+        className="mb-3 w-full rounded-[5px] bg-(--field) px-2.5 py-2 text-[12px] text-(--tx) outline-none placeholder:text-(--tx3)"
+      />
+      <div className="max-h-[60vh] overflow-y-auto pr-1">
+        {groups.map((g) => (
+          <section key={g.title} className="mb-4 last:mb-0">
+            <p className="mb-1.5 flex items-center gap-2 text-[10px] text-(--tx2)">
+              {g.title}
+              {/* the mode a group applies to, so nothing looks broken in the other one */}
+              {g.scope !== 'global' && g.scope !== mode && (
+                <span className="rounded bg-(--panel3) px-1.5 py-0.5 text-[9px] text-(--tx3)">
+                  {g.scope === 'studio' ? '3D Studio' : 'Shots'}
+                </span>
+              )}
+            </p>
+            <div className="rounded-[6px] bg-(--panel2)">
+              {g.items.map((s) => (
+                <div
+                  key={s.keys + s.desc}
+                  className="flex items-center justify-between gap-4 border-b border-(--line) px-2.5 py-1.5 last:border-0"
+                >
+                  <span className="text-[12px] text-(--tx2)">{s.desc}</span>
+                  <Keys combo={s.keys} />
+                </div>
+              ))}
+            </div>
+          </section>
         ))}
-      </ul>
-      <p className="mb-3 text-[13px] text-(--tx)">
-        One-time <span className="font-bold">$29</span> — lifetime license.
-      </p>
-      <button
-        onClick={() => {
-          st().setPro(true)
-          st().setDialog(null)
-        }}
-        className="w-full rounded-md bg-orange-600 py-2 text-[12px] font-semibold tracking-[0.14em] text-white uppercase hover:bg-orange-500"
-      >
-        Unlock Pro (demo — no payment wired)
-      </button>
-      <p className="mt-2 text-center text-[10px] text-(--tx3)">
-        Billing integration (Stripe) is stubbed in this build.
-      </p>
+        {groups.length === 0 && (
+          <p className="py-6 text-center text-[11px] text-(--tx3)">No shortcut matches “{query}”.</p>
+        )}
+      </div>
     </Modal>
   )
 }
@@ -322,7 +406,7 @@ export function ExportProgressOverlay() {
         </p>
         <div className="mb-2 h-2 overflow-hidden rounded-full bg-(--panel2)">
           <div
-            className="h-full bg-orange-500 transition-all"
+            className="h-full bg-(--tx) transition-all"
             style={{ width: `${pct ?? 40}%` }}
           />
         </div>

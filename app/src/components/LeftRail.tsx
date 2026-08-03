@@ -80,11 +80,18 @@ export function LeftRail() {
         expanded ? 'w-48 px-2.5' : 'w-14 items-center px-2'
       }`}
     >
-      {/* brand */}
-      <div className={`mb-4 flex h-9 items-center ${expanded ? 'gap-2.5 px-1.5' : 'justify-center'}`}>
-        <img src="/frog-logo.svg" alt="Studio logo" width={22} height={22} className="shrink-0" />
-        {expanded && <span className="text-[13px] font-semibold tracking-tight text-(--tx)">Studio</span>}
-      </div>
+      {/* brand — click to return to the home screen */}
+      <button
+        onClick={() => st().setMode('home')}
+        title="Ribbit — home"
+        aria-label="Go to home"
+        className={`mb-4 flex h-9 items-center rounded-lg transition-colors hover:bg-(--panel3) ${
+          expanded ? 'gap-2.5 px-1.5' : 'w-9 justify-center'
+        } ${mode === 'home' ? 'bg-(--panel3)' : ''}`}
+      >
+        <img src="/frog-logo.svg" alt="Ribbit logo" width={22} height={22} className="shrink-0" />
+        {expanded && <span className="text-[13px] font-semibold tracking-tight text-(--tx)">Ribbit</span>}
+      </button>
 
       {/* tools */}
       <nav className="flex flex-col gap-1">

@@ -87,7 +87,7 @@ export function defaultProject(): ProjectDoc {
   }
 }
 
-export type AppMode = 'studio' | 'shots'
+export type AppMode = 'home' | 'studio' | 'shots'
 
 interface StudioState {
   hydrated: boolean
@@ -726,7 +726,8 @@ export const useStudio = create<StudioState>()(
     hydrate: async () => {
       try {
         const theme = localStorage.getItem('ms-theme') === 'light' ? 'light' : 'dark'
-        const mode: AppMode = localStorage.getItem('ms-mode') === 'shots' ? 'shots' : 'studio'
+        const savedMode = localStorage.getItem('ms-mode')
+        const mode: AppMode = savedMode === 'shots' || savedMode === 'studio' ? savedMode : 'home'
         set((s) => {
           s.theme = theme
           s.mode = mode

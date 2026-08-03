@@ -186,11 +186,14 @@ function dimsFor(spec: DeviceSpec, orientation: 'portrait' | 'landscape'): Dims 
 
 function useScreenTexture(dev: DeviceInstance, screenAspect: number) {
   const asset = useStudio((s) => (dev.screen.assetId ? s.assets[dev.screen.assetId] : undefined))
-  const meta = useStudio((s) => s.project.assets.find((a) => a.id === dev.screen.assetId))
+  const assetId = dev.screen.assetId
   const [texture, setTexture] = useState<THREE.Texture | null>(null)
 
+  // Only the runtime asset (blob URL) is required — media dimensions are read
+  // from the decoded image/video itself. Depending on the project.assets meta
+  // entry made a missing/mismatched entry silently blank the whole screen.
   useEffect(() => {
-    if (!asset || !meta) {
+    if (!asset || !assetId) {
       setTexture(null)
       return
     }
@@ -201,15 +204,10 @@ function useScreenTexture(dev: DeviceInstance, screenAspect: number) {
     const setup = (t: THREE.Texture, mediaW: number, mediaH: number) => {
       t.colorSpace = THREE.SRGBColorSpace
       t.anisotropy = 8
-      const ia = mediaW / Math.max(1, mediaH)
-      const sa = screenAspect
+      const ia = Math.max(0.01, mediaW) / Math.max(1, mediaH)
+      const sa = screenAspect || ia
       let scrollRange = 0
       if (dev.screen.fit === 'contain') {
-        if (ia > sa) {
-          const ry = sa / ia
-          t.repeat.set(1, 1)
-          void ry
-        }
         t.repeat.set(1, 1)
         t.offset.set(0, 0)
       } else if (ia > sa) {
@@ -238,17 +236,22 @@ function useScreenTexture(dev: DeviceInstance, screenAspect: number) {
       void video.play().catch(() => {})
       const vt = new THREE.VideoTexture(video)
       tex = vt
-      rt.videos.set(meta.id, video)
-      setup(vt, meta.w, meta.h)
+      rt.videos.set(assetId, video)
+      const applyVideo = () => setup(vt, video!.videoWidth || 1080, video!.videoHeight || 1920)
+      if (video.readyState >= 1) applyVideo()
+      else video.addEventListener('loadedmetadata', applyVideo, { once: true })
     } else {
-      new THREE.TextureLoader().load(asset.url, (t) => {
-        if (cancelled) {
-          t.dispose()
-          return
-        }
+      const img = new Image()
+      img.decoding = 'async'
+      img.onload = () => {
+        if (cancelled) return
+        const t = new THREE.Texture(img)
+        t.needsUpdate = true
         tex = t
-        setup(t, meta.w, meta.h)
-      })
+        setup(t, img.naturalWidth || 1, img.naturalHeight || 1)
+      }
+      img.onerror = (e) => console.error('[screen texture] failed to load', asset.url, e)
+      img.src = asset.url
     }
 
     return () => {
@@ -256,12 +259,12 @@ function useScreenTexture(dev: DeviceInstance, screenAspect: number) {
       rt.screens.delete(dev.id)
       if (video) {
         video.pause()
-        rt.videos.delete(meta.id)
+        rt.videos.delete(assetId)
         video.src = ''
       }
       tex?.dispose()
     }
-  }, [asset, meta, dev.id, dev.screen.fit, screenAspect])
+  }, [asset, assetId, dev.id, dev.screen.fit, screenAspect])
 
   return texture
 }
@@ -336,10 +339,13 @@ export function DeviceMesh({ device }: { device: DeviceInstance }) {
     [dims.screenW, dims.screenH, dims.screenR],
   )
 
-  // Seat the screen flush on the body's flat front face (just proud of it to
-  // avoid z-fighting) so the frame's beveled edge wraps around it like a real
-  // device. Floating it in front of the bevel opens a visible gap at steep tilt.
-  const screenZ = dims.bodyD / 2 + 0.001
+  // Seat the screen flush on the body's front face, just proud of it so the
+  // frame's beveled edge wraps around it like a real device. The body's front
+  // cap is NOT at bodyD/2 — ExtrudeGeometry's bevel extrudes the outer contour
+  // beyond the flat depth by roughly `bevel`, so the true outermost surface
+  // sits at bodyD/2 + bevel. A screen offset that didn't clear the bevel sat
+  // embedded inside that beveled geometry and was permanently occluded by it.
+  const screenZ = dims.bodyD / 2 + dims.bevel + 0.001
 
   const chromeTex = useMemo(
     () => (spec.kind === 'browser' ? browserChromeTexture(spec.id.includes('dark')) : null),
@@ -351,10 +357,23 @@ export function DeviceMesh({ device }: { device: DeviceInstance }) {
     [spec.kind, dims.bodyW],
   )
 
-  const screenMat = texture ? (
-    <meshBasicMaterial map={texture} toneMapped={false} />
-  ) : (
-    <meshStandardMaterial color={EMPTY_SCREEN_COLOR} metalness={0.35} roughness={0.3} />
+  // Key by the texture identity so the material fully remounts when the image
+  // arrives. Merely setting `material.map` after first compile doesn't add the
+  // map sampler to an already-compiled shader, so the texture never showed —
+  // a fresh material is compiled *with* the map and renders it.
+  //
+  // FrontSide only: the body encloses the screen from every other angle now
+  // that screenZ correctly clears the bevel, and this quad has zero thickness.
+  // DoubleSide made both its faces render at once at grazing/behind angles,
+  // superimposing the (mirrored) back face over the front as a ghostly
+  // see-through double-exposure.
+  const screenMat = (
+    <meshBasicMaterial
+      key={texture ? texture.uuid : 'empty'}
+      map={texture ?? null}
+      color={texture ? '#ffffff' : EMPTY_SCREEN_COLOR}
+      toneMapped={false}
+    />
   )
 
   const bodyMat = <meshStandardMaterial color={colorValue} metalness={0.75} roughness={0.34} />

@@ -7,6 +7,7 @@ import { RightPanel } from './components/RightPanel'
 import { Inspector } from './components/Inspector'
 import { Viewport } from './components/Viewport'
 import { Timeline } from './components/Timeline'
+import { Home } from './components/Home'
 import {
   ExportDialog,
   ExportProgressOverlay,
@@ -317,7 +318,7 @@ export default function App() {
     <div className="flex h-full bg-(--panel2) text-(--tx)">
       <LeftRail />
       <div className="flex min-w-0 flex-1 flex-col">
-        {mode === 'studio' ? <StudioLayout /> : <ShotsEditor />}
+        {mode === 'home' ? <Home /> : mode === 'studio' ? <StudioLayout /> : <ShotsEditor />}
       </div>
 
       {dialog === 'export' && <ExportDialog />}

@@ -184,6 +184,10 @@ function useGlobalShortcuts() {
         s.setTime(Math.min(s.project.durationMs, Math.max(0, s.timeMs + d)))
       } else if (key === 'l') {
         s.setLoop(!s.loop)
+      } else if (key === 'g' || key === 'r' || key === 's') {
+        // Blender-style: G move, R rotate, S scale — pressing the active one exits
+        const want = key === 'g' ? 'translate' : key === 'r' ? 'rotate' : 'scale'
+        s.setGizmo(s.gizmo === want ? 'off' : want)
       } else if (key === 'i') {
         for (const prop of ['tiltX', 'tiltY', 'zoom', 'panX', 'panY'] as const)
           s.addKeyframeAt(`camera.${prop}`)

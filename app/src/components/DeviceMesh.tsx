@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import * as THREE from 'three'
 import type { ThreeEvent } from '@react-three/fiber'
 import { getDevice, screenAspectFor, type DeviceSpec } from '../lib/registry'
 import { rt } from '../lib/runtime'
 import { useStudio } from '../store'
+import { GltfDevice } from './GltfDevice'
 import type { DeviceInstance } from '../types'
 
 // ————— shared geometry helpers —————
@@ -386,6 +387,24 @@ export function DeviceMesh({ device }: { device: DeviceInstance }) {
   }, [spec.mask])
 
   const isPortrait = device.orientation === 'portrait' || !spec.canRotate
+
+  // A spec backed by a real .glb renders that instead of the procedural body.
+  // Suspense boundary lives here so the (lazy) model download can't block the
+  // rest of the scene from rendering.
+  if (spec.model) {
+    return (
+      <group ref={setGroup}>
+        <Suspense fallback={null}>
+          <GltfDevice
+            model={spec.model}
+            texture={texture}
+            emptyColor={EMPTY_SCREEN_COLOR}
+            onPick={onPick}
+          />
+        </Suspense>
+      </group>
+    )
+  }
 
   switch (spec.kind) {
     case 'laptop': {

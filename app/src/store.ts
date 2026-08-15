@@ -89,6 +89,9 @@ export function defaultProject(): ProjectDoc {
 
 export type AppMode = 'home' | 'studio' | 'shots'
 
+/** Transform-gizmo mode, mirroring Blender's move/rotate/scale tools. */
+export type GizmoMode = 'off' | 'translate' | 'rotate' | 'scale'
+
 interface StudioState {
   hydrated: boolean
   theme: 'dark' | 'light'
@@ -97,6 +100,8 @@ interface StudioState {
   railOpen: boolean
   /** right inspector panel visible */
   panelOpen: boolean
+  /** Blender-style transform gizmo on the selected device ('off' = hidden) */
+  gizmo: GizmoMode
   project: ProjectDoc
   assets: Record<string, AssetRuntime>
   selectedDeviceId: string | null
@@ -180,6 +185,7 @@ interface StudioState {
   setMode: (m: AppMode) => void
   setRailOpen: (v: boolean) => void
   setPanelOpen: (v: boolean) => void
+  setGizmo: (m: GizmoMode) => void
 
   hydrate: () => Promise<void>
 }
@@ -231,6 +237,7 @@ export const useStudio = create<StudioState>()(
     mode: 'studio',
     railOpen: localStorage.getItem('ms-rail') === 'open',
     panelOpen: localStorage.getItem('ms-panel') !== 'closed',
+    gizmo: 'off',
     project: defaultProject(),
     assets: {},
     selectedDeviceId: null,
@@ -722,6 +729,7 @@ export const useStudio = create<StudioState>()(
       localStorage.setItem('ms-panel', v ? 'open' : 'closed')
       set((s) => void (s.panelOpen = v))
     },
+    setGizmo: (m) => set((s) => void (s.gizmo = m)),
 
     hydrate: async () => {
       try {

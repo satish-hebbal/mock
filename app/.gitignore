@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Source device models: multi-MB Sketchfab exports kept locally only.
+# Commit the optimized output instead (scripts/optimize-models.mjs).
+public/models/*.glb

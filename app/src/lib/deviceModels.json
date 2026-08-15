@@ -1,0 +1,93 @@
+{
+  "_comment": "Screen-mesh manifest. `screenMesh` matches a three.js node name OR a material name. Chosen from scripts/detect-screens.mjs output, then confirmed by rendering. fitHeight is the on-screen HEIGHT of the display in scene units (matches the procedural devices), not the whole model. Shared by optimize-models.mjs (to strip replaceable screen textures) and the device registry.",
+  "models": [
+    {
+      "file": "nothing_phone_2a.glb",
+      "id": "nothing_phone_2a",
+      "name": "Nothing Phone (2a)",
+      "kind": "phone",
+      "screenMesh": "Cube_screen_0",
+      "screenAspect": 0.4494,
+      "fitHeight": 2.04,
+      "verified": true
+    },
+    {
+      "file": "nothing_phone_2.glb",
+      "id": "nothing_phone_2",
+      "name": "Nothing Phone (2)",
+      "kind": "phone",
+      "screenMesh": "Cylinder.003_screen_0",
+      "screenAspect": 0.4566,
+      "fitHeight": 2.04,
+      "verified": true
+    },
+    {
+      "file": "iphone_16_-_free.glb",
+      "id": "iphone_16",
+      "name": "iPhone 16",
+      "kind": "phone",
+      "screenMesh": "Object_18",
+      "screenAspect": 0.4615,
+      "fitHeight": 2.04,
+      "verified": true
+    },
+    {
+      "file": "iphone_17_pro_max_cosmic_orange.glb",
+      "id": "iphone_17_pro_max",
+      "name": "iPhone 17 Pro Max",
+      "kind": "phone",
+      "screenMesh": "Object_49",
+      "screenAspect": 0.4602,
+      "fitHeight": 2.04,
+      "verified": true
+    },
+    {
+      "file": "iphone_14_pro_max_deep_purple.glb",
+      "id": "iphone_14_pro_max",
+      "name": "iPhone 14 Pro Max",
+      "kind": "phone",
+      "screenMesh": "YbXWdqEcjbfTKuN_0",
+      "screenAspect": 0.4615,
+      "fitHeight": 2.04,
+      "verified": true
+    },
+    {
+      "file": "galaxy_s26_ultra_s_pen.glb",
+      "id": "galaxy_s26_ultra",
+      "name": "Galaxy S26 Ultra",
+      "kind": "phone",
+      "screenMesh": "phone_Material.016_0",
+      "screenAspect": 0.4571,
+      "fitHeight": 2.04,
+      "verified": true
+    },
+    {
+      "file": "macbook_pro_m5_max_16_inch_2026.glb",
+      "id": "macbook_pro_16",
+      "name": "MacBook Pro 16\u2033",
+      "kind": "laptop",
+      "screenMesh": "Object_23",
+      "screenAspect": 1.5434,
+      "fitHeight": 1.75
+    },
+    {
+      "file": "samsung_galaxy_watch_7.glb",
+      "id": "galaxy_watch_7",
+      "name": "Galaxy Watch 7",
+      "kind": "watch",
+      "screenMesh": "Object_34",
+      "screenAspect": 0.8548,
+      "fitHeight": 0.73,
+      "verified": true
+    },
+    {
+      "file": "apple_watch_ultra_orange.glb",
+      "id": "apple_watch_ultra",
+      "name": "Apple Watch Ultra",
+      "kind": "watch",
+      "screenMesh": "Object_54",
+      "screenAspect": 0.8167,
+      "fitHeight": 0.73
+    }
+  ]
+}

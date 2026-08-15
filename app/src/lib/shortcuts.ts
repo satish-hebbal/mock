@@ -81,6 +81,9 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { keys: 'Drag', desc: 'Orbit the camera' },
       { keys: 'Right-drag', desc: 'Pan' },
       { keys: 'Scroll', desc: 'Zoom' },
+      { keys: 'G', desc: 'Move gizmo on the selected device (press again to hide)' },
+      { keys: 'R', desc: 'Rotate gizmo' },
+      { keys: 'S', desc: 'Scale gizmo' },
     ],
   },
   {

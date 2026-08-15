@@ -24,6 +24,8 @@ export const rt = {
   videos: new Map<string, HTMLVideoElement>(),
   setFrameloop: undefined as ((mode: 'always' | 'never' | 'demand') => void) | undefined,
   exportCancelled: false,
+  /** true while a transform-gizmo handle is held, so camera gestures stand down */
+  gizmoDragging: false,
 }
 
 const BASE_DIST = 7

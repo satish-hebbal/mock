@@ -1,3 +1,5 @@
+import deviceModels from './deviceModels.json'
+
 // Device registry — source of truth for every device (PRD §9).
 export type DeviceKind =
   | 'phone'
@@ -17,6 +19,25 @@ export interface DeviceColor {
   value: string
 }
 
+/** A real 3D model backing a device, instead of the procedural slab meshes. */
+export interface DeviceModel {
+  /** path under /public, served as a static asset and lazy-loaded on demand */
+  url: string
+  /**
+   * Mesh/node name of the display surface. The screenshot is mapped onto this
+   * mesh; every other mesh keeps the model's own materials.
+   */
+  screenMesh: string
+  /** target on-screen HEIGHT of the display, in scene units */
+  fitHeight: number
+  /**
+   * Extra rotation in degrees, applied after auto-orientation. Escape hatch for
+   * models whose geometry defeats the automatic normal detection (e.g. a laptop
+   * whose lid and base are separate sub-scenes).
+   */
+  rotationEuler?: [number, number, number]
+}
+
 export interface DeviceSpec {
   id: string
   name: string
@@ -27,6 +48,8 @@ export interface DeviceSpec {
   canRotate: boolean
   mask: ScreenMask
   colors: DeviceColor[]
+  /** present → render the real GLB instead of the procedural body */
+  model?: DeviceModel
 }
 
 const PHONE_COLORS: DeviceColor[] = [
@@ -42,6 +65,40 @@ const METAL_COLORS: DeviceColor[] = [
   { id: 'black', name: 'Space Black', value: '#3c3c40' },
   { id: 'starlight', name: 'Starlight', value: '#e9e3d8' },
 ]
+
+/**
+ * Devices backed by real .glb models. Generated from the shared manifest so the
+ * asset pipeline (scripts/optimize-models.mjs) and the app can never disagree
+ * about which mesh is the display.
+ */
+const CATEGORY_FOR: Record<string, DeviceSpec['category']> = {
+  phone: 'Phones',
+  tablet: 'Tablets',
+  laptop: 'Laptops',
+  desktop: 'Desktops',
+  watch: 'Watches',
+}
+
+const MODEL_DEVICES: DeviceSpec[] = deviceModels.models
+  // Only ship models whose screen mesh has been confirmed by rendering — an
+  // unverified one shows the screenshot on the wrong face (or not at all).
+  .filter((m) => m.verified)
+  .map((m) => ({
+  id: m.id,
+  name: m.name,
+  category: CATEGORY_FOR[m.kind] ?? 'Frames',
+  kind: m.kind as DeviceKind,
+  screenAspect: m.screenAspect,
+  canRotate: m.kind !== 'laptop',
+  mask: 'none', // the model geometry already has its own notch/punch-hole
+  colors: [{ id: 'stock', name: 'Stock', value: '#3a3a3e' }],
+  model: {
+    url: `/models/optimized/${m.file}`,
+    screenMesh: m.screenMesh,
+    fitHeight: m.fitHeight,
+    rotationEuler: (m as { rotationEuler?: [number, number, number] }).rotationEuler,
+  },
+  }))
 
 export const DEVICES: DeviceSpec[] = [
   {
@@ -265,6 +322,7 @@ export const DEVICES: DeviceSpec[] = [
     mask: 'none',
     colors: [{ id: 'none', name: 'None', value: '#000000' }],
   },
+  ...MODEL_DEVICES,
 ]
 
 export function getDevice(id: string): DeviceSpec {

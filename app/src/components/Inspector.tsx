@@ -1,7 +1,22 @@
 import { useState } from 'react'
 import { pickMediaFile, useStudio } from '../store'
 import { ColorRow, Dropdown, MiniButton, Section, Segments, SliderRow, SubHeading } from './controls'
-import { Box, Camera, CircleMinus, Disc, FileImage, Image, Palette, Sparkles, Sun, Type } from 'lucide-react'
+import {
+  Ban,
+  Box,
+  Camera,
+  CircleMinus,
+  Disc,
+  FileImage,
+  Image,
+  Move3d,
+  Palette,
+  Rotate3d,
+  Scale3d,
+  Sparkles,
+  Sun,
+  Type,
+} from 'lucide-react'
 import { CAMERA_PRESETS, GRADIENT_PRESETS, OVERLAY_FONTS } from '../lib/presets'
 import { DEVICES, DEVICE_CATEGORIES, getDevice } from '../lib/registry'
 import { MESH_PALETTES, meshGradientDataURL } from '../lib/meshGradient'
@@ -403,6 +418,7 @@ function EffectsSection() {
 function DevicesSection() {
   const devices = useStudio((s) => s.project.scene.devices)
   const selectedId = useStudio((s) => s.selectedDeviceId)
+  const gizmo = useStudio((s) => s.gizmo)
   const st = useStudio.getState
   const [adding, setAdding] = useState(false)
 
@@ -453,6 +469,22 @@ function DevicesSection() {
             </div>
           )
         })}
+      </div>
+
+      <SubHeading icon={<Move3d {...subIcon} />}>Transform gizmo</SubHeading>
+      <div className="mb-2 grid grid-cols-4 gap-1">
+        {(
+          [
+            ['off', 'Off', Ban],
+            ['translate', 'Move', Move3d],
+            ['rotate', 'Rotate', Rotate3d],
+            ['scale', 'Scale', Scale3d],
+          ] as const
+        ).map(([m, label, Icon]) => (
+          <MiniButton key={m} active={gizmo === m} onClick={() => st().setGizmo(m)} title={label}>
+            <Icon {...subIcon} />
+          </MiniButton>
+        ))}
       </div>
 
       <div className="mb-2 flex gap-1">

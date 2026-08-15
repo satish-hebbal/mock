@@ -15,6 +15,7 @@ import { meshGradientDataURL } from '../lib/meshGradient'
 import { gradeFilter } from '../lib/grade'
 import { useStudio } from '../store'
 import { DeviceMesh } from './DeviceMesh'
+import { DeviceGizmo } from './DeviceGizmo'
 import { OverlayLayer } from './OverlayLayer'
 import type { BackgroundState } from '../types'
 
@@ -138,6 +139,8 @@ function useCameraGestures(container: React.RefObject<HTMLDivElement | null>) {
 
     const onPointerDown = (e: PointerEvent) => {
       if (e.button !== 0 && e.button !== 1 && e.button !== 2) return
+      // a transform-gizmo handle owns the drag; don't orbit underneath it
+      if (rt.gizmoDragging) return
       mode = e.button === 0 ? 'orbit' : 'pan'
       startX = e.clientX
       startY = e.clientY
@@ -146,7 +149,7 @@ function useCameraGestures(container: React.RefObject<HTMLDivElement | null>) {
     }
 
     const onPointerMove = (e: PointerEvent) => {
-      if (!mode) return
+      if (!mode || rt.gizmoDragging) return
       const dx = e.clientX - startX
       const dy = e.clientY - startY
       const s = useStudio.getState()
@@ -308,6 +311,7 @@ export function Viewport() {
                 <DeviceMesh key={`${d.id}-${d.modelId}-${d.orientation}`} device={d} />
               ))}
             </SceneRoot>
+            <DeviceGizmo />
             {ground.shadow && (
               <ContactShadows
                 position={[0, -1.3, 0]}

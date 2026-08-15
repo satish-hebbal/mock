@@ -47,7 +47,10 @@ export function Timeline() {
   const selectedKfIds = useStudio((s) => s.selectedKeyframeIds)
   const st = useStudio.getState
 
-  const [collapsed, setCollapsed] = useState(false)
+  // collapsed by default and remembered in the store, so the top bar and the `\`
+  // shortcut can drive the same state
+  const collapsed = !useStudio((s) => s.timelineOpen)
+  const setCollapsed = (v: boolean) => st().setTimelineOpen(!v)
   const [presetsOpen, setPresetsOpen] = useState(false)
   const [height, setHeight] = useState(() => {
     const saved = Number(localStorage.getItem(HEIGHT_KEY))
@@ -92,7 +95,8 @@ export function Timeline() {
     const el = e.currentTarget as HTMLElement
     el.setPointerCapture(e.pointerId)
     const onMove = (ev: PointerEvent) => {
-      setCollapsed(false)
+      // dragging the grip is also a way to open a collapsed timeline
+      if (!useStudio.getState().timelineOpen) setCollapsed(false)
       setHeight(Math.min(max, Math.max(MIN_H, startH - (ev.clientY - startY))))
     }
     const onUp = () => {

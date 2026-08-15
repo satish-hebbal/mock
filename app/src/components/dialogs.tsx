@@ -8,6 +8,9 @@ import { CircleMinus } from 'lucide-react'
 import { ui } from '../lib/ui'
 import { Dropdown, MiniButton, Segments, SliderRow } from './controls'
 
+/** Sentinel size option: follow the project's frame instead of a fixed preset. */
+const FRAME_IDX = -2
+
 function Modal({
   title,
   onClose,
@@ -55,7 +58,8 @@ export function ExportDialog() {
   const st = useStudio.getState
 
   const [mode, setMode] = useState<'image' | 'video' | 'batch'>('image')
-  const [sizeIdx, setSizeIdx] = useState(0)
+  // -2 = the project's own frame, the shape you actually composed against
+  const [sizeIdx, setSizeIdx] = useState(FRAME_IDX)
   const [customW, setCustomW] = useState(project.exportSize.width)
   const [customH, setCustomH] = useState(project.exportSize.height)
   const [scale, setScale] = useState(1)
@@ -69,8 +73,9 @@ export function ExportDialog() {
   const [error, setError] = useState<string | null>(null)
 
   const custom = sizeIdx === -1
-  const baseW = custom ? customW : SIZE_PRESETS[sizeIdx].width
-  const baseH = custom ? customH : SIZE_PRESETS[sizeIdx].height
+  const frame = sizeIdx === FRAME_IDX
+  const baseW = frame ? project.exportSize.width : custom ? customW : SIZE_PRESETS[sizeIdx].width
+  const baseH = frame ? project.exportSize.height : custom ? customH : SIZE_PRESETS[sizeIdx].height
   const outW = Math.round(baseW * (mode === 'image' ? scale : 1))
   const outH = Math.round(baseH * (mode === 'image' ? scale : 1))
 
@@ -176,6 +181,10 @@ export function ExportDialog() {
               value={sizeIdx}
               onChange={setSizeIdx}
               options={[
+                {
+                  value: FRAME_IDX,
+                  label: `Project frame ${project.exportSize.width}×${project.exportSize.height}`,
+                },
                 ...SIZE_PRESETS.map((p, i) => ({ value: i, label: p.name })),
                 { value: -1, label: 'Custom…' },
               ]}

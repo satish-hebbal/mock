@@ -19,6 +19,8 @@ export const rt = {
   camera: undefined as THREE.PerspectiveCamera | undefined,
   composer: undefined as { render(dt?: number): void; setSize(w: number, h: number): void } | undefined,
   sceneRoot: undefined as THREE.Group | undefined,
+  /** the lighting rig, yawed to stay put relative to the lens */
+  lightRig: undefined as THREE.Group | undefined,
   deviceGroups: new Map<string, THREE.Group>(),
   screens: new Map<string, ScreenHandle>(),
   videos: new Map<string, HTMLVideoElement>(),
@@ -60,6 +62,17 @@ export function applyAtTime(project: ProjectDoc, timeMs: number) {
       cam.updateProjectionMatrix()
     }
   }
+
+  /*
+   * Swing the lighting rig with the lens. A photographer walking around a
+   * product takes the lights with them, so a 45° key stays 45° off the camera
+   * instead of sliding behind the subject when the shot orbits. Driven here
+   * rather than in a useFrame so the export loop — which renders without R3F's
+   * frame loop — lights every frame exactly like the preview.
+   */
+  const yaw = degToRad(v('camera.tiltY', c.tiltY))
+  if (rt.lightRig) rt.lightRig.rotation.y = yaw
+  if (rt.scene) rt.scene.environmentRotation.y = yaw
 
   if (rt.sceneRoot) {
     rt.sceneRoot.rotation.set(

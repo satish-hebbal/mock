@@ -2,7 +2,8 @@ import { Vector2 } from 'three'
 import { applyAtTime, renderFrame, rt } from './runtime'
 import { paintMeshGradient } from './meshGradient'
 import { gradeFilter } from './grade'
-import type { AssetRuntime, BackgroundState, Overlay, ProjectDoc } from '../types'
+import { rgba } from './color'
+import type { AssetRuntime, BackgroundState, Overlay, ProjectDoc, SweepSpec } from '../types'
 
 // ————— Background compositing (preview CSS ⇄ export canvas parity) —————
 
@@ -23,6 +24,53 @@ function paintLinearGradient(
   g.addColorStop(1, to)
   ctx.fillStyle = g
   ctx.fillRect(0, 0, w, h)
+}
+
+/**
+ * The seamless sweep, in the same four passes the CSS preview uses: paper, the
+ * pool of light the key throws on it, the falloff toward the floor, and the
+ * corner hold. Elliptical gradients are done by scaling a circular one, which
+ * canvas has no direct equivalent for.
+ */
+function paintSweep(ctx: CanvasRenderingContext2D, w: number, h: number, s: SweepSpec) {
+  ctx.fillStyle = s.color
+  ctx.fillRect(0, 0, w, h)
+
+  const cy = h * s.hotY
+  const hotW = w * s.spread
+  const hotH = hotW * 0.75
+
+  ctx.save()
+  ctx.translate(w / 2, cy)
+  ctx.scale(1, hotH / hotW)
+  const hot = ctx.createRadialGradient(0, 0, 0, 0, 0, hotW)
+  hot.addColorStop(0, s.hot)
+  hot.addColorStop(0.7, rgba(s.hot, 0))
+  hot.addColorStop(1, rgba(s.hot, 0))
+  ctx.fillStyle = hot
+  ctx.fillRect(-w, (-h * hotW) / hotH, w * 2, (h * 2 * hotW) / hotH)
+  ctx.restore()
+
+  if (s.floor > 0) {
+    const floor = ctx.createLinearGradient(0, h * 0.46, 0, h)
+    floor.addColorStop(0, 'rgba(0, 0, 0, 0)')
+    floor.addColorStop(1, `rgba(0, 0, 0, ${s.floor})`)
+    ctx.fillStyle = floor
+    ctx.fillRect(0, 0, w, h)
+  }
+
+  if (s.vignette > 0) {
+    const r = Math.max(w, h) * 0.75
+    ctx.save()
+    ctx.translate(w / 2, cy)
+    ctx.scale(1, (h * 1.05) / (w * 1.2))
+    const vig = ctx.createRadialGradient(0, 0, r * 0.42, 0, 0, r)
+    vig.addColorStop(0, 'rgba(0, 0, 0, 0)')
+    vig.addColorStop(1, `rgba(0, 0, 0, ${s.vignette})`)
+    ctx.fillStyle = vig
+    ctx.fillRect(-w * 2, -h * 2, w * 4, h * 4)
+    ctx.restore()
+  }
 }
 
 async function paintBackground(
@@ -56,6 +104,9 @@ async function paintBackground(
       break
     case 'mesh':
       paintMeshGradient(ctx, w, h, bg.mesh.seed, bg.mesh.colors)
+      break
+    case 'studio':
+      paintSweep(ctx, w, h, bg.sweep)
       break
     case 'image': {
       const asset = bg.imageAssetId ? assets[bg.imageAssetId] : null

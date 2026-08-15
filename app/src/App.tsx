@@ -7,6 +7,7 @@ import { RightPanel } from './components/RightPanel'
 import { Inspector } from './components/Inspector'
 import { Viewport } from './components/Viewport'
 import { Timeline } from './components/Timeline'
+import { TopBar } from './components/TopBar'
 import { Home } from './components/Home'
 import {
   ExportDialog,
@@ -84,6 +85,10 @@ function useGlobalShortcuts() {
       }
       if (!mod && key === ']') {
         s.setPanelOpen(!s.panelOpen)
+        return true
+      }
+      if (!mod && key === '\\') {
+        s.setTimelineOpen(!s.timelineOpen)
         return true
       }
       if (!mod && e.shiftKey && key === 'd') {
@@ -271,23 +276,26 @@ function StudioLayout() {
   return (
     <>
       <main className="flex min-h-0 flex-1">
-        <div className="relative min-w-0 flex-1">
-          {hydrated && <Viewport />}
-          {hydrated && !hasMedia && (
-            <div className="pointer-events-none absolute inset-x-0 bottom-10 z-10 flex justify-center">
-              <div className="pointer-events-auto flex items-center gap-3 rounded-full border border-(--line) bg-(--panel) py-2 pr-2 pl-5 shadow-xl">
-                <span className="text-[13px] text-(--tx2)">
-                  Upload media to get started — or paste / drop.
-                </span>
-                <button
-                  onClick={() => pickMediaFile((f) => void useStudio.getState().importMedia(f))}
-                  className="rounded-full bg-(--accent-fill) px-4 py-1.5 text-[11px] font-semibold tracking-[0.14em] text-(--accent-tx) uppercase transition-opacity hover:opacity-90"
-                >
-                  Upload
-                </button>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <TopBar />
+          <div className="relative min-h-0 min-w-0 flex-1">
+            {hydrated && <Viewport />}
+            {hydrated && !hasMedia && (
+              <div className="pointer-events-none absolute inset-x-0 bottom-10 z-10 flex justify-center">
+                <div className="pointer-events-auto flex items-center gap-3 rounded-full border border-(--line) bg-(--panel) py-2 pr-2 pl-5 shadow-xl">
+                  <span className="text-[13px] text-(--tx2)">
+                    Upload media to get started — or paste / drop.
+                  </span>
+                  <button
+                    onClick={() => pickMediaFile((f) => void useStudio.getState().importMedia(f))}
+                    className="rounded-full bg-(--accent-fill) px-4 py-1.5 text-[11px] font-semibold tracking-[0.14em] text-(--accent-tx) uppercase transition-opacity hover:opacity-90"
+                  >
+                    Upload
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
         <RightPanel>
           <Inspector />

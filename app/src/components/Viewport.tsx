@@ -1,5 +1,5 @@
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { ContactShadows } from '@react-three/drei'
+import { ContactShadows, Environment, Lightformer } from '@react-three/drei'
 import {
   Bloom,
   ChromaticAberration,
@@ -13,6 +13,7 @@ import type { EffectComposer as EffectComposerImpl } from 'postprocessing'
 import { rt, applyAtTime } from '../lib/runtime'
 import { meshGradientDataURL } from '../lib/meshGradient'
 import { gradeFilter } from '../lib/grade'
+import { rgba } from '../lib/color'
 import { useStudio } from '../store'
 import { DeviceMesh } from './DeviceMesh'
 import { DeviceGizmo } from './DeviceGizmo'
@@ -38,6 +39,21 @@ function cssBackground(bg: BackgroundState, imageUrl: string | null): React.CSSP
         backgroundSize: 'cover',
         backgroundPosition: 'center',
       }
+    case 'studio': {
+      // Painted in the same order as the export canvas: paper, then the pool of
+      // light the key throws on it, the floor falloff, and the corner hold.
+      const s = bg.sweep
+      const hotW = Math.round(s.spread * 200)
+      const hotH = Math.round(s.spread * 150)
+      return {
+        backgroundColor: s.color,
+        backgroundImage: [
+          `radial-gradient(120% 105% at 50% ${s.hotY * 100}%, ${rgba('#000000', 0)} 42%, ${rgba('#000000', s.vignette)} 100%)`,
+          `linear-gradient(to bottom, ${rgba('#000000', 0)} 46%, ${rgba('#000000', s.floor)} 100%)`,
+          `radial-gradient(${hotW}% ${hotH}% at 50% ${s.hotY * 100}%, ${s.hot} 0%, ${rgba(s.hot, 0)} 70%)`,
+        ].join(','),
+      }
+    }
     case 'image':
       return imageUrl
         ? { backgroundImage: `url(${imageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
@@ -65,6 +81,14 @@ function RuntimeBridge() {
   // The single deterministic driver: evaluate keyframes at the playhead and
   // write into the three scene every frame (PRD §5.4).
   useFrame(() => {
+    // Several passes borrow the renderer mid-frame — the post-processing
+    // composer, the contact-shadow FBO, the environment cube — and each one
+    // toggles autoClear around its own render. If any of them unmounts between
+    // the set and the restore, the canvas stops clearing and every frame paints
+    // on top of the last one (the device smears into a fan of ghosts while you
+    // orbit). Re-asserting it here, before R3F renders, makes that unrecoverable
+    // state impossible.
+    gl.autoClear = true
     const s = useStudio.getState()
     applyAtTime(s.project, s.timeMs)
   })
@@ -82,9 +106,147 @@ function SceneRoot({ children }: { children: React.ReactNode }) {
   return <group ref={ref}>{children}</group>
 }
 
+// ————— the lighting rig (PRD §6.4 — photographic three-point setup) —————
+
+const KEY_WARM = new THREE.Color('#ffd2a1') // tungsten
+const KEY_COOL = new THREE.Color('#cfe0ff') // daylight strobe
+const NEUTRAL = new THREE.Color('#ffffff')
+
+/** Key colour for a -1 (cool) … +1 (warm) temperature dial. */
+function keyColor(t: number) {
+  const c = new THREE.Color().copy(NEUTRAL)
+  return t >= 0 ? c.lerp(KEY_WARM, t) : c.lerp(KEY_COOL, -t)
+}
+
+/** Position on a sphere around the subject, in the rig's camera-relative frame. */
+function place(azimuthDeg: number, elevationDeg: number, radius: number): [number, number, number] {
+  const a = THREE.MathUtils.degToRad(azimuthDeg)
+  const e = THREE.MathUtils.degToRad(elevationDeg)
+  return [Math.sin(a) * Math.cos(e) * radius, Math.sin(e) * radius, Math.cos(a) * Math.cos(e) * radius]
+}
+
+/**
+ * Lamps and softboxes, mounted on a rig that yaws with the camera.
+ *
+ * A photographer who walks around a product carries the setup with them, so a
+ * "45° key" stays 45° off the lens instead of swinging behind the subject when
+ * you orbit. The same yaw is applied to the environment map so the reflections
+ * in a glossy body track the lamps that are supposedly casting them.
+ */
+function StudioRig() {
+  const env = useStudio((s) => s.project.scene.environment)
+  const rigRef = useRef<THREE.Group>(null)
+
+  // the yaw itself is written by applyAtTime, the one driver both the preview
+  // and the export loop run through
+  useEffect(() => {
+    rt.lightRig = rigRef.current ?? undefined
+    return () => {
+      rt.lightRig = undefined
+    }
+  }, [])
+
+  const key = keyColor(env.temperature)
+  // fill is the bounce off the opposite wall: always cooler than the key
+  const fill = keyColor(-env.temperature * 0.5)
+  const rim = keyColor(-Math.abs(env.temperature) * 0.4 - 0.15)
+
+  const keyPos = place(env.keyAzimuth, env.keyElevation, 7)
+  const fillPos = place(-env.keyAzimuth * 0.85, env.keyElevation * 0.35, 6.5)
+  const rimPos = place(180 - env.keyAzimuth * 0.5, 42, 6)
+
+  const soft = 0.35 + env.softness * 1.15
+
+  return (
+    <>
+      <group ref={rigRef}>
+        <ambientLight intensity={env.ambient} />
+        <directionalLight position={keyPos} intensity={env.keyIntensity} color={key} />
+        <directionalLight position={fillPos} intensity={env.fillIntensity} color={fill} />
+        <directionalLight position={rimPos} intensity={env.rimIntensity} color={rim} />
+        {/* the white card on the table, lifting the underside of the product */}
+        <directionalLight position={[0, -4, 3.2]} intensity={env.bounce * 0.9} color="#ffffff" />
+      </group>
+
+      {/*
+        Softboxes as geometry: they are what a glossy phone body actually
+        reflects. Without them the metal frames read as flat grey plastic.
+
+        No `key` here on purpose — drei re-renders the cube map whenever these
+        children change identity, which is every time a lighting dial moves.
+        Remounting instead would throw away and reallocate the render target on
+        every frame of a slider drag.
+      */}
+      <Environment frames={1} resolution={128} environmentIntensity={env.reflection}>
+        <color attach="background" args={['#0a0a0c']} />
+        <Lightformer
+          form="rect"
+          intensity={env.keyIntensity * 1.1}
+          color={`#${key.getHexString()}`}
+          position={keyPos}
+          scale={[6 * soft, 9 * soft, 1]}
+          target={[0, 0, 0]}
+        />
+        <Lightformer
+          form="rect"
+          intensity={env.fillIntensity * 1.2}
+          color={`#${fill.getHexString()}`}
+          position={fillPos}
+          scale={[7 * soft, 6 * soft, 1]}
+          target={[0, 0, 0]}
+        />
+        <Lightformer
+          form="rect"
+          intensity={env.rimIntensity * 1.3}
+          color={`#${rim.getHexString()}`}
+          position={rimPos}
+          scale={[1.4, 9, 1]}
+          target={[0, 0, 0]}
+        />
+        <Lightformer
+          form="rect"
+          intensity={env.bounce * 1.1}
+          color="#ffffff"
+          position={[0, -5, 2]}
+          scale={[10, 10, 1]}
+          target={[0, 0, 0]}
+        />
+      </Environment>
+    </>
+  )
+}
+
+/**
+ * The pool of shadow the product sits in.
+ *
+ * ContactShadows projects straight down from an orthographic camera, so it
+ * can't be leaned toward or away from the key: offsetting it only slides the
+ * capture window until the blurred shadow runs off the edge of its own plane,
+ * which shows up as a hard diagonal line across the backdrop. It stays centred,
+ * and softness only nudges the blur — past roughly 3 the shadow stops reading
+ * as contact and becomes a grey cloud hanging in frame.
+ */
+function GroundShadow() {
+  const ground = useStudio((s) => s.project.scene.ground)
+  const softness = useStudio((s) => s.project.scene.environment.softness)
+
+  if (!ground.shadow) return null
+  return (
+    <ContactShadows
+      position={[0, -1.3, 0]}
+      opacity={ground.shadowOpacity}
+      scale={10}
+      blur={Math.min(3.2, ground.shadowBlur * (0.8 + softness * 0.4))}
+      far={3}
+      resolution={512}
+    />
+  )
+}
+
 function EffectsStack() {
   const effects = useStudio((s) => s.project.scene.effects)
   const composerRef = useRef<EffectComposerImpl>(null)
+  const gl = useThree((s) => s.gl)
 
   const enabled =
     effects.bloom > 0 || effects.noise > 0 || effects.vignette > 0 || effects.chromatic > 0
@@ -95,6 +257,17 @@ function EffectsStack() {
       rt.composer = undefined
     }
   }, [enabled, effects])
+
+  // Switching studio looks turns effects on and off, which mounts and unmounts
+  // the composer under a live renderer. Hand the plain render path back a clean
+  // slate — screen target, clearing enabled, buffer wiped — so the first frame
+  // after the swap isn't drawn over the composer's leftovers.
+  useEffect(() => {
+    if (enabled) return
+    gl.autoClear = true
+    gl.setRenderTarget(null)
+    gl.clear()
+  }, [enabled, gl])
 
   const chromaticOffset = useMemo(
     () => new THREE.Vector2(effects.chromatic * 0.004, effects.chromatic * 0.004),
@@ -238,9 +411,7 @@ export function Viewport() {
       : null,
   )
   const devices = useStudio((s) => s.project.scene.devices)
-  const env = useStudio((s) => s.project.scene.environment)
   const grade = useStudio((s) => s.project.scene.effects.grade)
-  const ground = useStudio((s) => s.project.scene.ground)
   const exportSize = useStudio((s) => s.project.exportSize)
   const selectDevice = useStudio((s) => s.selectDevice)
   const selectOverlay = useStudio((s) => s.selectOverlay)
@@ -302,26 +473,14 @@ export function Viewport() {
             onPointerMissed={() => selectDevice(null)}
           >
             <RuntimeBridge />
-            <ambientLight intensity={env.ambient} />
-            <directionalLight position={[4, 6, 5]} intensity={env.keyIntensity} />
-            <directionalLight position={[-5, 2, -4]} intensity={env.fillIntensity} />
-            <directionalLight position={[0, -3, 3]} intensity={env.rimIntensity} color="#bcd4ff" />
+            <StudioRig />
             <SceneRoot>
               {devices.map((d) => (
                 <DeviceMesh key={`${d.id}-${d.modelId}-${d.orientation}`} device={d} />
               ))}
             </SceneRoot>
             <DeviceGizmo />
-            {ground.shadow && (
-              <ContactShadows
-                position={[0, -1.3, 0]}
-                opacity={ground.shadowOpacity}
-                scale={10}
-                blur={ground.shadowBlur}
-                far={3}
-                resolution={512}
-              />
-            )}
+            <GroundShadow />
             <EffectsStack />
           </Canvas>
         </div>

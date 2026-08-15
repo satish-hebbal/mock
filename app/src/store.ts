@@ -2,8 +2,10 @@ import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { loadAsset, loadProjectJSON, saveAsset, saveProjectJSON } from './lib/db'
 import { getTargetValue, sampleKeyframes, setTargetValue } from './lib/evaluator'
-import { getDevice } from './lib/registry'
+import { DEFAULT_DEVICE_ID, getDevice } from './lib/registry'
 import { ANIMATION_PRESETS, TEMPLATES } from './lib/presets'
+import { DEFAULT_LOOK, getLook } from './lib/studio'
+import { NEUTRAL_GRADE } from './lib/grade'
 import type {
   AssetMeta,
   AssetRuntime,
@@ -18,6 +20,7 @@ import type {
   Keyframe,
   Overlay,
   ProjectDoc,
+  SweepSpec,
   Vec3,
 } from './types'
 
@@ -32,10 +35,11 @@ export interface ExportProgress {
 }
 
 function defaultDevice(): DeviceInstance {
+  const spec = getDevice(DEFAULT_DEVICE_ID)
   return {
     id: `dev_${uid()}`,
-    modelId: 'phone_pro',
-    colorVariant: 'titanium',
+    modelId: spec.id,
+    colorVariant: spec.colors[0]?.id ?? 'stock',
     orientation: 'portrait',
     transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: 1 },
     screen: { assetId: null, fit: 'cover', scroll: 0 },
@@ -43,6 +47,9 @@ function defaultDevice(): DeviceInstance {
 }
 
 export function defaultProject(): ProjectDoc {
+  // A new project opens on a lit set rather than a flat gradient: the
+  // three-point rig, its sweep, and the framing that setup was built around.
+  const look = DEFAULT_LOOK
   return {
     version: 2,
     name: 'Untitled Mockup',
@@ -51,28 +58,19 @@ export function defaultProject(): ProjectDoc {
     exportSize: { width: 1920, height: 1080 },
     scene: {
       devices: [defaultDevice()],
-      camera: {
-        tiltX: -12,
-        tiltY: 32,
-        roll: 0,
-        fov: 26,
-        zoom: 1.5,
-        panX: 0,
-        panY: 0,
-        rotateX: 0,
-        rotateY: 0,
-      },
+      camera: { ...look.camera, panX: 0, panY: 0, rotateX: 0, rotateY: 0 },
       background: {
-        type: 'gradient',
+        type: 'studio',
         color: '#b8c4e8',
         gradient: { kind: 'linear', angle: 135, from: '#c7b9f0', to: '#9fc4ee' },
         mesh: { seed: 7, colors: ['#a18cd1', '#fbc2eb', '#8ec5fc', '#e0c3fc'] },
+        sweep: { ...look.sweep },
         imageAssetId: null,
         blur: 0,
         brightness: 1,
       },
-      environment: { keyIntensity: 1.6, fillIntensity: 0.5, rimIntensity: 0.35, ambient: 0.65 },
-      ground: { shadow: true, shadowOpacity: 0.45, shadowBlur: 2.4 },
+      environment: { ...look.env },
+      ground: { ...look.ground },
       effects: {
         bloom: 0,
         noise: 0,
@@ -100,6 +98,8 @@ interface StudioState {
   railOpen: boolean
   /** right inspector panel visible */
   panelOpen: boolean
+  /** bottom timeline expanded past its transport bar (collapsed by default) */
+  timelineOpen: boolean
   /** Blender-style transform gizmo on the selected device ('off' = hidden) */
   gizmo: GizmoMode
   project: ProjectDoc
@@ -132,6 +132,9 @@ interface StudioState {
   setAnimatable: (target: string, value: number, label?: string) => void
   setCamera: (patch: Partial<CameraState>, label?: string) => void
   setBackground: (patch: Partial<BackgroundState>) => void
+  /** apply a whole photographic setup: lights, sweep, shadow, grade, framing */
+  applyStudioLook: (lookId: string, withCamera?: boolean) => void
+  setSweep: (patch: Partial<SweepSpec>) => void
   setEnvironment: (patch: Partial<EnvironmentState>) => void
   setGround: (patch: Partial<GroundState>) => void
   setEffects: (patch: Partial<EffectsState>) => void
@@ -185,6 +188,7 @@ interface StudioState {
   setMode: (m: AppMode) => void
   setRailOpen: (v: boolean) => void
   setPanelOpen: (v: boolean) => void
+  setTimelineOpen: (v: boolean) => void
   setGizmo: (m: GizmoMode) => void
 
   hydrate: () => Promise<void>
@@ -237,6 +241,7 @@ export const useStudio = create<StudioState>()(
     mode: 'studio',
     railOpen: localStorage.getItem('ms-rail') === 'open',
     panelOpen: localStorage.getItem('ms-panel') !== 'closed',
+    timelineOpen: localStorage.getItem('ms-timeline') === 'open',
     gizmo: 'off',
     project: defaultProject(),
     assets: {},
@@ -389,6 +394,35 @@ export const useStudio = create<StudioState>()(
       get().commit('environment')
       set((s) => {
         Object.assign(s.project.scene.environment, patch)
+      })
+    },
+
+    applyStudioLook: (lookId, withCamera = true) => {
+      const look = getLook(lookId)
+      if (!look) return
+      get().commit(`look-${lookId}`)
+      set((s) => {
+        s.project.scene.environment = { ...look.env }
+        s.project.scene.ground = { ...look.ground }
+        s.project.scene.background.type = 'studio'
+        s.project.scene.background.sweep = { ...look.sweep }
+        // a look owns the mood effects, so switching setups never leaves the
+        // last one's bloom behind; grain and fringe stay as the user set them
+        Object.assign(s.project.scene.effects, {
+          bloom: 0,
+          vignette: 0,
+          ...look.effects,
+        })
+        s.project.scene.effects.grade = { ...NEUTRAL_GRADE, ...look.grade }
+        if (withCamera) Object.assign(s.project.scene.camera, look.camera)
+      })
+    },
+
+    setSweep: (patch) => {
+      get().commit('sweep')
+      set((s) => {
+        Object.assign(s.project.scene.background.sweep, patch)
+        s.project.scene.background.type = 'studio'
       })
     },
     setGround: (patch) => {
@@ -729,6 +763,10 @@ export const useStudio = create<StudioState>()(
       localStorage.setItem('ms-panel', v ? 'open' : 'closed')
       set((s) => void (s.panelOpen = v))
     },
+    setTimelineOpen: (v) => {
+      localStorage.setItem('ms-timeline', v ? 'open' : 'closed')
+      set((s) => void (s.timelineOpen = v))
+    },
     setGizmo: (m) => set((s) => void (s.gizmo = m)),
 
     hydrate: async () => {
@@ -757,6 +795,11 @@ export const useStudio = create<StudioState>()(
             saved.scene.effects.grade = { exposure: 1, contrast: 1, saturation: 1, temperature: 0 }
           // drop the removed depth-of-field state from older saves
           delete (saved.scene as { blur?: unknown }).blur
+          // migration: projects saved before the studio rig only carried the
+          // four intensities, and had no sweep to fall back on
+          saved.scene.environment = { ...DEFAULT_LOOK.env, ...saved.scene.environment }
+          if (!saved.scene.background.sweep)
+            saved.scene.background.sweep = { ...DEFAULT_LOOK.sweep }
           for (const dev of saved.scene.devices)
             if (dev.screen.assetId && !runtime[dev.screen.assetId]) dev.screen.assetId = null
           if (saved.scene.background.imageAssetId && !runtime[saved.scene.background.imageAssetId])

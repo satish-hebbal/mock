@@ -32,6 +32,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { keys: 'Esc', desc: 'Close dialog, else clear selection' },
       { keys: '[', desc: 'Toggle the left rail' },
       { keys: ']', desc: 'Toggle the inspector panel' },
+      { keys: '\\', desc: 'Expand / collapse the timeline' },
       { keys: 'Shift+D', desc: 'Toggle dark / light theme' },
     ],
   },

@@ -325,8 +325,26 @@ export const DEVICES: DeviceSpec[] = [
   ...MODEL_DEVICES,
 ]
 
+/**
+ * What the picker offers: real .glb models only. The procedural slab bodies
+ * stay in DEVICES so projects saved against them still resolve and render —
+ * they're just not something you can reach for any more. Verify another model
+ * in deviceModels.json and it shows up here on its own.
+ */
+export const PICKABLE_DEVICES: DeviceSpec[] = DEVICES.filter((d) => d.model)
+
+export function isPickable(id: string): boolean {
+  return PICKABLE_DEVICES.some((d) => d.id === id)
+}
+
+/** The device new projects start on, and the fallback for unknown ids. */
+const DEFAULT_DEVICE: DeviceSpec =
+  PICKABLE_DEVICES.find((d) => d.id === 'iphone_17_pro_max') ?? PICKABLE_DEVICES[0] ?? DEVICES[0]
+
+export const DEFAULT_DEVICE_ID = DEFAULT_DEVICE.id
+
 export function getDevice(id: string): DeviceSpec {
-  return DEVICES.find((d) => d.id === id) ?? DEVICES[0]
+  return DEVICES.find((d) => d.id === id) ?? DEFAULT_DEVICE
 }
 
 export const DEVICE_CATEGORIES = ['Phones', 'Tablets', 'Laptops', 'Desktops', 'TV', 'Watches', 'Frames'] as const

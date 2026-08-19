@@ -1,4 +1,5 @@
 import { buildCardLayer, compositeCard, computeLayout, paintShotBackground, renderCard } from './render'
+import { loadBezelImage } from './bezels'
 import type { AssetRuntime } from '../types'
 import type { ShotsDoc } from './types'
 
@@ -50,15 +51,17 @@ export async function renderShotToCanvas(
     const rt = runtime[doc.background.imageAssetId]
     if (rt) bgImages[doc.background.imageAssetId] = await loadImage(rt.url)
   }
-  paintShotBackground(ctx, outW, outH, doc.background, bgImages)
+  paintShotBackground(ctx, outW, outH, doc.background, bgImages, Math.max(1, doc.zoom ?? 1))
 
   for (const img of doc.images) {
     const meta = doc.assets.find((a) => a.id === img.assetId)
     const rt = runtime[img.assetId]
     if (!meta || !rt) continue
     const media = await loadMediaSource(rt)
-    const L = computeLayout(img, meta.w, meta.h, outW, outH)
-    const card = renderCard(media.source, L, img, media.w, media.h)
+    const L = computeLayout(img, meta.w, meta.h, outW, outH, doc.zoom ?? 1)
+    // a frame that won't decode is skipped rather than failing the whole export
+    const frame = L.bezel ? await loadBezelImage(L.bezel).catch(() => undefined) : undefined
+    const card = renderCard(media.source, L, img, media.w, media.h, frame)
     const layer = buildCardLayer(outW, outH, card, L, img)
     compositeCard(ctx, layer, L, img, Math.min(outW, outH))
   }

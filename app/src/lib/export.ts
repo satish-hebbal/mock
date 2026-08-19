@@ -1,5 +1,5 @@
 import { Vector2 } from 'three'
-import { applyAtTime, renderFrame, rt } from './runtime'
+import { applyAtTime, renderFrame, rt, setEditorObjectsVisible } from './runtime'
 import { paintMeshGradient } from './meshGradient'
 import { gradeFilter } from './grade'
 import { rgba } from './color'
@@ -309,6 +309,8 @@ export async function exportImage(
   if (!rt.gl || !rt.camera) throw new Error('Renderer not ready')
   await preloadOverlayFonts(project.overlays)
   rt.setFrameloop?.('never')
+  // the gizmo lives in this scene; it must not reach the picture
+  setEditorObjectsVisible(false)
   await pauseVideos()
   const backup = resizeRenderer(opts.width, opts.height)
   try {
@@ -342,6 +344,7 @@ export async function exportImage(
     if (!blob) throw new Error('Encoding failed')
     downloadBlob(blob, `${filename ?? safeName(project.name)}.${opts.format}`)
   } finally {
+    setEditorObjectsVisible(true)
     if (backup) restoreRenderer(backup)
     resumeVideos()
     rt.setFrameloop?.('always')
@@ -410,6 +413,8 @@ export async function exportVideo(
 
   rt.exportCancelled = false
   rt.setFrameloop?.('never')
+  // the gizmo lives in this scene; it must not reach the picture
+  setEditorObjectsVisible(false)
   await pauseVideos()
   const backup = resizeRenderer(opts.width, opts.height)
   const total = Math.max(1, Math.round((project.durationMs / 1000) * opts.fps))
@@ -467,6 +472,7 @@ export async function exportVideo(
     const mime = opts.format === 'mp4' ? 'video/mp4' : 'video/webm'
     downloadBlob(new Blob([buffer], { type: mime }), `${safeName(project.name)}.${opts.format}`)
   } finally {
+    setEditorObjectsVisible(true)
     if (backup) restoreRenderer(backup)
     resumeVideos()
     rt.setFrameloop?.('always')

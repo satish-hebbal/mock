@@ -28,12 +28,12 @@ function Modal({
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-6" onMouseDown={onClose}>
       <div
-        className={`max-h-[85vh] w-full ${wide ? 'max-w-2xl' : 'max-w-md'} overflow-y-auto rounded-xl border border-(--line) bg-(--panel) p-5 shadow-2xl`}
+        className={`max-h-[85vh] w-full ${wide ? 'max-w-2xl' : 'max-w-md'} overflow-y-auto rounded-xl border border-(--line) bg-(--raised) p-5`}
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2.5">
-            <h2 className="text-[12px] font-semibold tracking-[0.2em] text-(--tx) uppercase">{title}</h2>
+            <h2 className="t-eyebrow text-(--tx) uppercase">{title}</h2>
             {aside}
           </div>
           <button
@@ -146,14 +146,14 @@ export function ExportDialog() {
 
       {mode === 'batch' ? (
         <>
-          <label className="mb-2 block text-[10px] tracking-[0.15em] text-(--tx3) uppercase">
+          <label className="mb-2 block t-eyebrow text-(--tx3) uppercase">
             Sizes to export
           </label>
-          <div className="mb-2 max-h-48 overflow-y-auto rounded border border-(--line) p-1">
+          <div className="mb-2 max-h-48 overflow-y-auto rounded-xs border border-(--line) p-1">
             {SIZE_PRESETS.map((p, i) => (
               <label
                 key={p.name}
-                className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-[11px] text-(--tx2) hover:bg-(--panel2)"
+                className="flex cursor-pointer items-center gap-2 rounded-xs px-2 py-1 t-body-sm text-(--tx2) hover:bg-(--panel2)"
               >
                 <input
                   type="checkbox"
@@ -168,14 +168,14 @@ export function ExportDialog() {
               </label>
             ))}
           </div>
-          <p className="mb-2 text-[10px] text-(--tx3)">
+          <p className="mb-2 t-caption text-(--tx3)">
             {batchIdxs.length} size{batchIdxs.length === 1 ? '' : 's'} · one file each, downloaded in
             sequence.
           </p>
         </>
       ) : (
         <>
-          <label className="mb-2 block text-[10px] tracking-[0.15em] text-(--tx3) uppercase">Size</label>
+          <label className="mb-2 block t-eyebrow text-(--tx3) uppercase">Size</label>
           <div className="mb-2">
             <Dropdown
               value={sizeIdx}
@@ -196,14 +196,14 @@ export function ExportDialog() {
                 type="number"
                 value={customW}
                 onChange={(e) => setCustomW(Number(e.target.value))}
-                className="w-24 rounded border border-(--line) bg-transparent px-2 py-1 font-mono text-[12px] text-(--tx)"
+                className="w-24 rounded-xs border border-(--line) bg-transparent px-2 py-1 font-mono t-body-sm text-(--tx)"
               />
               <span className="text-(--tx3)">×</span>
               <input
                 type="number"
                 value={customH}
                 onChange={(e) => setCustomH(Number(e.target.value))}
-                className="w-24 rounded border border-(--line) bg-transparent px-2 py-1 font-mono text-[12px] text-(--tx)"
+                className="w-24 rounded-xs border border-(--line) bg-transparent px-2 py-1 font-mono t-body-sm text-(--tx)"
               />
             </div>
           )}
@@ -245,7 +245,7 @@ export function ExportDialog() {
             onChange={setVFormat}
           />
           <SliderRow label="Mbps" value={bitrateMbps} min={2} max={40} step={1} onChange={setBitrateMbps} />
-          <label className="mb-2 flex items-center gap-2 text-[11px] text-(--tx2)">
+          <label className="mb-2 flex items-center gap-2 t-body-sm text-(--tx2)">
             <input
               type="checkbox"
               checked={motionBlur}
@@ -253,7 +253,7 @@ export function ExportDialog() {
                          />
             Motion blur (smoother fast moves)
           </label>
-          <p className="mb-2 text-[10px] text-(--tx3)">
+          <p className="mb-2 t-caption text-(--tx3)">
             {(project.durationMs / 1000).toFixed(1)}s · {project.fps} fps ·{' '}
             {Math.round((project.durationMs / 1000) * project.fps)} frames — rendered offline in your
             browser.
@@ -261,12 +261,12 @@ export function ExportDialog() {
         </>
       )}
 
-      <label className="mb-3 flex items-center gap-2 text-[11px] text-(--tx2)">
+      <label className="mb-3 flex items-center gap-2 t-body-sm text-(--tx2)">
         <input type="checkbox" checked={transparent} onChange={(e) => setTransparent(e.target.checked)} />
         Transparent background {mode === 'video' ? '(forces WebM alpha)' : '(PNG alpha)'}
       </label>
 
-      {error && <p className="mb-2 text-[11px] text-(--danger)">{error}</p>}
+      {error && <p className="mb-2 t-body-sm text-(--danger)">{error}</p>}
 
       <button
         onClick={() => {
@@ -276,7 +276,7 @@ export function ExportDialog() {
           }
           void run()
         }}
-        className="w-full rounded-md bg-(--accent-fill) py-2 text-[12px] font-semibold tracking-[0.14em] text-(--accent-tx) uppercase hover:opacity-90"
+        className="w-full rounded-md bg-(--accent-fill) py-2 t-button text-(--accent-tx) hover:opacity-90"
       >
         {mode === 'batch' ? `Export ${batchIdxs.length} images` : `Export ${mode} · ${outW}×${outH}`}
       </button>
@@ -299,8 +299,8 @@ export function TemplatesDialog() {
           >
             <div className="h-20 w-full" style={{ background: t.swatch }} />
             <div className="p-2">
-              <p className="text-[12px] font-medium text-(--tx)">{t.name}</p>
-              <p className="text-[10px] text-(--tx3)">{t.desc}</p>
+              <p className="t-body-sm font-medium text-(--tx)">{t.name}</p>
+              <p className="t-caption text-(--tx3)">{t.desc}</p>
             </div>
           </button>
         ))}
@@ -323,13 +323,13 @@ function Keys({ combo }: { combo: string }) {
     <span className="flex flex-wrap items-center gap-0.5">
       {parts.map((p, i) =>
         i % 2 === 1 ? (
-          <span key={i} className="px-0.5 text-[10px] text-(--tx3)">
+          <span key={i} className="px-0.5 t-caption text-(--tx3)">
             {p.trim()}
           </span>
         ) : (
           <kbd
             key={i}
-            className="rounded-[4px] border border-(--line2) bg-(--panel3) px-1.5 py-0.5 text-[10px] whitespace-nowrap text-(--tx)"
+            className="rounded-xs border border-(--line2) bg-(--panel3) px-1.5 py-0.5 t-caption whitespace-nowrap text-(--tx)"
           >
             {p}
           </kbd>
@@ -366,27 +366,27 @@ export function ShortcutsDialog() {
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search shortcuts…"
-        className="mb-3 w-full rounded-[5px] bg-(--field) px-2.5 py-2 text-[12px] text-(--tx) outline-none placeholder:text-(--tx3)"
+        className="mb-3 w-full rounded-sm bg-(--field) px-2.5 py-2 t-body-sm text-(--tx) outline-none placeholder:text-(--tx3)"
       />
       <div className="max-h-[60vh] overflow-y-auto pr-1">
         {groups.map((g) => (
           <section key={g.title} className="mb-4 last:mb-0">
-            <p className="mb-1.5 flex items-center gap-2 text-[10px] text-(--tx2)">
+            <p className="mb-1.5 flex items-center gap-2 t-caption text-(--tx2)">
               {g.title}
               {/* the mode a group applies to, so nothing looks broken in the other one */}
               {g.scope !== 'global' && g.scope !== mode && (
-                <span className="rounded bg-(--panel3) px-1.5 py-0.5 text-[9px] text-(--tx3)">
+                <span className="rounded-xs bg-(--panel3) px-1.5 py-0.5 t-caption text-(--tx3)">
                   {g.scope === 'studio' ? '3D Studio' : 'Shots'}
                 </span>
               )}
             </p>
-            <div className="rounded-[6px] bg-(--panel2)">
+            <div className="rounded-sm bg-(--panel2)">
               {g.items.map((s) => (
                 <div
                   key={s.keys + s.desc}
                   className="flex items-center justify-between gap-4 border-b border-(--line) px-2.5 py-1.5 last:border-0"
                 >
-                  <span className="text-[12px] text-(--tx2)">{s.desc}</span>
+                  <span className="t-body-sm text-(--tx2)">{s.desc}</span>
                   <Keys combo={s.keys} />
                 </div>
               ))}
@@ -394,7 +394,7 @@ export function ShortcutsDialog() {
           </section>
         ))}
         {groups.length === 0 && (
-          <p className="py-6 text-center text-[11px] text-(--tx3)">No shortcut matches “{query}”.</p>
+          <p className="py-6 text-center t-body-sm text-(--tx3)">No shortcut matches “{query}”.</p>
         )}
       </div>
     </Modal>
@@ -409,8 +409,8 @@ export function ExportProgressOverlay() {
   const pct = progress.total > 1 ? Math.round((progress.done / progress.total) * 100) : null
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
-      <div className="w-80 rounded-xl border border-(--line) bg-(--panel) p-5 text-center shadow-2xl">
-        <p className="mb-3 text-[12px] font-medium tracking-[0.15em] text-(--tx) uppercase">
+      <div className="w-80 rounded-xl border border-(--line) bg-(--raised) p-5 text-center">
+        <p className="mb-3 t-eyebrow text-(--tx) uppercase">
           {progress.label}
         </p>
         <div className="mb-2 h-2 overflow-hidden rounded-full bg-(--panel2)">
@@ -420,13 +420,13 @@ export function ExportProgressOverlay() {
           />
         </div>
         {pct !== null && (
-          <p className="mb-3 font-mono text-[11px] text-(--tx3)">
+          <p className="mb-3 font-mono t-body-sm text-(--tx3)">
             {progress.done} / {progress.total} frames · {pct}%
           </p>
         )}
         <button
           onClick={cancelExport}
-          className="rounded border border-(--line) px-4 py-1.5 text-[11px] tracking-wide text-(--tx2) uppercase hover:text-(--tx)"
+          className="rounded-xs border border-(--line) px-4 py-1.5 t-eyebrow text-(--tx2) uppercase hover:text-(--tx)"
         >
           Cancel
         </button>

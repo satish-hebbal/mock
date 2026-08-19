@@ -99,7 +99,7 @@ export function OverlayLayer({ width, height }: { width: number; height: number 
                   style={{ width: o.width * width, display: 'block' }}
                 />
               ) : (
-                <div className="rounded bg-black/40 px-2 py-1 text-[10px] text-white">missing image</div>
+                <div className="rounded-xs bg-black/40 px-2 py-1 t-caption text-white">missing image</div>
               ))}
           </div>
         )

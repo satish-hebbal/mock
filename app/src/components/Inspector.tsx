@@ -1,26 +1,22 @@
-import { useEffect, useState } from 'react'
 import { pickMediaFile, useStudio } from '../store'
 import { ColorRow, Dropdown, MiniButton, Section, Segments, SliderRow, SubHeading } from './controls'
 import {
-  ArrowLeftRight,
   Box,
   Camera,
   CircleMinus,
-  Crop,
   Disc,
   FileImage,
   Image,
-  Link2,
   Move3d,
   Palette,
   Sparkles,
   Sun,
   Type,
-  Unlink,
 } from 'lucide-react'
 import { focalFromFov } from '../lib/studio'
-import { OVERLAY_FONTS, ratioLabel } from '../lib/presets'
+import { OVERLAY_FONTS } from '../lib/presets'
 import { getDevice } from '../lib/registry'
+import { CAMERA_LIMITS } from '../lib/camera'
 import { ui } from '../lib/ui'
 import type { BackgroundType } from '../types'
 
@@ -46,77 +42,6 @@ function ratioNote(key: number, fill: number): string {
   if (r >= 2.6) return `${r.toFixed(1)}:1 — natural contrast`
   if (r >= 1.8) return `${r.toFixed(1)}:1 — soft, flattering`
   return `${r.toFixed(1)}:1 — near shadowless`
-}
-
-// ————— Frame —————
-
-/** Numeric field that only commits on blur/Enter, so a half-typed "19" isn't clamped. */
-function NumField({
-  value,
-  onCommit,
-  label,
-}: {
-  value: number
-  onCommit: (v: number) => void
-  label: string
-}) {
-  const [draft, setDraft] = useState(String(value))
-  useEffect(() => setDraft(String(value)), [value])
-  const commit = () => {
-    const n = Number(draft)
-    if (Number.isFinite(n) && n > 0) onCommit(n)
-    else setDraft(String(value))
-  }
-  return (
-    <input
-      value={draft}
-      aria-label={label}
-      inputMode="numeric"
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') e.currentTarget.blur()
-        if (e.key === 'Escape') setDraft(String(value))
-      }}
-      className="h-7 w-full min-w-0 rounded-[5px] bg-(--field) px-2 text-[11px] text-(--tx) tabular-nums outline-none focus:ring-1 focus:ring-(--accent)"
-    />
-  )
-}
-
-function FrameSection() {
-  const size = useStudio((s) => s.project.exportSize)
-  const setExportSize = useStudio((s) => s.setExportSize)
-  const [linked, setLinked] = useState(false)
-  const ratio = size.width / size.height
-
-  const setWidth = (width: number) =>
-    setExportSize(width, linked ? Math.round(width / ratio) : size.height)
-  const setHeight = (height: number) =>
-    setExportSize(linked ? Math.round(height * ratio) : size.width, height)
-
-  return (
-    <Section title="Frame" icon={<Crop {...secIcon} />} defaultOpen={false}>
-      <div className="flex items-center gap-1.5">
-        <NumField value={size.width} onCommit={setWidth} label="Frame width" />
-        <span className="text-[11px] text-(--tx3)">×</span>
-        <NumField value={size.height} onCommit={setHeight} label="Frame height" />
-        <MiniButton
-          active={linked}
-          title={linked ? 'Ratio locked — editing one side moves the other' : 'Lock the ratio'}
-          onClick={() => setLinked(!linked)}
-        >
-          {linked ? <Link2 {...subIcon} /> : <Unlink {...subIcon} />}
-        </MiniButton>
-        <MiniButton title="Swap width and height" onClick={() => setExportSize(size.height, size.width)}>
-          <ArrowLeftRight {...subIcon} />
-        </MiniButton>
-      </div>
-      <p className="mt-1.5 text-[10px] text-(--tx3)">
-        {ratioLabel(size.width, size.height)} · this is the picture you export. Ratios and platform
-        sizes are in the toolbar above.
-      </p>
-    </Section>
-  )
 }
 
 // ————— Source —————
@@ -162,10 +87,10 @@ function SourceSection() {
           )
         ) : (
           <>
-            <span className="text-[11px] font-medium tracking-[0.14em] text-(--tx2) uppercase">
+            <span className="t-eyebrow text-(--tx2) uppercase">
               Click to upload
             </span>
-            <span className="text-[9px] tracking-[0.1em] text-(--tx3) uppercase">
+            <span className="t-eyebrow text-(--tx3) uppercase">
               image or video · drag & drop or paste
             </span>
           </>
@@ -205,7 +130,7 @@ function SourceSection() {
         </>
       )}
       {selectedDeviceId === null && (
-        <p className="mt-2 text-[10px] text-(--tx3)">Media binds to the selected device.</p>
+        <p className="mt-2 t-caption text-(--tx3)">Media binds to the selected device.</p>
       )}
     </Section>
   )
@@ -241,24 +166,23 @@ function CameraSection() {
 
   return (
     <Section title="Camera" icon={<Camera {...secIcon} />}>
-      {row('tiltX', 'Tilt X', -88, 88, 0.5, 'DRAG')}
-      {row('tiltY', 'Tilt Y', -180, 180, 0.5, 'DRAG')}
-      {row('roll', 'Roll', -45, 45, 0.5)}
+      {row('tiltX', 'Tilt X', ...CAMERA_LIMITS.tiltX, 0.5, 'DRAG')}
+      {row('tiltY', 'Tilt Y', ...CAMERA_LIMITS.tiltY, 0.5, 'DRAG')}
+      {row('roll', 'Roll', ...CAMERA_LIMITS.roll, 0.5)}
       {row(
         'fov',
         'Lens',
-        8,
-        90,
+        ...CAMERA_LIMITS.fov,
         0.5,
         // product work lives around 50–100mm: long enough not to distort
         'Field of view, shown as its 35mm-equivalent focal length',
         (v) => `${focalFromFov(v)}mm`,
       )}
-      {row('zoom', 'Zoom', 0.3, 8, 0.01, 'SCROLL')}
-      {row('panX', 'Pan X', -3, 3, 0.01, 'R-DRAG')}
-      {row('panY', 'Pan Y', -3, 3, 0.01, 'R-DRAG')}
-      {row('rotateY', 'Rotate Y', -180, 180, 0.5)}
-      {row('rotateX', 'Rotate X', -90, 90, 0.5)}
+      {row('zoom', 'Zoom', ...CAMERA_LIMITS.zoom, 0.01, 'SCROLL')}
+      {row('panX', 'Pan X', ...CAMERA_LIMITS.panX, 0.01, 'R-DRAG')}
+      {row('panY', 'Pan Y', ...CAMERA_LIMITS.panY, 0.01, 'R-DRAG')}
+      {row('rotateY', 'Rotate Y', ...CAMERA_LIMITS.rotateY, 0.5)}
+      {row('rotateX', 'Rotate X', ...CAMERA_LIMITS.rotateX, 0.5)}
     </Section>
   )
 }
@@ -278,7 +202,7 @@ function SceneSection() {
   return (
     <Section title="Scene" icon={<Image {...secIcon} />}>
       {/* the backdrop is *chosen* in the toolbar; this section tunes the choice */}
-      <p className="mb-2 text-[10px] text-(--tx3)">
+      <p className="mb-2 t-caption text-(--tx3)">
         Backdrop: <span className="text-(--tx2)">{BG_LABEL[bg.type]}</span> — swap it from the
         toolbar above.
       </p>
@@ -355,7 +279,7 @@ function SceneSection() {
       )}
 
       {bg.type === 'transparent' && (
-        <p className="text-[10px] text-(--tx3)">
+        <p className="t-caption text-(--tx3)">
           Exports with a true alpha channel (PNG / WebM-alpha).
         </p>
       )}
@@ -366,7 +290,7 @@ function SceneSection() {
         <SliderRow label="Fill" value={env.fillIntensity} min={0} max={3} onChange={(fillIntensity) => setEnvironment({ fillIntensity })} hint="Opens the shadows the key casts" />
         <SliderRow label="Rim" value={env.rimIntensity} min={0} max={3} onChange={(rimIntensity) => setEnvironment({ rimIntensity })} hint="Behind the subject — peels it off the backdrop" />
         <SliderRow label="Ambient" value={env.ambient} min={0} max={2} onChange={(ambient) => setEnvironment({ ambient })} />
-        <p className="mt-1 mb-2 pl-5 text-[10px] text-(--tx3)">
+        <p className="mt-1 mb-2 pl-5 t-caption text-(--tx3)">
           Key-to-fill {ratioNote(env.keyIntensity, env.fillIntensity)}
         </p>
 
@@ -459,7 +383,7 @@ function EffectsSection() {
 
       <div className="mt-3 border-t border-(--line) pt-3">
         <div className="mb-1 flex items-center justify-between">
-          <p className="flex items-center gap-1.5 text-[10px] text-(--tx2)">
+          <p className="flex items-center gap-1.5 t-caption text-(--tx2)">
             <Palette {...subIcon} /> Color grade
           </p>
           <MiniButton
@@ -509,7 +433,7 @@ function DevicesSection() {
         <div>
           {/* the dropdown above already names the device when there's more than one */}
           {devices.length === 1 && (
-            <p className="mb-1 text-[9px] font-semibold tracking-[0.18em] text-(--tx3) uppercase">
+            <p className="mb-1 t-eyebrow text-(--tx3) uppercase">
               {spec.name}
             </p>
           )}
@@ -521,7 +445,7 @@ function DevicesSection() {
                   title={c.name}
                   onClick={() => st().updateDevice(selected.id, { colorVariant: c.id })}
                   className={`h-6 w-6 rounded-full border-2 transition-transform hover:scale-110 ${
-                    selected.colorVariant === c.id ? 'border-(--tx)' : 'border-(--line)'
+                    selected.colorVariant === c.id ? 'is-picked' : 'border-(--line)'
                   }`}
                   style={{ background: c.value }}
                 />
@@ -587,7 +511,7 @@ function OverlaysSection() {
   return (
     <Section title="Text · Logo · Shapes" icon={<Type {...secIcon} />} defaultOpen={false}>
       {overlays.length === 0 && (
-        <p className="text-[10px] text-(--tx3)">
+        <p className="t-caption text-(--tx3)">
           Add text, a shape or a logo from the toolbar above — they'll show up here to edit.
         </p>
       )}
@@ -597,11 +521,11 @@ function OverlaysSection() {
             <div
               key={o.id}
               onClick={() => st().selectOverlay(o.id)}
-              className={`flex cursor-pointer items-center justify-between rounded border px-2 py-1 ${
+              className={`flex cursor-pointer items-center justify-between rounded-xs border px-2 py-1 ${
                 o.id === selectedId ? 'border-(--line2) bg-(--panel3)' : 'border-(--line)'
               }`}
             >
-              <span className="max-w-40 truncate text-[11px] text-(--tx)">
+              <span className="max-w-40 truncate t-body-sm text-(--tx)">
                 {o.type === 'text' ? `T · ${o.text}` : o.type === 'shape' ? `▢ · ${o.shape}` : '🖼 · logo'}
               </span>
               <button
@@ -627,7 +551,7 @@ function OverlaysSection() {
                 value={selected.text}
                 onChange={(e) => st().updateOverlay(selected.id, { text: e.target.value })}
                 rows={2}
-                className="mb-1 w-full rounded border border-(--line) bg-transparent px-2 py-1 text-[12px] text-(--tx)"
+                className="mb-1 w-full rounded-xs border border-(--line) bg-transparent px-2 py-1 t-body-sm text-(--tx)"
               />
               <div className="mb-1 flex items-center gap-2">
                 <Dropdown
@@ -655,7 +579,7 @@ function OverlaysSection() {
               />
               <ColorRow label="Color" value={selected.color} onChange={(color) => st().updateOverlay(selected.id, { color })} />
               <div className="flex items-center justify-between gap-2 py-1">
-                <span className="text-[11px] text-(--tx2)">Pill bg</span>
+                <span className="t-body-sm text-(--tx2)">Pill bg</span>
                 <span className="flex items-center gap-1">
                   <MiniButton
                     active={!!selected.bg}
@@ -668,7 +592,7 @@ function OverlaysSection() {
                       type="color"
                       value={selected.bg}
                       onChange={(e) => st().updateOverlay(selected.id, { bg: e.target.value })}
-                      className="h-6 w-8 cursor-pointer rounded border border-(--line) bg-transparent"
+                      className="h-6 w-8 cursor-pointer rounded-xs border border-(--line) bg-transparent"
                     />
                   )}
                 </span>
@@ -709,7 +633,6 @@ function OverlaysSection() {
 export function Inspector() {
   return (
     <>
-      <FrameSection />
       <SourceSection />
       <CameraSection />
       <SceneSection />

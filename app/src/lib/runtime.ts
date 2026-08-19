@@ -28,9 +28,58 @@ export const rt = {
   exportCancelled: false,
   /** true while a transform-gizmo handle is held, so camera gestures stand down */
   gizmoDragging: false,
+  /**
+   * Objects that live in the scene purely for editing — the transform gizmo and
+   * anything like it. They share the scene the exporter renders, so unless they
+   * are hidden for the duration they get baked into the picture.
+   */
+  editorOnly: new Set<THREE.Object3D>(),
+}
+
+/**
+ * Hide (or restore) every editor-only object. The exporter wraps its whole run
+ * in this: `renderFrame()` draws whatever is in the scene, and React can't be
+ * relied on to have unmounted the gizmo by then — the export renders
+ * synchronously, well before any re-render would land.
+ */
+export function setEditorObjectsVisible(visible: boolean) {
+  for (const o of rt.editorOnly) o.visible = visible
 }
 
 const BASE_DIST = 7
+
+/**
+ * Pan + zoom that brings every device into frame, leaving the angle alone.
+ *
+ * Recovery, not a reset: losing the subject usually means the pan wandered, and
+ * the tilt you'd dialled in is the part worth keeping. Reads the live scene
+ * rather than the document so it accounts for whatever the devices' own
+ * transforms and the scene rotation have done to them.
+ */
+export function framingForDevices(fovDeg: number): { panX: number; panY: number; zoom: number } | null {
+  const groups = [...rt.deviceGroups.values()]
+  if (groups.length === 0 || !rt.camera) return null
+  rt.scene?.updateMatrixWorld(true)
+
+  const box = new THREE.Box3()
+  for (const g of groups) box.expandByObject(g)
+  if (box.isEmpty()) return null
+
+  const center = box.getCenter(new THREE.Vector3())
+  const radius = box.getBoundingSphere(new THREE.Sphere()).radius
+  if (!(radius > 0)) return null
+
+  // fit on whichever axis is tighter — a portrait frame runs out of width first
+  const vFov = degToRad(fovDeg)
+  const hFov = 2 * Math.atan(Math.tan(vFov / 2) * (rt.camera.aspect || 1))
+  const dist = (radius / Math.sin(Math.min(vFov, hFov) / 2)) * 1.12 // a little air
+
+  return {
+    panX: clamp(center.x, -3, 3),
+    panY: clamp(center.y, -3, 3),
+    zoom: clamp(BASE_DIST / dist, 0.3, 8),
+  }
+}
 const tmpTarget = new THREE.Vector3()
 const { degToRad, clamp } = THREE.MathUtils
 

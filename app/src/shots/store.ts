@@ -2,6 +2,9 @@ import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { loadAsset, loadJSON, saveAsset, saveJSON } from '../lib/db'
 import type { AssetMeta, AssetRuntime } from '../types'
+import { coalesces, endEditRun, patchLabel } from '../lib/history'
+import { migrateDeviceId } from './devices'
+import { applyLayoutToDoc, getLayoutPreset } from './layouts'
 import { extractPalette, magicBackgrounds, randomBackground } from './palette'
 import {
   defaultShotsDoc,
@@ -53,19 +56,35 @@ async function metaForBlob(blob: Blob, mime: string): Promise<Pick<AssetMeta, 'k
 const clone = (d: ShotsDoc): ShotsDoc => JSON.parse(JSON.stringify(d)) as ShotsDoc
 
 /**
- * Tile the screens into a centered horizontal row so each stays visible and
- * clickable. Only positional properties (offset + scale) are re-laid-out;
- * per-screen tilt/rotation the user dialed in is preserved.
+ * Re-run the doc's active layout over its screens.
+ *
+ * Called whenever the set of screens changes, so adding or removing media keeps
+ * the arrangement you picked instead of silently snapping back to a row. Only
+ * placement is rewritten; per-screen device, media and finish are left alone.
  */
-function arrangeRow(images: ShotsImage[]) {
-  const n = images.length
-  images.forEach((im, i) => {
-    const c = i - (n - 1) / 2
-    im.offsetX = n === 1 ? 0 : c * (0.9 / n)
-    im.offsetY = 0
-    im.scale = n === 1 ? 1 : Math.min(1, 1.35 / n)
-  })
+function reflow(doc: ShotsDoc) {
+  applyLayoutToDoc(doc, doc.layout ?? 'row')
 }
+
+/**
+ * Re-run the active preset because the frame it was measured against changed.
+ *
+ * Presets work out their spacing from the box aspect and the device aspect, so
+ * a new canvas size, padding, or device leaves the stored offsets stale — which
+ * is why changing the frame used to mean going back and clicking the same
+ * preset again. Does nothing once the arrangement has been edited by hand:
+ * those offsets are already relative to the box and survive a resize, and
+ * re-running would throw the edits away.
+ */
+function remeasure(doc: ShotsDoc) {
+  if (!doc.layout) return
+  applyLayoutToDoc(doc, doc.layout)
+}
+
+/** Placement the presets own — touching these by hand makes the layout custom. */
+const HAND_PLACED = ['scale', 'offsetX', 'offsetY', 'rotate'] as const
+/** Changes that alter the frame a preset measured, so it has to be re-run. */
+const RESHAPES = ['device', 'padding', 'style3d'] as const
 
 /**
  * Migrate a persisted doc from the single-`image` shape to the multi-`images`
@@ -77,10 +96,12 @@ function migrateDoc(doc: ShotsDoc & { image?: ShotsImage | null }): ShotsDoc {
     doc.images = legacy ? [legacy] : []
     doc.selectedId = legacy ? legacy.id : null
   }
-  // backfill fields on screens saved before they existed
-  for (const im of doc.images) {
+  if (!Array.isArray(doc.parked)) doc.parked = []
+  // backfill fields on screens saved before they existed, and re-point any
+  // device saved against the old drawn-bezel catalog at a real frame
+  for (const im of [...doc.images, ...doc.parked]) {
     if (!im.id) im.id = `shot_${uid()}`
-    if (im.device === undefined) im.device = 'none'
+    im.device = migrateDeviceId(im.device)
     if (im.style3d === undefined) im.style3d = false
   }
   if (!doc.selectedId || !doc.images.some((i) => i.id === doc.selectedId))
@@ -98,12 +119,15 @@ interface ShotsState {
   past: ShotsDoc[]
   future: ShotsDoc[]
 
-  commit: () => void
+  /** `label` groups a run of edits into one entry; omit it for discrete actions */
+  commit: (label?: string) => void
   undo: () => void
   redo: () => void
 
   setName: (name: string) => void
   setSize: (width: number, height: number) => void
+  /** dolly the camera in or out — magnifies the whole composition */
+  setZoom: (zoom: number) => void
   setBackground: (patch: Partial<ShotsBackground>) => void
   randomizeBackground: () => void
   applyMagicBackground: (index: number) => void
@@ -113,6 +137,10 @@ interface ShotsState {
   setGlow: (patch: Partial<ShotsImage['glow']>) => void
   removeImage: () => void
   selectImage: (id: string) => void
+  /** arrange the screens with a named layout preset */
+  applyLayout: (presetId: string) => void
+  /** grow or trim the screen count, then re-apply the active layout */
+  setScreenCount: (n: number) => void
 
   /** append a screen (replace: true swaps the selected screen's media instead) */
   importMedia: (file: Blob, mime?: string, opts?: { replace?: boolean }) => Promise<void>
@@ -134,43 +162,56 @@ export const useShots = create<ShotsState>()(
     past: [],
     future: [],
 
-    commit: () =>
+    commit: (label) => {
+      // a continuing gesture folds into the entry already on the stack
+      if (coalesces(label)) return
       set((s) => {
         s.past.push(clone(s.doc))
         if (s.past.length > 50) s.past.shift()
         s.future = []
-      }),
+      })
+    },
 
-    undo: () =>
+    undo: () => {
+      endEditRun()
       set((s) => {
         const prev = s.past.pop()
         if (!prev) return
         s.future.push(clone(s.doc))
         s.doc = prev
-      }),
+      })
+    },
 
-    redo: () =>
+    redo: () => {
+      endEditRun()
       set((s) => {
         const next = s.future.pop()
         if (!next) return
         s.past.push(clone(s.doc))
         s.doc = next
-      }),
+      })
+    },
 
     setName: (name) => set((s) => void (s.doc.name = name)),
 
     setSize: (width, height) => {
-      get().commit()
+      get().commit('size')
       set((s) => {
         s.doc.size = {
           width: Math.min(7680, Math.max(64, Math.round(width))),
           height: Math.min(7680, Math.max(64, Math.round(height))),
         }
+        remeasure(s.doc)
       })
     },
 
+    setZoom: (zoom) => {
+      get().commit('zoom')
+      set((s) => void (s.doc.zoom = Math.min(2.5, Math.max(0.4, zoom))))
+    },
+
     setBackground: (patch) => {
-      get().commit()
+      get().commit(patchLabel('bg', patch))
       set((s) => {
         Object.assign(s.doc.background, patch)
       })
@@ -195,28 +236,35 @@ export const useShots = create<ShotsState>()(
     },
 
     setImage: (patch) => {
-      get().commit()
+      get().commit(patchLabel('img', patch))
       set((s) => {
         const img = selectedShotsImage(s.doc)
-        if (img) Object.assign(img, patch)
+        if (!img) return
+        Object.assign(img, patch)
+        if (HAND_PLACED.some((k) => k in patch)) {
+          // the arrangement is no longer the preset's, so stop claiming it is
+          s.doc.layout = undefined
+        } else if (RESHAPES.some((k) => k in patch)) {
+          remeasure(s.doc)
+        }
       })
     },
     setShadow: (patch) => {
-      get().commit()
+      get().commit(patchLabel('shadow', patch))
       set((s) => {
         const img = selectedShotsImage(s.doc)
         if (img) Object.assign(img.shadow, patch)
       })
     },
     setBorder: (patch) => {
-      get().commit()
+      get().commit(patchLabel('border', patch))
       set((s) => {
         const img = selectedShotsImage(s.doc)
         if (img) Object.assign(img.border, patch)
       })
     },
     setGlow: (patch) => {
-      get().commit()
+      get().commit(patchLabel('glow', patch))
       set((s) => {
         const img = selectedShotsImage(s.doc)
         if (img) Object.assign(img.glow, patch)
@@ -229,12 +277,57 @@ export const useShots = create<ShotsState>()(
         const idx = s.doc.images.findIndex((i) => i.id === s.doc.selectedId)
         if (idx < 0) return
         s.doc.images.splice(idx, 1)
-        arrangeRow(s.doc.images)
+        reflow(s.doc)
         s.doc.selectedId = s.doc.images[Math.min(idx, s.doc.images.length - 1)]?.id ?? null
       })
     },
 
     selectImage: (id) => set((s) => void (s.doc.selectedId = id)),
+
+    applyLayout: (presetId) => {
+      const preset = getLayoutPreset(presetId)
+      if (!preset) return
+      get().commit()
+      set((s) => {
+        s.doc.layout = presetId
+        applyLayoutToDoc(s.doc, presetId)
+      })
+    },
+
+    setScreenCount: (n) => {
+      const count = Math.min(MAX_SHOTS, Math.max(1, n))
+      const doc = get().doc
+      if (doc.images.length === 0 || doc.images.length === count) return
+      get().commit()
+      set((s) => {
+        if (!s.doc.parked) s.doc.parked = []
+
+        // Trimming sets screens aside instead of destroying them. Dropping to
+        // one screen and back used to lose three uploads for good; now the
+        // media, device, shadow and finish all come back exactly as they were.
+        while (s.doc.images.length > count) {
+          const spare = s.doc.images.pop()
+          if (spare) s.doc.parked.unshift(spare)
+        }
+
+        // Growing takes the most recently parked screen back before falling
+        // back to cloning, so raising the count undoes lowering it.
+        while (s.doc.images.length < count) {
+          const revived = s.doc.parked.shift()
+          if (revived) {
+            s.doc.images.push(revived)
+            continue
+          }
+          const last = s.doc.images[s.doc.images.length - 1]
+          if (!last) break
+          s.doc.images.push({ ...JSON.parse(JSON.stringify(last)), id: `shot_${uid()}` })
+        }
+
+        if (!s.doc.images.some((i) => i.id === s.doc.selectedId))
+          s.doc.selectedId = s.doc.images[0]?.id ?? null
+        reflow(s.doc)
+      })
+    },
 
     importMedia: async (file, mime, opts) => {
       const type = mime ?? (file instanceof File ? file.type : 'image/png')
@@ -270,7 +363,7 @@ export const useShots = create<ShotsState>()(
           const screen = { ...defaultShotsImage(id), palette }
           s.doc.images.push(screen)
           s.doc.selectedId = screen.id
-          arrangeRow(s.doc.images)
+          reflow(s.doc)
         }
         // On the very first upload, dress the background from the image palette.
         if (firstUpload && palette.length > 0) {
@@ -323,6 +416,7 @@ export const useShots = create<ShotsState>()(
           doc.assets = alive
           // drop screens whose media didn't survive, and normalize palettes
           doc.images = doc.images.filter((im) => runtime[im.assetId])
+          doc.parked = (doc.parked ?? []).filter((im) => runtime[im.assetId])
           for (const im of doc.images) if (!im.palette) im.palette = []
           if (!doc.images.some((i) => i.id === doc.selectedId))
             doc.selectedId = doc.images[0]?.id ?? null

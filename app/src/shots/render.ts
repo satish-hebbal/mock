@@ -1,6 +1,5 @@
 import { paintMeshGradient } from '../lib/meshGradient'
 import { getWallpaper } from './wallpapers'
-import { getShotsDevice, type DeviceNotch } from './devices'
 import { computeLayout, perspectiveFor, type CardLayout } from './layout'
 import type { ShotsBackground, ShotsGradient, ShotsImage } from './types'
 
@@ -57,9 +56,14 @@ export function paintShotBackground(
   H: number,
   bg: ShotsBackground,
   images: Record<string, HTMLImageElement>,
+  /**
+   * Camera zoom, clamped to >= 1 by the caller. The backdrop magnifies with the
+   * camera so a push-in enlarges the whole picture, not just the devices.
+   */
+  zoom = 1,
 ) {
   ctx.save()
-  const over = bg.blur > 0 ? 0.08 : 0
+  const over = (bg.blur > 0 ? 0.08 : 0) + (zoom - 1) / 2
   const ox = -W * over
   const oy = -H * over
   const ow = W * (1 + over * 2)
@@ -128,30 +132,6 @@ export function paintShotBackground(
 
 // ————— the screenshot "card" (chrome + image + radius + border) —————
 
-function drawNotch(g: CanvasRenderingContext2D, notch: DeviceNotch, L: CardLayout) {
-  const { screenX: sx, screenY: sy, screenW: sw } = L
-  if (notch === 'island') {
-    const w = sw * 0.3
-    const h = sw * 0.032
-    g.fillStyle = '#000000'
-    g.beginPath()
-    g.roundRect(sx + (sw - w) / 2, sy + sw * 0.02, w, h, h / 2)
-    g.fill()
-  } else if (notch === 'punch') {
-    const r = sw * 0.016
-    g.fillStyle = '#000000'
-    g.beginPath()
-    g.arc(sx + sw / 2, sy + sw * 0.032, r, 0, Math.PI * 2)
-    g.fill()
-  } else if (notch === 'camera') {
-    const r = Math.max(1.2, sw * 0.006)
-    g.fillStyle = '#2a2a30'
-    g.beginPath()
-    g.arc(sx + sw / 2, sy - L.bezelPx * 0.5, r, 0, Math.PI * 2)
-    g.fill()
-  }
-}
-
 /** Draw `media` filling the rect, cropping the overflow — CSS `object-fit: cover`. */
 function drawCover(
   g: CanvasRenderingContext2D,
@@ -179,33 +159,16 @@ export function renderCard(
   img: ShotsImage,
   mediaW = 0,
   mediaH = 0,
+  /** decoded frame PNG for `L.bezel`; omit to render the screen bare */
+  frame?: CanvasImageSource,
 ): HTMLCanvasElement {
   const c = document.createElement('canvas')
   c.width = Math.max(1, Math.round(L.cardW))
   c.height = Math.max(1, Math.round(L.cardH))
   const g = c.getContext('2d')!
-  const W = c.width
-  const H = c.height
-  const hasDevice = !img.style3d && img.device !== 'none'
-  const dev = getShotsDevice(hasDevice ? img.device : 'none')
   const dark = img.frame === 'macos-dark' || img.frame === 'browser-dark'
   const browser = img.frame.startsWith('browser')
   const barH = L.barH
-
-  // device bezel
-  if (hasDevice) {
-    const orr = Math.min(L.outerRadiusPx, W / 2, H / 2)
-    g.beginPath()
-    g.roundRect(0, 0, W, H, orr)
-    g.fillStyle = dev.color
-    g.fill()
-    const lw = Math.max(1, L.bezelPx * 0.12)
-    g.lineWidth = lw
-    g.strokeStyle = dev.edge
-    g.beginPath()
-    g.roundRect(lw / 2, lw / 2, W - lw, H - lw, orr)
-    g.stroke()
-  }
 
   const sx = L.screenX
   const sy = L.screenY
@@ -258,7 +221,10 @@ export function renderCard(
     g.restore()
   }
 
-  drawNotch(g, dev.notch, L)
+  // The frame goes on last, over the screenshot clipped above: the island and
+  // camera are opaque pixels inside the cutout, so they land in place for free.
+  if (L.bezel && frame) g.drawImage(frame, 0, 0, c.width, c.height)
+
   return c
 }
 

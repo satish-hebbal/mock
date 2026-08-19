@@ -1,13 +1,14 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { exportProjectFile, importProjectFile, pickMediaFile, useStudio } from './store'
 import { useShots } from './shots/store'
 import { ShotsEditor } from './shots/ShotsEditor'
-import { LeftRail } from './components/LeftRail'
+import { ToolRail } from './components/ToolRail'
+import { ToolPanel } from './components/ToolPanel'
+import { AppSheet } from './components/AppSheet'
 import { RightPanel } from './components/RightPanel'
 import { Inspector } from './components/Inspector'
 import { Viewport } from './components/Viewport'
 import { Timeline } from './components/Timeline'
-import { TopBar } from './components/TopBar'
 import { Home } from './components/Home'
 import {
   ExportDialog,
@@ -80,7 +81,7 @@ function useGlobalShortcuts() {
         return true
       }
       if (!mod && key === '[') {
-        s.setRailOpen(!s.railOpen)
+        s.setToolPanelOpen(!s.toolPanelOpen)
         return true
       }
       if (!mod && key === ']') {
@@ -193,6 +194,8 @@ function useGlobalShortcuts() {
         // Blender-style: G move, R rotate, S scale — pressing the active one exits
         const want = key === 'g' ? 'translate' : key === 'r' ? 'rotate' : 'scale'
         s.setGizmo(s.gizmo === want ? 'off' : want)
+      } else if (key === 'f') {
+        s.frameDevices()
       } else if (key === 'i') {
         for (const prop of ['tiltX', 'tiltY', 'zoom', 'panX', 'panY'] as const)
           s.addKeyframeAt(`camera.${prop}`)
@@ -275,20 +278,26 @@ function StudioLayout() {
   const hasMedia = useStudio((s) => s.project.scene.devices.some((d) => d.screen.assetId))
   return (
     <>
-      <main className="flex min-h-0 flex-1">
+      <main className="flex min-h-0 flex-1 gap-2">
+        <ToolPanel />
         <div className="flex min-w-0 flex-1 flex-col">
-          <TopBar />
-          <div className="relative min-h-0 min-w-0 flex-1">
+          <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden rounded-lg border border-(--line) bg-(--raised)">
             {hydrated && <Viewport />}
             {hydrated && !hasMedia && (
               <div className="pointer-events-none absolute inset-x-0 bottom-10 z-10 flex justify-center">
-                <div className="pointer-events-auto flex items-center gap-3 rounded-full border border-(--line) bg-(--panel) py-2 pr-2 pl-5 shadow-xl">
-                  <span className="text-[13px] text-(--tx2)">
+                <div className="pointer-events-auto flex items-center gap-3 rounded-full border border-(--line) bg-(--raised) py-2 pr-2 pl-5">
+                  <span className="t-body text-(--tx2)">
                     Upload media to get started — or paste / drop.
                   </span>
+                  {/*
+                    Pill, not the default `rounded-md` button: this one is nested
+                    inside a pill-shaped prompt, and the radius scale carries
+                    "pill/full" precisely for that case. Keeps Linear's button
+                    padding (8px 14px) and type token.
+                  */}
                   <button
                     onClick={() => pickMediaFile((f) => void useStudio.getState().importMedia(f))}
-                    className="rounded-full bg-(--accent-fill) px-4 py-1.5 text-[11px] font-semibold tracking-[0.14em] text-(--accent-tx) uppercase transition-opacity hover:opacity-90"
+                    className="rounded-full bg-(--accent-fill) px-3.5 py-2 t-button text-(--accent-tx) transition-opacity hover:opacity-90"
                   >
                     Upload
                   </button>
@@ -322,16 +331,57 @@ export default function App() {
     document.documentElement.classList.toggle('light', theme === 'light')
   }, [theme])
 
+  // Shortcuts listen on window, so the document has to own focus. Without this
+  // a fresh load leaves it on the browser chrome and every key goes there.
+  const rootRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const root = rootRef.current
+    if (!root) return
+    root.focus({ preventScroll: true })
+
+    /*
+     * Keep the keyboard pointed at the app.
+     *
+     * Shortcuts listen on `window`, which only sees a key if the document owns
+     * focus — and focus drifts constantly: a fresh load leaves it on the browser
+     * chrome, and every click parks it on whatever button was pressed. That
+     * second case is worse than it sounds: with focus sitting on Loopify, Space
+     * re-fires Loopify instead of toggling playback, because the browser
+     * activates the focused button first.
+     *
+     * So after any click that isn't into a field, focus goes back to the root.
+     * Deferred a frame so the click itself still lands where it was aimed.
+     */
+    const FIELDS = 'input, textarea, select, [contenteditable="true"]'
+    const onPointerDown = (e: PointerEvent) => {
+      if ((e.target as HTMLElement | null)?.closest?.(FIELDS)) return
+      requestAnimationFrame(() => {
+        if (!document.activeElement?.closest?.(FIELDS)) root.focus({ preventScroll: true })
+      })
+    }
+    const onWindowFocus = () => {
+      if (!document.activeElement?.closest?.(FIELDS)) root.focus({ preventScroll: true })
+    }
+    window.addEventListener('pointerdown', onPointerDown)
+    window.addEventListener('focus', onWindowFocus)
+    return () => {
+      window.removeEventListener('pointerdown', onPointerDown)
+      window.removeEventListener('focus', onWindowFocus)
+    }
+  }, [])
+
   usePlayback()
   useGlobalShortcuts()
   useMediaDropPaste()
 
   return (
-    <div className="flex h-full bg-(--panel2) text-(--tx)">
-      <LeftRail />
-      <div className="flex min-w-0 flex-1 flex-col">
+    <div ref={rootRef} tabIndex={-1} className="flex h-full bg-(--panel2) text-(--tx) outline-none">
+      <ToolRail />
+      <div className="flex min-w-0 flex-1 flex-col gap-2 py-2 pr-2">
         {mode === 'home' ? <Home /> : mode === 'studio' ? <StudioLayout /> : <ShotsEditor />}
       </div>
+
+      <AppSheet />
 
       {dialog === 'export' && <ExportDialog />}
       {dialog === 'templates' && <TemplatesDialog />}

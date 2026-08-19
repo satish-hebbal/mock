@@ -24,10 +24,10 @@ function RequestDialog({ request }: { request: Request }) {
           if (e.key === 'Escape') cancel()
           if (e.key === 'Enter' && request.kind === 'prompt' && draft.trim()) accept()
         }}
-        className="w-full max-w-sm rounded-xl border border-(--line) bg-(--panel) p-5 shadow-2xl"
+        className="w-full max-w-sm rounded-xl border border-(--line) bg-(--raised) p-5"
       >
         <div className="mb-3 flex items-start justify-between gap-3">
-          <h2 className="text-[13px] font-semibold text-(--tx)">{request.title}</h2>
+          <h2 className="t-body font-semibold text-(--tx)">{request.title}</h2>
           <button
             onClick={cancel}
             aria-label="Close"
@@ -39,23 +39,23 @@ function RequestDialog({ request }: { request: Request }) {
 
         {request.kind === 'prompt' ? (
           <>
-            {request.label && <p className="mb-2 text-[11px] text-(--tx2)">{request.label}</p>}
+            {request.label && <p className="mb-2 t-body-sm text-(--tx2)">{request.label}</p>}
             <input
               autoFocus
               value={draft}
               placeholder={request.placeholder}
               onChange={(e) => setDraft(e.target.value)}
-              className="mb-4 w-full rounded-[5px] bg-(--field) px-2.5 py-2 text-[12px] text-(--tx) outline-none placeholder:text-(--tx3) focus:ring-1 focus:ring-(--accent)"
+              className="mb-4 w-full rounded-md bg-(--field) px-3 py-2 t-body-sm text-(--tx) outline-none placeholder:text-(--tx3) focus:ring-2 focus:ring-(--focus)"
             />
           </>
         ) : (
-          request.body && <p className="mb-4 text-[12px] leading-relaxed text-(--tx2)">{request.body}</p>
+          request.body && <p className="mb-4 t-body-sm leading-relaxed text-(--tx2)">{request.body}</p>
         )}
 
         <div className="flex justify-end gap-2">
           <button
             onClick={cancel}
-            className="rounded-[5px] bg-(--field) px-3 py-1.5 text-[11px] text-(--tx2) hover:bg-(--field-h) hover:text-(--tx)"
+            className="rounded-md bg-(--field) px-3.5 py-2 t-button text-(--tx2) hover:bg-(--field-h) hover:text-(--tx)"
           >
             Cancel
           </button>
@@ -63,7 +63,7 @@ function RequestDialog({ request }: { request: Request }) {
             autoFocus={request.kind === 'confirm'}
             onClick={accept}
             disabled={request.kind === 'prompt' && draft.trim() === ''}
-            className={`rounded-[5px] px-3 py-1.5 text-[11px] font-semibold disabled:opacity-40 ${
+            className={`rounded-md px-3.5 py-2 t-button disabled:opacity-40 ${
               danger ? 'bg-(--danger) text-white' : 'bg-(--accent-fill) text-(--accent-tx)'
             } hover:opacity-90`}
           >
@@ -96,15 +96,15 @@ export function UILayer() {
             <div
               key={t.id}
               role="status"
-              className={`pointer-events-auto flex max-w-sm items-start gap-2 rounded-lg border px-3 py-2 text-[12px] shadow-xl ${
+              className={`pointer-events-auto flex max-w-sm items-start gap-2 rounded-lg border px-3 py-2 t-body-sm ${
                 t.kind === 'error'
-                  ? 'border-(--danger) bg-(--panel) text-(--danger)'
-                  : 'border-(--line) bg-(--panel) text-(--tx2)'
+                  ? 'border-(--danger) bg-(--raised) text-(--danger)'
+                  : 'border-(--line) bg-(--raised) text-(--tx2)'
               }`}
             >
               <Icon
                 size={14}
-                className={`mt-px shrink-0 ${t.kind === 'success' ? 'text-(--accent)' : ''}`}
+                className={`mt-px shrink-0 ${t.kind === 'success' ? 'text-(--success)' : ''}`}
               />
               <span>{t.message}</span>
             </div>

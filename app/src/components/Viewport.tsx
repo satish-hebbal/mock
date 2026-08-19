@@ -15,6 +15,9 @@ import { meshGradientDataURL } from '../lib/meshGradient'
 import { gradeFilter } from '../lib/grade'
 import { rgba } from '../lib/color'
 import { useStudio } from '../store'
+import { ALPHA_CHECKER } from '../lib/checker'
+import { clampCamera } from '../lib/camera'
+import { Focus } from 'lucide-react'
 import { DeviceMesh } from './DeviceMesh'
 import { DeviceGizmo } from './DeviceGizmo'
 import { OverlayLayer } from './OverlayLayer'
@@ -59,11 +62,7 @@ function cssBackground(bg: BackgroundState, imageUrl: string | null): React.CSSP
         ? { backgroundImage: `url(${imageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
         : { background: '#111' }
     case 'transparent':
-      return {
-        backgroundImage:
-          'repeating-conic-gradient(#3a3a42 0% 25%, #2a2a30 0% 50%)',
-        backgroundSize: '20px 20px',
-      }
+      return ALPHA_CHECKER
   }
 }
 
@@ -327,17 +326,13 @@ function useCameraGestures(container: React.RefObject<HTMLDivElement | null>) {
       const dy = e.clientY - startY
       const s = useStudio.getState()
       if (mode === 'orbit') {
-        s.setAnimatable('camera.tiltY', start.tiltY + dx * 0.35, 'gesture-orbit')
-        s.setAnimatable(
-          'camera.tiltX',
-          THREE.MathUtils.clamp(start.tiltX - dy * 0.3, -88, 88),
-          'gesture-orbit',
-        )
+        s.setAnimatable('camera.tiltY', clampCamera('tiltY', start.tiltY + dx * 0.35), 'gesture-orbit')
+        s.setAnimatable('camera.tiltX', clampCamera('tiltX', start.tiltX - dy * 0.3), 'gesture-orbit')
       } else {
         const zoom = Math.max(0.2, s.project.scene.camera.zoom)
         const k = (7 / zoom) * 0.0016
-        s.setAnimatable('camera.panX', start.panX - dx * k, 'gesture-pan')
-        s.setAnimatable('camera.panY', start.panY + dy * k, 'gesture-pan')
+        s.setAnimatable('camera.panX', clampCamera('panX', start.panX - dx * k), 'gesture-pan')
+        s.setAnimatable('camera.panY', clampCamera('panY', start.panY + dy * k), 'gesture-pan')
       }
     }
 
@@ -349,11 +344,7 @@ function useCameraGestures(container: React.RefObject<HTMLDivElement | null>) {
     const onWheel = (e: WheelEvent) => {
       e.preventDefault()
       const s = useStudio.getState()
-      const zoom = THREE.MathUtils.clamp(
-        s.project.scene.camera.zoom * Math.exp(-e.deltaY * 0.0012),
-        0.3,
-        8,
-      )
+      const zoom = clampCamera('zoom', s.project.scene.camera.zoom * Math.exp(-e.deltaY * 0.0012))
       s.setAnimatable('camera.zoom', Number(zoom.toFixed(3)), 'gesture-zoom')
     }
 
@@ -441,6 +432,7 @@ export function Viewport() {
   }, [hintsVisible])
 
   const bgStyle = useMemo(() => cssBackground(background, bgImageUrl), [background, bgImageUrl])
+  const alphaBg = background.type === 'transparent'
   const bgFilter =
     background.type === 'image' || background.type === 'mesh'
       ? `blur(${(background.blur * rect.width) / 1280}px) brightness(${background.brightness})`
@@ -451,7 +443,7 @@ export function Viewport() {
     <div ref={outerRef} className="relative flex h-full w-full items-center justify-center overflow-hidden">
       <div
         ref={frameRef}
-        className="relative overflow-hidden rounded-lg shadow-2xl"
+        className="relative overflow-hidden rounded-lg"
         style={{ width: rect.width, height: rect.height }}
         onPointerDown={(e) => {
           if (e.target === e.currentTarget) {
@@ -459,11 +451,21 @@ export function Viewport() {
           }
         }}
       >
+        {/*
+          With no backdrop the checkerboard stands in for absence, so it sits
+          outside the graded layer: the exporter leaves those pixels untouched,
+          and grading "nothing" would both lie about the export and light the
+          grid up whenever the scene carries a bright exposure.
+        */}
+        {alphaBg && <div className="absolute inset-0" style={ALPHA_CHECKER} />}
+
         {/* graded layer: background + 3D canvas share the color grade so preview
             matches the export composite (overlays/watermark stay ungraded) */}
         <div className="absolute inset-0" style={{ filter: gradeCss }}>
           {/* background layer (CSS preview; export repaints identically) */}
-          <div className="absolute inset-0" style={{ ...bgStyle, filter: bgFilter, transform: 'scale(1.06)' }} />
+          {!alphaBg && (
+            <div className="absolute inset-0" style={{ ...bgStyle, filter: bgFilter, transform: 'scale(1.06)' }} />
+          )}
 
           <Canvas
             className="absolute inset-0"
@@ -488,16 +490,31 @@ export function Viewport() {
         <OverlayLayer width={rect.width} height={rect.height} />
       </div>
 
+      {/*
+        Lost-the-subject button. Orbiting past the edge of the frame is easy and
+        gives no clue how to get back — the numbers say nothing and the canvas is
+        empty. This recentres on the devices and fits them, keeping the angle,
+        so a wrong drag is one click to undo rather than a hunt.
+      */}
+      <button
+        onClick={() => useStudio.getState().frameDevices()}
+        title="Frame the devices (F)"
+        aria-label="Frame the devices"
+        className="absolute top-3 right-3 z-10 flex h-8 w-8 items-center justify-center rounded-md border border-(--line) bg-(--raised) text-(--tx2) transition-colors hover:border-(--line2) hover:text-(--tx)"
+      >
+        <Focus size={15} strokeWidth={1.8} />
+      </button>
+
       {/* gesture hints — shown until the user's first orbit/zoom/pan, then never again */}
       {hintsVisible && (
         <div
-          className={`pointer-events-none absolute bottom-3 left-4 flex gap-2 text-[9px] tracking-widest text-(--tx3) transition-opacity duration-300 ${
+          className={`pointer-events-none absolute bottom-3 left-4 flex gap-2 t-caption tracking-widest text-(--tx3) transition-opacity duration-300 ${
             hintsFading ? 'opacity-0' : 'opacity-100'
           }`}
         >
-          <span className="rounded bg-(--panel) px-1.5 py-0.5">DRAG · ORBIT</span>
-          <span className="rounded bg-(--panel) px-1.5 py-0.5">SCROLL · ZOOM</span>
-          <span className="rounded bg-(--panel) px-1.5 py-0.5">R-DRAG · PAN</span>
+          <span className="rounded-xs bg-(--raised) px-1.5 py-0.5">DRAG · ORBIT</span>
+          <span className="rounded-xs bg-(--raised) px-1.5 py-0.5">SCROLL · ZOOM</span>
+          <span className="rounded-xs bg-(--raised) px-1.5 py-0.5">R-DRAG · PAN</span>
         </div>
       )}
     </div>

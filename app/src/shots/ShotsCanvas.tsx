@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { useShots } from './store'
 import { computeLayout, perspectiveFor, type CardLayout } from './layout'
-import { getShotsDevice, type DeviceNotch } from './devices'
 import { getWallpaper, gradientCss } from './wallpapers'
 import { meshGradientDataURL } from '../lib/meshGradient'
-import type { ShotsBackground, ShotsImage } from './types'
+import { ALPHA_CHECKER } from '../lib/checker'
+import type { ShotsBackground, ShotsDoc, ShotsImage } from './types'
 
 function useFitRect(outer: React.RefObject<HTMLDivElement | null>, aspect: number) {
   const [rect, setRect] = useState({ width: 640, height: 400 })
@@ -29,25 +29,10 @@ function useFitRect(outer: React.RefObject<HTMLDivElement | null>, aspect: numbe
   return rect
 }
 
-/**
- * Alpha checkerboard, drawn only in the preview — exports keep true alpha.
- * Built from theme surfaces so it stays a quiet backdrop for the shot rather
- * than a high-contrast grid competing with it.
- */
-const CHECKER_SQUARE = 'color-mix(in srgb, var(--tx3) 12%, transparent)'
-const CHECKER: React.CSSProperties = {
-  backgroundColor: 'var(--panel2)',
-  backgroundImage:
-    `linear-gradient(45deg, ${CHECKER_SQUARE} 25%, transparent 25%, transparent 75%, ${CHECKER_SQUARE} 75%),` +
-    `linear-gradient(45deg, ${CHECKER_SQUARE} 25%, transparent 25%, transparent 75%, ${CHECKER_SQUARE} 75%)`,
-  backgroundSize: '20px 20px',
-  backgroundPosition: '0 0, 10px 10px',
-}
-
 function bgCss(bg: ShotsBackground, imageUrl: string | null): React.CSSProperties {
   switch (bg.type) {
     case 'transparent':
-      return CHECKER
+      return ALPHA_CHECKER
     case 'solid':
       return { background: bg.color }
     case 'gradient':
@@ -67,62 +52,6 @@ function bgCss(bg: ShotsBackground, imageUrl: string | null): React.CSSPropertie
   }
 }
 
-// ————— device notch overlay (mirrors drawNotch in render.ts) —————
-
-function Notch({ notch, L, f }: { notch: DeviceNotch; L: CardLayout; f: number }) {
-  const sw = L.screenW
-  if (notch === 'island') {
-    const w = sw * 0.3 * f
-    const h = sw * 0.032 * f
-    return (
-      <span
-        style={{
-          position: 'absolute',
-          top: (L.screenY + sw * 0.02) * f,
-          left: (L.screenX + (sw - sw * 0.3) / 2) * f,
-          width: w,
-          height: h,
-          borderRadius: h / 2,
-          background: '#000',
-        }}
-      />
-    )
-  }
-  if (notch === 'punch') {
-    const r = sw * 0.016 * f
-    return (
-      <span
-        style={{
-          position: 'absolute',
-          top: (L.screenY + sw * 0.032) * f - r,
-          left: (L.screenX + sw / 2) * f - r,
-          width: r * 2,
-          height: r * 2,
-          borderRadius: '50%',
-          background: '#000',
-        }}
-      />
-    )
-  }
-  if (notch === 'camera') {
-    const r = Math.max(1.2, sw * 0.006) * f
-    return (
-      <span
-        style={{
-          position: 'absolute',
-          top: (L.screenY - L.bezelPx * 0.5) * f - r,
-          left: (L.screenX + sw / 2) * f - r,
-          width: r * 2,
-          height: r * 2,
-          borderRadius: '50%',
-          background: '#2a2a30',
-        }}
-      />
-    )
-  }
-  return null
-}
-
 // ————— the screenshot card (device bezel + frame chrome + image), mirrors render.ts —————
 
 function Card({ img, url, f, L }: { img: ShotsImage; url: string; f: number; L: CardLayout }) {
@@ -131,8 +60,6 @@ function Card({ img, url, f, L }: { img: ShotsImage; url: string; f: number; L: 
   const dot = Math.max(2.5, L.barH * f * 0.13)
   const rx = img.style3d ? img.rotateX : 0
   const ry = img.style3d ? img.rotateY : 0
-  const hasDevice = !img.style3d && img.device !== 'none'
-  const dev = getShotsDevice(hasDevice ? img.device : 'none')
 
   return (
     <div
@@ -144,19 +71,6 @@ function Card({ img, url, f, L }: { img: ShotsImage; url: string; f: number; L: 
         transform: `perspective(${perspectiveFor(L.cardW) * f}px) rotateX(${rx}deg) rotateY(${ry}deg) rotateZ(${img.rotate}deg)`,
       }}
     >
-      {/* device bezel */}
-      {hasDevice && (
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            borderRadius: L.outerRadiusPx * f,
-            background: dev.color,
-            boxShadow: `inset 0 0 0 ${Math.max(1, L.bezelPx * 0.12 * f)}px ${dev.edge}`,
-          }}
-        />
-      )}
-
       {/* screen */}
       <div
         style={{
@@ -206,25 +120,50 @@ function Card({ img, url, f, L }: { img: ShotsImage; url: string; f: number; L: 
         <img src={url} alt="" draggable={false} style={{ width: '100%', flex: 1, objectFit: 'cover', minHeight: 0 }} />
       </div>
 
-      {hasDevice && <Notch notch={dev.notch} L={L} f={f} />}
+      {/*
+       * The frame sits over the screen box above (which clips itself to the
+       * cutout's radius). The island and camera are opaque pixels inside the
+       * cutout, so they overlay the screenshot without any extra markup.
+       */}
+      {L.bezel && (
+        <img
+          src={L.bezel.src}
+          alt=""
+          draggable={false}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            pointerEvents: 'none',
+          }}
+        />
+      )}
     </div>
   )
 }
 
-/** One placed screen: reflection + shadow/glow + the (selectable) card. */
-function ScreenInstance({ img, W, H, f, selected }: {
+/**
+ * One placed screen: reflection + shadow/glow + the (selectable) card.
+ *
+ * Deliberately draws no selected state. An outline on the canvas competes with
+ * the shot you're judging, and the numbered thumbnail strip in the left panel
+ * already says which screen the controls are pointed at.
+ */
+function ScreenInstance({ img, doc, W, H, f, interactive }: {
   img: ShotsImage
+  doc: ShotsDoc
   W: number
   H: number
   f: number
-  selected: boolean
+  interactive: boolean
 }) {
   const assets = useShots((s) => s.assets)
-  const meta = useShots((s) => s.doc.assets.find((a) => a.id === img.assetId))
   const selectImage = useShots((s) => s.selectImage)
+  const meta = doc.assets.find((a) => a.id === img.assetId)
   const url = assets[img.assetId]?.url
   if (!url || !meta) return null
-  const layout = computeLayout(img, meta.w, meta.h, W, H)
+  const layout = computeLayout(img, meta.w, meta.h, W, H, doc.zoom ?? 1)
   const minDim = Math.min(W, H)
 
   const dropShadow =
@@ -258,16 +197,14 @@ function ScreenInstance({ img, W, H, f, selected }: {
         </div>
       )}
       <div
-        className="absolute cursor-pointer"
-        onPointerDown={() => selectImage(img.id)}
+        className={interactive ? 'absolute cursor-pointer' : 'pointer-events-none absolute'}
+        onPointerDown={interactive ? () => selectImage(img.id) : undefined}
         style={{
           left: layout.cx * f,
           top: layout.cy * f,
           marginLeft: (-layout.cardW * f) / 2,
           marginTop: (-layout.cardH * f) / 2,
           filter: `${glow} ${dropShadow}`.trim() || undefined,
-          outline: selected ? '2px solid rgba(99,155,255,0.95)' : undefined,
-          outlineOffset: 2,
           borderRadius: layout.outerRadiusPx * f,
         }}
       >
@@ -277,64 +214,117 @@ function ScreenInstance({ img, W, H, f, selected }: {
   )
 }
 
-export function ShotsCanvas() {
-  const doc = useShots((s) => s.doc)
+/**
+ * The composition itself, at whatever pixel size it's handed.
+ *
+ * Split out from the viewport so the layout-preset thumbnails can render the
+ * *actual* shot — this screenshot, this background, this shadow — rather than a
+ * drawn approximation. A preset picker that lies about the result is worse than
+ * no picker, and a second renderer would drift from this one the first time
+ * either changed.
+ */
+export function ShotsScene({
+  doc,
+  width,
+  height,
+  interactive = false,
+}: {
+  doc: ShotsDoc
+  width: number
+  height: number
+  interactive?: boolean
+}) {
   const assets = useShots((s) => s.assets)
-  const outerRef = useRef<HTMLDivElement>(null)
   const { width: W, height: H } = doc.size
-  const rect = useFitRect(outerRef, W / H)
-  const f = rect.width / W
+  const f = width / W
 
   const bg = doc.background
   const bgImageUrl = bg.imageAssetId ? (assets[bg.imageAssetId]?.url ?? null) : null
   const alpha = bg.type === 'transparent'
   const bgFilter =
     bg.blur > 0 || bg.brightness !== 1
-      ? `blur(${(bg.blur * rect.width) / 1280}px) brightness(${bg.brightness})`
+      ? `blur(${(bg.blur * width) / 1280}px) brightness(${bg.brightness})`
       : undefined
+  /*
+   * The backdrop pushes in with the camera, so zooming magnifies the picture
+   * rather than just the phones. It never goes below 1: pulling back would
+   * otherwise shrink the backdrop off the frame edges, and a backdrop is meant
+   * to be endless — pulling back just shows more of it.
+   */
+  const bgZoom = Math.max(1, doc.zoom ?? 1)
+
+  return (
+    <div className="relative overflow-hidden rounded-lg" style={{ width, height }}>
+      {/* background — the checkerboard takes no blur/vignette, matching the exporter */}
+      <div
+        className="absolute inset-0"
+        style={
+          alpha
+            ? bgCss(bg, bgImageUrl)
+            : { ...bgCss(bg, bgImageUrl), filter: bgFilter, transform: `scale(${1.08 * bgZoom})` }
+        }
+      />
+      {!alpha && bg.vignette > 0 && (
+        <div
+          className="absolute inset-0"
+          style={{
+            background: `radial-gradient(circle at 50% 50%, transparent 45%, rgba(0,0,0,${bg.vignette * 0.65}) 100%)`,
+          }}
+        />
+      )}
+
+      {/* screens, painted back-to-front */}
+      {doc.images.map((img) => (
+        <ScreenInstance key={img.id} img={img} doc={doc} W={W} H={H} f={f} interactive={interactive} />
+      ))}
+    </div>
+  )
+}
+
+/**
+ * A preview that fills whatever width it's given and takes the frame's own
+ * aspect — square frame, square preview.
+ *
+ * ShotsScene needs real pixel dimensions (it scales the composition by
+ * `width / doc.size.width`), so the container is measured rather than guessed.
+ * Both preview spots used to hardcode a width, which left a strip of dead panel
+ * beside them and lied about the shape of anything that wasn't 16:9.
+ */
+export function ShotsPreview({ doc }: { doc: ShotsDoc }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [width, setWidth] = useState(0)
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const ro = new ResizeObserver(() => setWidth(el.clientWidth))
+    ro.observe(el)
+    setWidth(el.clientWidth)
+    return () => ro.disconnect()
+  }, [])
+
+  const height = Math.round((width * doc.size.height) / Math.max(1, doc.size.width))
+
+  return (
+    <div ref={ref} className="w-full">
+      {width > 0 && <ShotsScene doc={doc} width={width} height={height} />}
+    </div>
+  )
+}
+
+export function ShotsCanvas() {
+  const doc = useShots((s) => s.doc)
+  const outerRef = useRef<HTMLDivElement>(null)
+  const rect = useFitRect(outerRef, doc.size.width / doc.size.height)
 
   return (
     <div ref={outerRef} className="relative flex h-full w-full items-center justify-center overflow-hidden">
-      <div
-        className="relative overflow-hidden rounded-lg shadow-2xl"
-        style={{ width: rect.width, height: rect.height }}
-      >
-        {/* background — the checkerboard takes no blur/vignette, matching the exporter */}
-        <div
-          className="absolute inset-0"
-          style={
-            alpha
-              ? bgCss(bg, bgImageUrl)
-              : { ...bgCss(bg, bgImageUrl), filter: bgFilter, transform: 'scale(1.08)' }
-          }
-        />
-        {!alpha && bg.vignette > 0 && (
-          <div
-            className="absolute inset-0"
-            style={{ background: `radial-gradient(circle at 50% 50%, transparent 45%, rgba(0,0,0,${bg.vignette * 0.65}) 100%)` }}
-          />
-        )}
-
-        {/* screens, painted back-to-front */}
-        {doc.images.map((img) => (
-          <ScreenInstance
-            key={img.id}
-            img={img}
-            W={W}
-            H={H}
-            f={f}
-            selected={img.id === doc.selectedId && doc.images.length > 1}
-          />
-        ))}
-
-        {doc.images.length === 0 && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <p className="rounded-full bg-black/50 px-4 py-2 text-[12px] text-white/90">
-              Upload a screenshot to get started
-            </p>
-          </div>
-        )}
-      </div>
+      <ShotsScene doc={doc} width={rect.width} height={rect.height} interactive />
+      {doc.images.length === 0 && (
+        <p className="pointer-events-none absolute rounded-full bg-black/50 px-4 py-2 t-body-sm text-white/90">
+          Upload a screenshot to get started
+        </p>
+      )}
     </div>
   )
 }

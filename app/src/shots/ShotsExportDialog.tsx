@@ -10,11 +10,11 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-6" onMouseDown={onClose}>
       <div
-        className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-xl border border-(--line) bg-(--panel) p-5 shadow-2xl"
+        className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-xl border border-(--line) bg-(--raised) p-5"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-[12px] font-semibold tracking-[0.2em] text-(--tx) uppercase">{title}</h2>
+          <h2 className="t-eyebrow text-(--tx) uppercase">{title}</h2>
           <button
             onClick={onClose}
             aria-label="Close"
@@ -59,7 +59,7 @@ export function ShotsExportDialog() {
 
   return (
     <Modal title="Export shot" onClose={() => setDialog(null)}>
-      <label className="mb-2 block text-[10px] tracking-[0.15em] text-(--tx3) uppercase">
+      <label className="mb-2 block t-eyebrow text-(--tx3) uppercase">
         Resolution — {SIZE_PRESETS.find((p) => p.width === doc.size.width && p.height === doc.size.height)?.name ?? `${doc.size.width}×${doc.size.height}`}
       </label>
       <div className="mb-3 flex gap-1">
@@ -80,18 +80,18 @@ export function ShotsExportDialog() {
         onChange={setFormat}
       />
       {doc.background.type === 'transparent' && format === 'jpg' && (
-        <p className="mb-2 text-[11px] text-(--danger)">
+        <p className="mb-2 t-body-sm text-(--danger)">
           JPG can't store transparency — this shot will export on a black background. Use PNG or WebP.
         </p>
       )}
       {format !== 'png' && <SliderRow label="Quality" value={quality} min={0.5} max={1} onChange={setQuality} />}
 
-      {error && <p className="mb-2 text-[11px] text-(--danger)">{error}</p>}
+      {error && <p className="mb-2 t-body-sm text-(--danger)">{error}</p>}
 
       <button
         disabled={exporting}
         onClick={() => void run()}
-        className="mt-2 w-full rounded-md bg-(--accent-fill) py-2 text-[12px] font-semibold tracking-[0.14em] text-(--accent-tx) uppercase hover:opacity-90 disabled:opacity-60"
+        className="mt-2 w-full rounded-md bg-(--accent-fill) py-2 t-button text-(--accent-tx) hover:opacity-90 disabled:opacity-60"
       >
         {exporting ? 'Rendering…' : `Export · ${outW}×${outH}`}
       </button>

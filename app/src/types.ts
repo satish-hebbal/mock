@@ -30,6 +30,8 @@ export interface DeviceInstance {
   id: string
   modelId: string
   colorVariant: string
+  /** set when colorVariant is 'custom': a raw hex from the picker */
+  customColor?: string
   orientation: 'portrait' | 'landscape'
   transform: Transform
   screen: ScreenBinding
@@ -47,7 +49,7 @@ export interface CameraState {
   rotateY: number
 }
 
-export type BackgroundType = 'solid' | 'gradient' | 'mesh' | 'image' | 'transparent'
+export type BackgroundType = 'solid' | 'gradient' | 'mesh' | 'image' | 'studio' | 'transparent'
 
 export interface GradientSpec {
   kind: 'linear' | 'radial'
@@ -56,22 +58,91 @@ export interface GradientSpec {
   to: string
 }
 
+/**
+ * A seamless studio sweep — the curved roll of paper behind a product shot.
+ * It reads as one continuous surface: the key throws a hotspot on the paper
+ * behind the subject, the sweep falls off toward the floor, and the corners
+ * are held down so the eye stays on the product.
+ */
+export interface SweepSpec {
+  /** the paper itself */
+  color: string
+  /** colour of the pool of light the key throws on it */
+  hot: string
+  /** hotspot centre, as a fraction of frame height (0 = top) */
+  hotY: number
+  /** hotspot radius, as a fraction of frame width */
+  spread: number
+  /** how far the paper darkens toward the bottom edge, 0..1 */
+  floor: number
+  /** corner darkening, 0..1 */
+  vignette: number
+}
+
 export interface BackgroundState {
   type: BackgroundType
   color: string
   gradient: GradientSpec
   mesh: { seed: number; colors: string[] }
+  sweep: SweepSpec
   imageAssetId: string | null
   /** blur px applied to image/mesh backgrounds */
   blur: number
   brightness: number
 }
 
+/**
+ * A photographic lighting rig (PRD §6.4, extended for the studio looks).
+ *
+ * The three lamps are the standard product-photography setup: a key that
+ * defines the form, a weaker fill that opens the shadows it casts, and a rim
+ * behind the subject that separates it from the backdrop. Angles are measured
+ * off the *camera* axis, not the world, so the rig travels with the lens the
+ * way a photographer swings a whole setup around the product.
+ */
 export interface EnvironmentState {
   keyIntensity: number
   fillIntensity: number
   rimIntensity: number
   ambient: number
+  /** key azimuth off the camera axis in degrees (+ = camera right) */
+  keyAzimuth: number
+  /** key elevation above the subject's horizon, degrees */
+  keyElevation: number
+  /** apparent source size: 0 = bare bulb (hard), 1 = big softbox (soft) */
+  softness: number
+  /** key colour: -1 cool strobe … 0 neutral … +1 tungsten warm */
+  temperature: number
+  /** how strongly the softboxes show up as reflections in glossy surfaces */
+  reflection: number
+  /** white bounce card below the product, lifting the underside */
+  bounce: number
+
+  /*
+   * Everything below is optional so projects saved before these existed still
+   * load. Each reader falls back to the value that reproduces the old rig, so
+   * an old file opens looking exactly as it did.
+   */
+
+  /** procedural environment mood id (lib/moods.ts); absent means 'studio' */
+  mood?: string
+  /** how strongly the mood's dome shows up; absent means 1 */
+  moodIntensity?: number
+
+  /*
+   * Explicit lamp colours. Absent means "follow the warmth slider", which is
+   * the easier control for a photographic look, so setting one of these is an
+   * opt-out of that rather than the default way to drive the rig.
+   */
+  keyColor?: string
+  fillColor?: string
+  rimColor?: string
+  ambientColor?: string
+
+  /** sky-to-ground bounce; absent or 0 means no hemisphere lamp */
+  hemiIntensity?: number
+  hemiSky?: string
+  hemiGround?: string
 }
 
 export interface GroundState {

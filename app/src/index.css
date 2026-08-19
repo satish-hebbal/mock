@@ -1,66 +1,277 @@
 @import "tailwindcss";
 
 /*
- * Editor chrome drawn from the frog mark: amber #FFC300 (the eye) is the only
- * chromatic color and means "active"; olive #658900 backs it for on-states that
- * need a second step. Surfaces are warm-neutral greys so they sit under the
- * mark rather than fighting it.
+ * Linear's design system, applied verbatim.
+ * Source: voltagent/awesome-design-md — design-md/linear.app/DESIGN.md
+ *
+ * Every value below is quoted from that document. Where the app needs a role
+ * the document doesn't name, the mapping onto Linear's own tokens is written
+ * out next to it, and the handful of genuinely absent values (a destructive
+ * colour, most of the light theme) are marked DERIVED so they're easy to
+ * replace if the spec ever fills those gaps.
  */
-:root {
-  --panel2: #171614; /* app backdrop (darkest) */
-  --panel: #1e1d1a; /* raised panels & rails */
-  --panel3: #2c2a26; /* hover surfaces / insets */
-  --sel: #38352f; /* selected / active surface */
-  --field: #2c2a26; /* inline input chips */
-  --field-h: #38352f; /* input chip hover */
-  --line: rgba(255, 240, 200, 0.08);
-  --line2: rgba(255, 240, 200, 0.16);
-  --tx: #fdfbf5; /* primary text & values */
-  --tx2: #b5b0a3; /* labels, icons */
-  --tx3: #7e7a6f; /* tertiary / placeholders */
-  /*
-   * Two accent roles, because amber can't do both jobs in both themes:
-   * `--accent` is INK (text, icons, 1px lines) and must contrast the panel;
-   * `--accent-fill` is a filled SURFACE and always stays logo amber, with
-   * `--accent-tx` as the ink on top of it.
-   */
-  --accent: #ffc300;
-  --accent-fill: #ffc300;
-  --accent-tx: #1e1d1a;
-  --accent-soft: rgba(255, 195, 0, 0.16);
-  --accent2: #7c9c14; /* logo olive, for secondary on-states */
-  --danger: #f87171;
-}
 
-:root.light {
-  --panel2: #f4f2ec;
-  --panel: #ffffff;
-  --panel3: #eae7dd;
-  --sel: #d6d0be; /* darker than the field so slider fills stay readable */
-  --field: #efece3;
-  --field-h: #e4e0d4;
-  --line: rgba(40, 34, 10, 0.10);
-  --line2: rgba(40, 34, 10, 0.20);
-  --tx: #1c1a14;
-  --tx2: #5c574a;
-  --tx3: #8b8578;
-  --accent: #8a6a00; /* darkened amber so accent ink stays legible on white */
-  --accent-fill: #ffc300; /* …but filled buttons keep the bright logo amber */
-  --accent-tx: #1c1a14; /* dark ink on that amber fill */
-  --accent-soft: rgba(255, 195, 0, 0.28);
-  --accent2: #5b7a01;
-  --danger: #dc2626;
+:root {
+  /* ————— Colors · Brand & Accent ————— */
+  --primary: #5e6ad2;
+  --on-primary: #ffffff;
+  --primary-hover: #828fff;
+  --primary-focus: #5e69d1;
+  --brand-secure: #7a7fad;
+
+  /* ————— Colors · Surface ————— */
+  --canvas: #08090a; /* the black Linear actually ships */
+  --surface-1: #0f1011;
+  --surface-2: #141516;
+  --surface-3: #18191a;
+  --surface-4: #191a1b;
+  --hairline: #23252a;
+  --hairline-strong: #34343a;
+  --hairline-tertiary: #3e3e44;
+  --inverse-canvas: #ffffff;
+  --inverse-surface-1: #f5f6f6;
+  --inverse-surface-2: #f6f7f7;
+
+  /* ————— Colors · Text ————— */
+  --ink: #f7f8f8;
+  --ink-muted: #d0d6e0;
+  --ink-subtle: #8a8f98;
+  --ink-tertiary: #62666d;
+
+  /* ————— Colors · Semantic ————— */
+  --success: #27a644;
+  --overlay: #000000;
+
+  /* ————— Typography ————— */
+  --font-display: "Linear Display", "SF Pro Display", -apple-system, system-ui, "Segoe UI", Roboto,
+    sans-serif;
+  --font-text: "Linear Text", "SF Pro Display", -apple-system, system-ui, "Segoe UI", Roboto,
+    sans-serif;
+  --font-mono: "Linear Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* ————— Spacing ————— */
+  --space-xxs: 4px;
+  --space-xs: 8px;
+  --space-sm: 12px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-xxl: 48px;
+  --space-section: 96px;
+
+  /*
+   * ————— App roles, mapped onto the ladder above —————
+   * The editor was already written against these names, so pointing them at
+   * Linear tokens re-skins every panel at once. The ladder is Linear's:
+   * canvas underneath, surfaces stepping up, hairlines doing the separating.
+   */
+  /*
+   * Docked chrome is NOT a lifted surface. Sampling Linear's own sidebar gives
+   * the canvas black, not surface-1 — the rails, side panels and timeline sit
+   * flat on the same ground as the content and are separated by a hairline
+   * alone. Painting them surface-1 is what made the app read grey next to it.
+   */
+  --panel2: var(--canvas); /* app backdrop */
+  --panel: var(--canvas); /* rails, side panels, timeline — same ground */
+  /* Things that genuinely float (dialogs, menus, toasts) do lift: Level 1. */
+  --raised: var(--surface-1);
+  --panel3: var(--surface-3); /* hover surfaces / insets */
+  /*
+   * DERIVED. Linear names no "selected surface", and reaching for --hairline
+   * turned every active tab into a pale grey slab — the ladder is meant to be
+   * felt, not read. This sits a single step above the hover surface, which is
+   * all the separation Linear's own selected rows use.
+   */
+  --sel: #1c1d20;
+  --field: var(--surface-2); /* inline input chips */
+  --field-h: var(--surface-3); /* input chip hover */
+  --line: var(--hairline);
+  --line2: var(--hairline-strong);
+  --tx: var(--ink);
+  --tx2: var(--ink-subtle);
+  --tx3: var(--ink-tertiary);
+  /*
+   * `--accent` is INK (text, icons, 1px lines) and takes Primary Hover: at
+   * #5e6ad2 the fill colour sits near 4:1 on the near-black canvas, and Linear
+   * reserves the brighter step for exactly this job. `--accent-fill` stays the
+   * true Primary, with On-Primary as its ink.
+   */
+  --accent: var(--primary-hover);
+  --accent-fill: var(--primary);
+  --accent-tx: var(--on-primary);
+  --accent-soft: color-mix(in srgb, var(--primary) 18%, transparent);
+  --accent2: var(--brand-secure);
+  --danger: #f2555a; /* DERIVED — the spec names no destructive colour */
+
+  /* "Focus ring: 2px primary-focus outline at 50% opacity." */
+  --focus: color-mix(in srgb, var(--primary-focus) 50%, transparent);
 }
 
 /*
- * Squircle corners app-wide. `corner-shape` (CSS Borders 4) reshapes an existing
- * border-radius, so every rounded-* utility gets the continuous curve for free
- * and degrades to a plain arc where the property is unsupported. Pills and dots
- * (rounded-full) stay true circles.
+ * Light theme. The document supplies only three inverse surfaces and stops, so
+ * the canvas/surface relationship is taken from it literally (canvas is the
+ * lighter ground, surfaces step *down*) and the inks and hairlines below are
+ * DERIVED to keep the same contrast intervals as the dark set.
  */
-@supports (corner-shape: squircle) {
-  [class*="rounded"]:not([class*="rounded-full"]) {
-    corner-shape: squircle;
+:root.light {
+  --panel2: var(--inverse-surface-1);
+  --panel: var(--inverse-surface-1);
+  --raised: var(--inverse-canvas);
+  --panel3: #ebecec;
+  --sel: #dcdee1;
+  --field: var(--inverse-surface-2);
+  --field-h: #ebecec;
+  --line: #e4e5e8;
+  --line2: #d2d4d8;
+  --tx: #0f1011;
+  --tx2: #62666d;
+  --tx3: #8a8f98;
+  --accent: var(--primary); /* Primary reads cleanly as ink on the light ground */
+  --accent-soft: color-mix(in srgb, var(--primary) 14%, transparent);
+}
+
+/*
+ * ————— Border radius —————
+ * "xs: 4px | sm: 6px | md: 8px | lg: 12px | xl: 16px | xxl: 24px | pill/full"
+ * Fed to Tailwind's radius namespace so `rounded-md` *is* Linear's md.
+ */
+@theme {
+  /*
+   * Tailwind's default is 150ms on an ease-in-out curve, which spends its first
+   * frames barely moving — on a hover that reads as the UI thinking before it
+   * answers. A decelerating curve puts the whole change at the start, so the
+   * highlight appears the instant the pointer lands and settles from there.
+   */
+  --default-transition-duration: 110ms;
+  --default-transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 24px;
+
+  /* "Desktop-XL 1440 · Desktop 1280 · Tablet 1024 · Mobile-Lg 768 · Mobile 480" */
+  --breakpoint-mobile: 480px;
+  --breakpoint-mobile-lg: 768px;
+  --breakpoint-tablet: 1024px;
+  --breakpoint-desktop: 1280px;
+  --breakpoint-desktop-xl: 1440px;
+}
+
+/*
+ * ————— Type scale —————
+ * One class per row of the document's typography table. They live in the
+ * components layer so a Tailwind utility (`font-semibold`, `tracking-…`) still
+ * wins where a specific spot needs to depart from the token.
+ */
+@layer components {
+  /*
+   * "This one is chosen", said quietly.
+   *
+   * A hard white border shouts, and over a colour swatch or a thumbnail it also
+   * changes what you're judging. This is a hairline in the ink colour at low
+   * strength, lifted off the panel by a soft contrasted shadow — the shadow does
+   * the separating, so the border never has to get loud.
+   */
+  .is-picked {
+    border-color: color-mix(in srgb, var(--ink) 34%, transparent);
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--ink) 12%, transparent),
+      0 6px 16px -6px color-mix(in srgb, var(--overlay) 85%, transparent);
+  }
+
+  .t-display-xl {
+    font-family: var(--font-display);
+    font-size: 80px;
+    font-weight: 600;
+    line-height: 1.05;
+    letter-spacing: -3px;
+  }
+  .t-display-lg {
+    font-family: var(--font-display);
+    font-size: 56px;
+    font-weight: 600;
+    line-height: 1.1;
+    letter-spacing: -1.8px;
+  }
+  .t-display-md {
+    font-family: var(--font-display);
+    font-size: 40px;
+    font-weight: 600;
+    line-height: 1.15;
+    letter-spacing: -1px;
+  }
+  .t-headline {
+    font-family: var(--font-display);
+    font-size: 28px;
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: -0.6px;
+  }
+  .t-card-title {
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-weight: 500;
+    line-height: 1.25;
+    letter-spacing: -0.4px;
+  }
+  .t-subhead {
+    font-family: var(--font-display);
+    font-size: 20px;
+    font-weight: 400;
+    line-height: 1.4;
+    letter-spacing: -0.2px;
+  }
+  .t-body-lg {
+    font-family: var(--font-text);
+    font-size: 18px;
+    font-weight: 400;
+    line-height: 1.5;
+    letter-spacing: -0.1px;
+  }
+  .t-body {
+    font-family: var(--font-text);
+    font-size: 16px;
+    font-weight: 400;
+    line-height: 1.5;
+    letter-spacing: -0.05px;
+  }
+  .t-body-sm {
+    font-family: var(--font-text);
+    font-size: 14px;
+    font-weight: 400;
+    line-height: 1.5;
+    letter-spacing: 0;
+  }
+  .t-caption {
+    font-family: var(--font-text);
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.4;
+    letter-spacing: 0;
+  }
+  .t-button {
+    font-family: var(--font-text);
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.2;
+    letter-spacing: 0;
+  }
+  .t-eyebrow {
+    font-family: var(--font-text);
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.3;
+    letter-spacing: 0.4px;
+  }
+  .t-mono {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 400;
+    line-height: 1.5;
+    letter-spacing: 0;
   }
 }
 
@@ -75,8 +286,67 @@ body {
   overflow: hidden;
   background: var(--panel2);
   color: var(--tx);
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* body-sm is the working size for editor chrome; body (16px) is for prose */
+  font-family: var(--font-text);
+  font-size: 14px;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+}
+
+/*
+ * The app menu drops in from above the viewport rather than fading in place —
+ * it reads as one sheet pulled down off the top edge, which is what the logo
+ * button promises.
+ */
+@keyframes sheet-drop {
+  from {
+    transform: translateY(-101%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+/*
+ * The quick-snap shutter. The band starts fully off the left edge and leaves
+ * past the right, so no part of the frame is lit at rest, and the edge flash
+ * runs on the same clock so they read as one event rather than two effects.
+ */
+@keyframes snap-sweep {
+  from {
+    transform: translateX(-120%);
+  }
+  to {
+    transform: translateX(340%);
+  }
+}
+
+@keyframes snap-edge {
+  0% {
+    opacity: 0;
+  }
+  18% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes scrim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [style*="sheet-drop"],
+  [class*="sheet-drop"],
+  [class*="scrim-in"] {
+    animation: none !important;
+  }
 }
 
 /* hide number input spinners for compact numeric fields */
@@ -92,7 +362,7 @@ input[type="number"] {
 
 input[type="range"],
 input[type="checkbox"] {
-  accent-color: var(--accent);
+  accent-color: var(--primary);
 }
 
 /* thin, unobtrusive scrollbars for the dark chrome */

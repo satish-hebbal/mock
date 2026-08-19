@@ -1,136 +1,77 @@
-// ————— Device frame catalog (temporary bezel placeholders) —————
-//
-// Each device is modeled as a uniform bezel border around the screenshot so the
-// CSS preview (ShotsCanvas) and the canvas exporter (render.ts) stay in perfect
-// sync. All metrics are fractions of the *screen width* so a device scales with
-// the shot. Swap these for realistic PNG/SVG assets later without touching the
-// layout math — just keep `bezel`, `outerRadius`, `screenRadius`.
+import { BEZELS, getBezel, type Bezel, type BezelCategory } from './bezels'
 
-export type ShotsDeviceId =
-  | 'none'
-  | 'iphone'
-  | 'android'
-  | 'ipad'
-  | 'macbook'
-  | 'imac'
-  | 'watch'
+/*
+ * The Shots device catalog. "No device" (a bare screenshot with its own corner
+ * radius) plus one entry per real frame in `bezels.ts` — there are no drawn
+ * bezels any more, so the picker, the preview and the exporter all read the
+ * same measured geometry and can't drift apart.
+ */
 
-export type DeviceCategory = 'none' | 'phone' | 'tablet' | 'laptop' | 'desktop' | 'watch'
+/** `'none'` for a bare screenshot, otherwise a `Bezel.id`. */
+export type ShotsDeviceId = string
 
-export type DeviceNotch = 'none' | 'island' | 'punch' | 'camera'
+export type DeviceCategory = 'none' | BezelCategory
+
+export const NO_DEVICE = 'none'
 
 export interface DeviceSpec {
   id: ShotsDeviceId
   label: string
   category: DeviceCategory
-  /** bezel thickness on every side, as a fraction of the screen width */
-  bezel: number
-  /** outer (device) corner radius, as a fraction of the outer width */
-  outerRadius: number
-  /** screen corner radius, as a fraction of the screen width */
-  screenRadius: number
-  /** front camera / cutout style drawn over the top of the screen */
-  notch: DeviceNotch
-  /** bezel fill color */
-  color: string
-  /** subtle inner edge highlight color (rim light on the bezel) */
-  edge: string
-  /**
-   * Nominal screen size in logical points. Display metadata for the picker
-   * (label + preview proportions) — the layout still fits the *screenshot's*
-   * own aspect, so this never changes how a shot is composed.
-   */
-  screen?: { w: number; h: number }
+  /** the frame asset, or null for a bare screenshot */
+  bezel: Bezel | null
+  /** screen size in logical points — the frame's cutout, or null when bare */
+  screen: { w: number; h: number } | null
+}
+
+const BARE: DeviceSpec = {
+  id: NO_DEVICE,
+  label: 'No device',
+  category: 'none',
+  bezel: null,
+  screen: null,
 }
 
 export const DEVICES: DeviceSpec[] = [
-  {
-    id: 'none',
-    label: 'No device',
-    category: 'none',
-    bezel: 0,
-    outerRadius: 0,
-    screenRadius: 0,
-    notch: 'none',
-    color: '#000000',
-    edge: 'transparent',
-  },
-  {
-    id: 'iphone',
-    label: 'iPhone',
-    category: 'phone',
-    bezel: 0.035,
-    outerRadius: 0.16,
-    screenRadius: 0.11,
-    notch: 'island',
-    color: '#0b0b0f',
-    edge: '#3a3a42',
-    screen: { w: 430, h: 932 },
-  },
-  {
-    id: 'android',
-    label: 'Android',
-    category: 'phone',
-    bezel: 0.028,
-    outerRadius: 0.13,
-    screenRadius: 0.1,
-    notch: 'punch',
-    color: '#111114',
-    edge: '#33343a',
-    screen: { w: 412, h: 915 },
-  },
-  {
-    id: 'ipad',
-    label: 'Tablet',
-    category: 'tablet',
-    bezel: 0.03,
-    outerRadius: 0.055,
-    screenRadius: 0.028,
-    notch: 'camera',
-    color: '#101014',
-    edge: '#35363c',
-    screen: { w: 1024, h: 1366 },
-  },
-  {
-    id: 'macbook',
-    label: 'Laptop',
-    category: 'laptop',
-    bezel: 0.022,
-    outerRadius: 0.03,
-    screenRadius: 0.012,
-    notch: 'camera',
-    color: '#1b1c20',
-    edge: '#3d3e44',
-    screen: { w: 1512, h: 982 },
-  },
-  {
-    id: 'imac',
-    label: 'Desktop',
-    category: 'desktop',
-    bezel: 0.02,
-    outerRadius: 0.02,
-    screenRadius: 0.008,
-    notch: 'camera',
-    color: '#1e1f24',
-    edge: '#43444a',
-    screen: { w: 2240, h: 1260 },
-  },
-  {
-    id: 'watch',
-    label: 'Watch',
-    category: 'watch',
-    bezel: 0.055,
-    outerRadius: 0.28,
-    screenRadius: 0.2,
-    notch: 'none',
-    color: '#0a0a0d',
-    edge: '#3a3a42',
-    screen: { w: 410, h: 502 },
-  },
+  BARE,
+  ...BEZELS.map((b) => ({
+    id: b.id,
+    label: b.label,
+    category: b.category as DeviceCategory,
+    bezel: b,
+    screen: { w: b.screen.w, h: b.screen.h },
+  })),
 ]
 
-const DEVICE_MAP = new Map(DEVICES.map((d) => [d.id, d]))
+const BY_ID = new Map(DEVICES.map((d) => [d.id, d]))
 
 export function getShotsDevice(id: ShotsDeviceId): DeviceSpec {
-  return DEVICE_MAP.get(id) ?? DEVICES[0]
+  return BY_ID.get(id) ?? BARE
+}
+
+/** The frame asset for a screen, or null when it should render bare. */
+export function bezelFor(id: ShotsDeviceId): Bezel | null {
+  return id === NO_DEVICE ? null : getBezel(id)
+}
+
+/**
+ * Docs saved against the old placeholder catalog ('iphone', 'android', …).
+ * Phones and tablets map onto the closest real frame; the drawn laptop, desktop
+ * and watch had no equivalent asset, so those fall back to a bare screenshot
+ * rather than silently becoming a phone.
+ */
+const LEGACY: Record<string, ShotsDeviceId> = {
+  iphone: 'iphone-16-plus', // the old placeholder was 430×932
+  android: 'iphone-16',
+  ipad: 'ipad-pro-13',
+  macbook: NO_DEVICE,
+  imac: NO_DEVICE,
+  watch: NO_DEVICE,
+}
+
+/** Normalize a persisted device id to one this build can render. */
+export function migrateDeviceId(id: string | undefined): ShotsDeviceId {
+  if (!id) return NO_DEVICE
+  if (BY_ID.has(id)) return id
+  return LEGACY[id] ?? NO_DEVICE
 }

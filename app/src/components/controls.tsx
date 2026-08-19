@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useStudio } from '../store'
+import { endEditRun } from '../lib/history'
+import { KF_MARK } from '../lib/marks'
 
 /*
  * Panel primitives, modelled on Figma's right rail: sentence-case section
@@ -38,9 +40,9 @@ export function Section({
           className="flex flex-1 items-center gap-2 py-2.5 text-left"
         >
           {icon && <span className="shrink-0 text-(--tx2)">{icon}</span>}
-          <span className="text-[11px] font-semibold text-(--tx)">{title}</span>
+          <span className="t-body-sm font-semibold text-(--tx)">{title}</span>
           {badge && (
-            <span className="rounded bg-(--panel3) px-1.5 py-0.5 text-[9px] font-medium text-(--tx2)">
+            <span className="rounded-xs bg-(--panel3) px-1.5 py-0.5 t-caption font-medium text-(--tx2)">
               {badge}
             </span>
           )}
@@ -49,7 +51,7 @@ export function Section({
         <button
           onClick={() => setOpen(!open)}
           aria-label={open ? `Collapse ${title}` : `Expand ${title}`}
-          className="flex h-6 w-6 items-center justify-center rounded text-(--tx3) hover:bg-(--panel3) hover:text-(--tx)"
+          className="flex h-6 w-6 items-center justify-center rounded-xs text-(--tx3) hover:bg-(--panel3) hover:text-(--tx)"
         >
           <ChevronDown size={13} className={`transition-transform ${open ? '' : '-rotate-90'}`} />
         </button>
@@ -62,7 +64,7 @@ export function Section({
 /** Quiet label above a cluster of fields ("Alignment", "Lighting", …). */
 export function SubHeading({ children, icon }: { children: ReactNode; icon?: ReactNode }) {
   return (
-    <p className="mb-1.5 flex items-center gap-1.5 text-[10px] text-(--tx2)">
+    <p className="mb-1.5 flex items-center gap-1.5 t-caption text-(--tx2)">
       {icon}
       {children}
     </p>
@@ -109,7 +111,7 @@ export function KFDiamond({ target }: { target: string }) {
       className="flex h-4 w-4 shrink-0 items-center justify-center"
     >
       <span
-        className={`block h-2 w-2 rotate-45 transition-colors ${
+        className={`${KF_MARK} ${
           hasHere
             ? 'bg-(--accent)'
             : hasTrack
@@ -170,6 +172,7 @@ export function SliderRow({
     const v = Number(draft)
     if (Number.isFinite(v)) onChange(clamp(v))
     setEditing(false)
+    endEditRun()
   }
 
   // Figma-style relative scrub: drag anywhere on the field, ~180px covers the
@@ -195,6 +198,9 @@ export function SliderRow({
       el.removeEventListener('pointermove', onMove)
       el.removeEventListener('pointerup', onUp)
       scrubbing.current = false
+      // the drag is over: whatever comes next is a separate undo step, without
+      // having to wait out the coalescing window
+      endEditRun()
       if (!moved) startEdit()
     }
     el.addEventListener('pointermove', onMove)
@@ -224,10 +230,10 @@ export function SliderRow({
         title={hint ?? label}
         onPointerDown={onPointerDown}
         onKeyDown={onKeyDown}
-        className="relative h-7 flex-1 cursor-ew-resize overflow-hidden rounded-[5px] bg-(--field) select-none focus:ring-1 focus:ring-(--accent) focus:outline-none"
+        className="relative h-7 flex-1 cursor-ew-resize overflow-hidden rounded-sm bg-(--field) select-none focus:ring-2 focus:ring-(--focus) focus:outline-none"
       >
         <div
-          className="pointer-events-none absolute inset-y-0 left-0 rounded-[5px] bg-(--sel)"
+          className="pointer-events-none absolute inset-y-0 left-0 rounded-sm bg-(--sel)"
           style={{ width: `${pct}%` }}
         />
         <div
@@ -235,7 +241,7 @@ export function SliderRow({
           style={{ left: `calc(${pct}% - 6px)` }}
         />
         <div className="absolute inset-0 flex items-center justify-between gap-2 px-2.5">
-          <span className="flex min-w-0 items-center gap-1.5 text-[11px] text-(--tx2)">
+          <span className="flex min-w-0 items-center gap-1.5 t-body-sm text-(--tx2)">
             {icon && <span className="shrink-0">{icon}</span>}
             <span className="truncate">{label}</span>
           </span>
@@ -251,10 +257,10 @@ export function SliderRow({
                 if (e.key === 'Escape') setEditing(false)
                 e.stopPropagation()
               }}
-              className="w-14 shrink-0 rounded-[3px] border border-(--line2) bg-(--panel) px-1 text-right text-[11px] text-(--tx) tabular-nums outline-none"
+              className="w-14 shrink-0 rounded-xs border border-(--line2) bg-(--raised) px-1 text-right t-body-sm text-(--tx) tabular-nums outline-none"
             />
           ) : (
-            <span className="shrink-0 text-[11px] text-(--tx) tabular-nums">{format(value)}</span>
+            <span className="shrink-0 t-body-sm text-(--tx) tabular-nums">{format(value)}</span>
           )}
         </div>
       </div>
@@ -263,6 +269,44 @@ export function SliderRow({
 }
 
 // ————— segment tabs —————
+
+/**
+ * The sliding selection pill for an equal-width segmented row.
+ *
+ * Painting the active background on the button itself makes selection *jump*:
+ * one pill vanishes and another appears, and nothing connects them. A single
+ * pill that travels tells you where the selection went, which matters most on
+ * the row you use least, where the labels haven't been memorised yet.
+ *
+ * The geometry is derived rather than measured. Both callers lay their options
+ * out as equal columns with a 2px gap, so cell width is `(track - gaps) / n` and
+ * each step is exactly one cell plus one gap. Percentages in `translateX`
+ * resolve against the element's own width, so "move one cell" is literally
+ * `100% + 2px`, and it stays correct at any container width with no
+ * ResizeObserver and no layout read.
+ */
+export function SegmentThumb({
+  count,
+  index,
+  radius = 'rounded-xs',
+}: {
+  count: number
+  index: number
+  /** match the row's own corner radius */
+  radius?: string
+}) {
+  if (index < 0) return null // nothing selected: no pill rather than a stray one
+  return (
+    <span
+      aria-hidden
+      className={`pointer-events-none absolute top-0.5 bottom-0.5 left-0.5 bg-(--sel) transition-transform duration-200 ease-out motion-reduce:transition-none ${radius}`}
+      style={{
+        width: `calc((100% - ${4 + 2 * (count - 1)}px) / ${count})`,
+        transform: `translateX(calc(${index} * (100% + 2px)))`,
+      }}
+    />
+  )
+}
 
 export function Segments<T extends string>({
   options,
@@ -276,9 +320,10 @@ export function Segments<T extends string>({
 }) {
   return (
     <div
-      className="mb-2 grid gap-0.5 rounded-[5px] bg-(--field) p-0.5"
+      className="relative mb-2 grid gap-0.5 rounded-sm bg-(--field) p-0.5"
       style={{ gridTemplateColumns: `repeat(${options.length}, 1fr)` }}
     >
+      <SegmentThumb count={options.length} index={options.findIndex((o) => o.id === value)} />
       {options.map((o) => (
         <button
           key={o.id}
@@ -286,10 +331,8 @@ export function Segments<T extends string>({
           aria-pressed={value === o.id}
           aria-label={o.label}
           title={o.label}
-          className={`flex h-6 items-center justify-center gap-1 truncate rounded-[3px] px-1.5 text-[11px] transition-colors ${
-            value === o.id
-              ? 'bg-(--sel) text-(--tx)'
-              : 'text-(--tx2) hover:text-(--tx)'
+          className={`relative z-10 flex h-6 items-center justify-center gap-1 truncate rounded-xs px-1.5 t-body-sm transition-colors ${
+            value === o.id ? 'text-(--tx)' : 'text-(--tx2) hover:text-(--tx)'
           }`}
         >
           {o.icon ?? o.label}
@@ -317,9 +360,9 @@ export function IconToggle({
       aria-pressed={active}
       aria-label={label}
       title={label}
-      className={`flex h-6 w-6 items-center justify-center rounded-[4px] transition-colors ${
+      className={`flex h-6 w-6 items-center justify-center rounded-xs transition-colors ${
         active
-          ? 'bg-(--accent-soft) text-(--accent)'
+          ? 'bg-(--sel) text-(--tx)'
           : 'text-(--tx2) hover:bg-(--panel3) hover:text-(--tx)'
       }`}
     >
@@ -339,7 +382,8 @@ export function Dropdown<T extends string | number>({
   align = 'left',
 }: {
   value: T
-  options: { value: T; label: string }[]
+  /** an `icon` is drawn ahead of the label, in the trigger and the list alike */
+  options: { value: T; label: string; icon?: ReactNode }[]
   onChange: (v: T) => void
   title?: string
   className?: string
@@ -381,15 +425,16 @@ export function Dropdown<T extends string | number>({
         onKeyDown={(e) => {
           if (e.key === 'Escape') setOpen(false)
         }}
-        className="flex h-7 w-full items-center gap-1.5 rounded-[5px] bg-(--field) px-2 text-[11px] text-(--tx) hover:bg-(--field-h)"
+        className="flex h-7 w-full items-center gap-1.5 rounded-sm bg-(--field) px-2 t-body-sm text-(--tx) hover:bg-(--field-h)"
       >
+        {current?.icon && <span className="shrink-0 text-(--tx2)">{current.icon}</span>}
         <span className="min-w-0 flex-1 truncate text-left">{current?.label ?? '—'}</span>
         <ChevronDown size={12} className={`shrink-0 text-(--tx3) ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
         <div
           role="listbox"
-          className={`absolute z-50 max-h-64 min-w-full overflow-y-auto rounded-[6px] border border-(--line) bg-(--panel) p-1 shadow-2xl ${
+          className={`absolute z-50 max-h-64 min-w-full overflow-y-auto rounded-sm border border-(--line) bg-(--raised) p-1 ${
             dropUp ? 'bottom-full mb-1' : 'top-full mt-1'
           } ${align === 'right' ? 'right-0' : 'left-0'}`}
         >
@@ -402,13 +447,14 @@ export function Dropdown<T extends string | number>({
                 onChange(o.value)
                 setOpen(false)
               }}
-              className={`block w-full truncate rounded-[4px] px-2 py-1.5 text-left text-[11px] whitespace-nowrap ${
+              className={`flex w-full items-center gap-2 rounded-xs px-2 py-1.5 text-left t-body-sm whitespace-nowrap ${
                 o.value === value
-                  ? 'bg-(--accent-soft) text-(--accent)'
+                  ? 'bg-(--sel) text-(--tx)'
                   : 'text-(--tx2) hover:bg-(--panel3) hover:text-(--tx)'
               }`}
             >
-              {o.label}
+              {o.icon && <span className="shrink-0">{o.icon}</span>}
+              <span className="min-w-0 flex-1 truncate">{o.label}</span>
             </button>
           ))}
         </div>
@@ -431,9 +477,9 @@ export function ColorRow({
   return (
     <label
       title={label}
-      className="relative my-0.5 flex h-7 items-center gap-2 rounded-[5px] bg-(--field) px-2 hover:bg-(--field-h)"
+      className="relative my-0.5 flex h-7 items-center gap-2 rounded-sm bg-(--field) px-2 hover:bg-(--field-h)"
     >
-      <span className="relative h-4 w-4 shrink-0 overflow-hidden rounded-[3px] border border-(--line2)">
+      <span className="relative h-4 w-4 shrink-0 overflow-hidden rounded-xs border border-(--line2)">
         <input
           type="color"
           value={value}
@@ -442,9 +488,52 @@ export function ColorRow({
           className="absolute -inset-1 cursor-pointer"
         />
       </span>
-      <span className="text-[11px] text-(--tx) uppercase tabular-nums">{value.replace('#', '')}</span>
-      <span className="ml-auto truncate text-[10px] text-(--tx3)">{label}</span>
+      <span className="t-mono text-(--tx) uppercase tabular-nums">{value.replace('#', '')}</span>
+      <span className="ml-auto truncate t-caption text-(--tx3)">{label}</span>
     </label>
+  )
+}
+
+/**
+ * A labelled fold for controls that most shots never touch.
+ *
+ * The panel's default is to show everything, which is right when every row is
+ * something you reach for. It stops being right when a rarely-used group sits
+ * between two common ones and pushes the common one off-screen, so this exists
+ * for that case only.
+ */
+export function Disclosure({
+  label,
+  icon,
+  open,
+  onToggle,
+  children,
+}: {
+  label: string
+  icon?: ReactNode
+  open: boolean
+  onToggle: (v: boolean) => void
+  children: ReactNode
+}) {
+  return (
+    <div className="mb-1">
+      {/* the header is a SubHeading that grew a caret, so a foldable group and
+          a plain one still read as the same rank in the panel */}
+      <button
+        onClick={() => onToggle(!open)}
+        aria-expanded={open}
+        className="mb-1.5 flex h-6 w-full items-center gap-1.5 t-caption text-(--tx2) hover:text-(--tx)"
+      >
+        <ChevronRight
+          size={11}
+          strokeWidth={2.2}
+          className={`shrink-0 text-(--tx3) transition-transform ${open ? 'rotate-90' : ''}`}
+        />
+        {icon}
+        {label}
+      </button>
+      {open && children}
+    </div>
   )
 }
 
@@ -466,9 +555,9 @@ export function MiniButton({
       onClick={onClick}
       title={title}
       aria-pressed={active}
-      className={`inline-flex h-7 items-center justify-center gap-1.5 truncate rounded-[5px] px-2 text-[11px] transition-colors ${
+      className={`inline-flex h-7 items-center justify-center gap-1.5 truncate rounded-sm px-2 t-body-sm transition-colors ${
         active
-          ? 'bg-(--accent-soft) text-(--accent)'
+          ? 'bg-(--sel) text-(--tx)'
           : 'bg-(--field) text-(--tx2) hover:bg-(--field-h) hover:text-(--tx)'
       }`}
     >

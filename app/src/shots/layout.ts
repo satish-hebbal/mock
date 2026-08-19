@@ -1,4 +1,5 @@
-import { getShotsDevice } from './devices'
+import { bezelFor } from './devices'
+import type { Bezel } from './bezels'
 import type { ShotsFrame, ShotsImage } from './types'
 
 /** Window-chrome bar height as a fraction of card width, per frame style. */
@@ -9,13 +10,13 @@ export function barFracFor(frame: ShotsFrame): number {
 }
 
 export interface CardLayout {
-  /** outer (device) card size on the canvas, in export pixels */
+  /** outer card size on the canvas, in export pixels — the whole device frame */
   cardW: number
   cardH: number
   /** card center on the canvas */
   cx: number
   cy: number
-  /** screen rect within the card canvas (equal to the card when device='none') */
+  /** screen rect within the card (equal to the card when there's no frame) */
   screenX: number
   screenY: number
   screenW: number
@@ -24,11 +25,11 @@ export interface CardLayout {
   barH: number
   /** screen corner radius in px */
   screenRadiusPx: number
-  /** outer device corner radius in px */
+  /** outer card corner radius in px — 0 with a frame, whose PNG shapes itself */
   outerRadiusPx: number
-  /** device bezel thickness in px (0 when device='none') */
-  bezelPx: number
   borderPx: number
+  /** the frame asset to paint over the screen, or null for a bare screenshot */
+  bezel: Bezel | null
 }
 
 /**
@@ -36,8 +37,9 @@ export interface CardLayout {
  * a shot looks identical in both. All inputs are in export pixels; the preview
  * simply multiplies the result by its display scale.
  *
- * When a device is selected the screenshot is wrapped in a uniform bezel; the
- * *outer* device box is what gets fitted into the padded content area.
+ * With a device frame the *PNG* is what gets fitted into the padded content
+ * area, and the screen rect is its cutout scaled by the same factor — so the
+ * screenshot always lands exactly in the hole, at any size.
  */
 export function computeLayout(
   img: ShotsImage,
@@ -45,60 +47,86 @@ export function computeLayout(
   mediaH: number,
   W: number,
   H: number,
+  /**
+   * Camera zoom. Applied to the card size *and* to its offset from centre —
+   * scaling size alone grows each screen about its own middle, which closes the
+   * gaps instead of magnifying the arrangement.
+   */
+  zoom = 1,
 ): CardLayout {
-  // device bezels are flat placeholders — never combine them with 3D tilt
-  const dev = getShotsDevice(img.style3d ? 'none' : img.device)
+  const scale = img.scale * zoom
+  /*
+   * A device frame is a flat photograph of a real phone, lit from one angle. Tilt
+   * it in pseudo-3D and the lighting no longer agrees with the pose, so it reads
+   * as a picture of a phone rather than a phone. 3D therefore drops the frame and
+   * shows the bare screen — both here and, because the exporter reads the same
+   * layout, in the file you get out.
+   */
+  const bezel = img.style3d ? null : bezelFor(img.device)
   const minDim = Math.min(W, H)
   const pad = img.padding * minDim
   const boxW = Math.max(1, W - 2 * pad)
   const boxH = Math.max(1, H - 2 * pad)
-
-  const imgA = mediaW / Math.max(1, mediaH)
-  // A selected device dictates the screen shape — you're mocking up an iPhone,
-  // not an iPhone-shaped-like-your-screenshot. With no device the screenshot's
-  // own aspect wins, so a bare shot is never cropped.
-  const screenA = dev.screen ? dev.screen.w / dev.screen.h : imgA
   const barFrac = barFracFor(img.frame)
-  // screen aspect once the chrome bar is added on top: screenH = screenW/screenA + barFrac*screenW
-  const cardA = screenA / (1 + barFrac * screenA)
 
-  // Outer device box expressed in units of the screen width (s).
-  const outerWs = 1 + 2 * dev.bezel
-  const outerHs = 1 / cardA + 2 * dev.bezel
-  const outerA = outerWs / outerHs
+  if (bezel) {
+    // Fit the whole frame, then scale its measured geometry by the same factor.
+    const outerA = bezel.frame.w / bezel.frame.h
+    let cardW = boxW
+    let cardH = cardW / outerA
+    if (cardH > boxH) {
+      cardH = boxH
+      cardW = cardH * outerA
+    }
+    cardW *= scale
+    cardH *= scale
 
+    const k = cardW / bezel.frame.w // PNG px -> canvas px
+    const screenW = bezel.screen.w * k
+    return {
+      cardW,
+      cardH,
+      cx: W / 2 + img.offsetX * boxW * zoom,
+      cy: H / 2 + img.offsetY * boxH * zoom,
+      screenX: bezel.screen.x * k,
+      screenY: bezel.screen.y * k,
+      screenW,
+      screenH: bezel.screen.h * k,
+      barH: barFrac * screenW,
+      screenRadiusPx: bezel.radius * k,
+      outerRadiusPx: 0,
+      borderPx: img.border.width * (screenW / 1000),
+      bezel,
+    }
+  }
+
+  // Bare screenshot: the card *is* the screen and keeps the media's own aspect,
+  // so nothing is ever cropped when no device dictates a shape.
+  const imgA = mediaW / Math.max(1, mediaH)
+  const cardA = imgA / (1 + barFrac * imgA)
   let cardW = boxW
-  let cardH = cardW / outerA
+  let cardH = cardW / cardA
   if (cardH > boxH) {
     cardH = boxH
-    cardW = cardH * outerA
+    cardW = cardH * cardA
   }
-  cardW *= img.scale
-  cardH *= img.scale
+  cardW *= scale
+  cardH *= scale
 
-  const s = cardW / outerWs // screen width in px
-  const screenW = s
-  const screenH = s / cardA
-  const bezelPx = dev.bezel * s
-
-  const cx = W / 2 + img.offsetX * boxW
-  const cy = H / 2 + img.offsetY * boxH
-
-  const bare = img.style3d || img.device === 'none'
   return {
     cardW,
     cardH,
-    cx,
-    cy,
-    screenX: bezelPx,
-    screenY: bezelPx,
-    screenW,
-    screenH,
-    barH: barFrac * screenW,
-    screenRadiusPx: (bare ? img.radius : dev.screenRadius) * screenW,
-    outerRadiusPx: bare ? img.radius * screenW : dev.outerRadius * cardW,
-    bezelPx,
-    borderPx: img.border.width * (screenW / 1000),
+    cx: W / 2 + img.offsetX * boxW * zoom,
+    cy: H / 2 + img.offsetY * boxH * zoom,
+    screenX: 0,
+    screenY: 0,
+    screenW: cardW,
+    screenH: cardH,
+    barH: barFrac * cardW,
+    screenRadiusPx: img.radius * cardW,
+    outerRadiusPx: img.radius * cardW,
+    borderPx: img.border.width * (cardW / 1000),
+    bezel: null,
   }
 }
 

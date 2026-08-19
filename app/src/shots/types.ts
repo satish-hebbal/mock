@@ -86,6 +86,21 @@ export interface ShotsDoc {
   background: ShotsBackground
   /** stacked screens, painted back-to-front; up to MAX_SHOTS */
   images: ShotsImage[]
+  /**
+   * Screens the count control has set aside, newest first out of the shot.
+   * Lowering the count parks them here rather than deleting them, so their
+   * media — and their device, shadow and finish — come back untouched when the
+   * count goes up again.
+   */
+  parked?: ShotsImage[]
+  /** id of the active layout preset, so the picker can mark it */
+  layout?: string
+  /**
+   * Camera zoom. Magnifies the whole composition about the frame centre —
+   * every screen's size *and* its distance from centre, plus the backdrop — so
+   * pushing in crops rather than rearranging. Part of the shot, so it exports.
+   */
+  zoom?: number
   /** id of the screen currently being edited, or null when empty */
   selectedId: string | null
   assets: AssetMeta[]
@@ -142,6 +157,9 @@ export function defaultShotsDoc(): ShotsDoc {
       noise: 0,
     },
     images: [],
+    parked: [],
+    layout: 'row',
+    zoom: 1,
     selectedId: null,
     assets: [],
   }

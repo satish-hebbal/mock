@@ -4,9 +4,14 @@ import { targetLabel } from '../lib/evaluator'
 import { EASING_NAMES } from '../lib/easing'
 import { ANIMATION_PRESETS } from '../lib/presets'
 import { Dropdown, MiniButton } from './controls'
+import { KF_MARK } from '../lib/marks'
+import { EasingGlyph } from './EasingGlyph'
+import { ui } from '../lib/ui'
 import {
   ChevronDown,
-  ChevronUp,
+  Infinity as InfinityIcon,
+  PanelBottomClose,
+  PanelBottomOpen,
   Pause,
   Play,
   Plus,
@@ -14,6 +19,7 @@ import {
   SkipBack,
   SkipForward,
   Trash2,
+  Wand2,
 } from 'lucide-react'
 import type { EasingName } from '../types'
 
@@ -47,7 +53,10 @@ export function Timeline() {
   const selectedKfIds = useStudio((s) => s.selectedKeyframeIds)
   const st = useStudio.getState
 
-  const [collapsed, setCollapsed] = useState(false)
+  // collapsed by default and remembered in the store, so the top bar and the `\`
+  // shortcut can drive the same state
+  const collapsed = !useStudio((s) => s.timelineOpen)
+  const setCollapsed = (v: boolean) => st().setTimelineOpen(!v)
   const [presetsOpen, setPresetsOpen] = useState(false)
   const [height, setHeight] = useState(() => {
     const saved = Number(localStorage.getItem(HEIGHT_KEY))
@@ -92,7 +101,8 @@ export function Timeline() {
     const el = e.currentTarget as HTMLElement
     el.setPointerCapture(e.pointerId)
     const onMove = (ev: PointerEvent) => {
-      setCollapsed(false)
+      // dragging the grip is also a way to open a collapsed timeline
+      if (!useStudio.getState().timelineOpen) setCollapsed(false)
       setHeight(Math.min(max, Math.max(MIN_H, startH - (ev.clientY - startY))))
     }
     const onUp = () => {
@@ -256,7 +266,7 @@ export function Timeline() {
 
   return (
     <footer
-      className="relative flex shrink-0 flex-col border-t border-(--line) bg-(--panel)"
+      className="relative flex shrink-0 flex-col rounded-lg border border-(--line) bg-(--raised)"
       style={{ height: collapsed ? TRANSPORT_H : height }}
     >
       {/* resize grip — sits on the top edge, canvas above gives up the space */}
@@ -266,12 +276,12 @@ export function Timeline() {
         title="Drag to resize the timeline"
         className="group absolute -top-1 right-0 left-0 z-20 flex h-2 cursor-ns-resize items-center justify-center"
       >
-        <span className="h-0.5 w-10 rounded-full bg-transparent transition-colors group-hover:bg-(--accent)" />
+        <span className="h-0.5 w-10 rounded-full bg-transparent transition-colors group-hover:bg-(--tx3)" />
       </div>
 
       {/* transport bar */}
       <div className="flex h-11 shrink-0 items-center gap-2 px-3">
-        <span className="rounded bg-(--panel2) px-2 py-1 text-[11px] text-(--tx) tabular-nums">
+        <span className="rounded-xs bg-(--panel2) px-2 py-1 t-body-sm text-(--tx) tabular-nums">
           {fmtTime(timeMs)} / {fmtTime(duration)}
         </span>
 
@@ -281,7 +291,7 @@ export function Timeline() {
           </MiniButton>
           <button
             onClick={() => st().setPlaying(!playing)}
-            className="flex h-7 items-center rounded-[5px] bg-(--accent-fill) px-3 text-(--accent-tx) hover:opacity-90"
+            className="flex h-8 items-center rounded-md bg-(--accent-fill) px-3.5 t-button text-(--accent-tx) hover:opacity-90"
             title="Play / pause (Space)"
           >
             {playing ? <Pause size={13} fill="currentColor" /> : <Play size={13} fill="currentColor" />}
@@ -294,7 +304,7 @@ export function Timeline() {
           </MiniButton>
         </div>
 
-        <label className="ml-2 flex items-center gap-1 text-[10px] text-(--tx3)">
+        <label className="ml-2 flex items-center gap-1 t-caption text-(--tx3)">
           DUR
           <input
             type="number"
@@ -303,11 +313,15 @@ export function Timeline() {
             step={0.5}
             value={duration / 1000}
             onChange={(e) => st().setDuration(Number(e.target.value) * 1000)}
-            className="w-13 rounded border border-(--line) bg-transparent px-1 py-0.5 text-right text-[11px] text-(--tx) tabular-nums"
+            onKeyDown={(e) => {
+              // hand focus back, or the isTyping guard swallows every shortcut
+              if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur()
+            }}
+            className="w-13 rounded-xs border border-(--line) bg-transparent px-1 py-0.5 text-right t-body-sm text-(--tx) tabular-nums"
           />
           s
         </label>
-        <label className="flex items-center gap-1 text-[10px] text-(--tx3)">
+        <label className="flex items-center gap-1 t-caption text-(--tx3)">
           FPS
           <Dropdown
             className="w-16"
@@ -318,32 +332,35 @@ export function Timeline() {
         </label>
 
         {selectedKfIds.length > 0 && (
-          <span className="rounded bg-(--accent-soft) px-2 py-1 text-[10px] text-(--accent)">
+          <span className="rounded-xs bg-(--sel) px-2 py-1 t-caption text-(--tx)">
             {selectedKfIds.length} selected
           </span>
         )}
 
-        <div className="relative ml-auto flex items-center gap-1">
-          <MiniButton onClick={() => setPresetsOpen(!presetsOpen)} active={presetsOpen}>
-            Presets
-            <ChevronDown size={12} className={`transition-transform ${presetsOpen ? 'rotate-180' : ''}`} />
-          </MiniButton>
-          {presetsOpen && (
-            <div className="absolute right-0 bottom-9 z-30 flex w-44 flex-col gap-1 rounded-lg border border-(--line) bg-(--panel) p-2 shadow-xl">
-              {ANIMATION_PRESETS.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => {
-                    st().applyAnimationPreset(p.id)
-                    setPresetsOpen(false)
-                  }}
-                  className="rounded px-2 py-1.5 text-left text-[11px] text-(--tx2) hover:bg-(--panel3) hover:text-(--tx)"
-                >
-                  {p.name}
-                </button>
-              ))}
-            </div>
-          )}
+        <div className="ml-auto flex items-center gap-1">
+          <div className="relative">
+            <MiniButton onClick={() => setPresetsOpen(!presetsOpen)} active={presetsOpen}>
+              <Wand2 size={12} />
+              Presets
+              <ChevronDown size={12} className={`transition-transform ${presetsOpen ? 'rotate-180' : ''}`} />
+            </MiniButton>
+            {presetsOpen && (
+              <div className="absolute right-0 bottom-full z-30 mb-1.5 flex w-44 flex-col gap-1 rounded-lg border border-(--line) bg-(--raised) p-2">
+                {ANIMATION_PRESETS.map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => {
+                      st().applyAnimationPreset(p.id)
+                      setPresetsOpen(false)
+                    }}
+                    className="rounded-xs px-2 py-1.5 text-left t-body-sm text-(--tx2) hover:bg-(--panel3) hover:text-(--tx)"
+                  >
+                    {p.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           <Dropdown
             className="w-28"
@@ -354,7 +371,11 @@ export function Timeline() {
               const ids = selectedKfIds.length > 0 ? selectedKfIds : project.keyframes.map((k) => k.id)
               st().setKeyframeEasing(ids, v as EasingName)
             }}
-            options={EASING_NAMES.map((e) => ({ value: e.id, label: e.label }))}
+            options={EASING_NAMES.map((e) => ({
+              value: e.id,
+              label: e.label,
+              icon: <EasingGlyph easing={e.id} />,
+            }))}
           />
 
           <MiniButton
@@ -367,16 +388,30 @@ export function Timeline() {
             <Plus size={12} /> Add KF
           </MiniButton>
           <MiniButton title="First frame == last frame" onClick={() => st().makeLoopFriendly()}>
-            Loopify
+            <InfinityIcon size={12} /> Loopify
           </MiniButton>
-          <MiniButton title="Clear all keyframes" onClick={() => st().clearAllKeyframes()}>
+          <MiniButton
+            title="Clear all keyframes"
+            onClick={() => {
+              void ui
+                .confirm({
+                  title: 'Clear all keyframes?',
+                  body: 'Every keyframe on every track goes. Ctrl+Z brings them back.',
+                  confirmLabel: 'Clear all',
+                  danger: true,
+                })
+                .then((ok) => {
+                  if (ok) st().clearAllKeyframes()
+                })
+            }}
+          >
             <Trash2 size={12} />
           </MiniButton>
           <MiniButton
-            title={collapsed ? 'Expand timeline' : 'Collapse timeline'}
+            title={collapsed ? 'Expand the timeline (\\)' : 'Collapse the timeline (\\)'}
             onClick={() => setCollapsed(!collapsed)}
           >
-            {collapsed ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+            {collapsed ? <PanelBottomOpen size={13} /> : <PanelBottomClose size={13} />}
           </MiniButton>
         </div>
       </div>
@@ -393,22 +428,36 @@ export function Timeline() {
                 style={{ height: RULER_H }}
                 className="relative flex-1 cursor-col-resize rounded-t bg-(--panel2)"
               >
-                {Array.from({ length: secs + 1 }, (_, i) => (
-                  <span
-                    key={i}
-                    className="absolute top-0 h-full border-l border-(--line) pl-1 text-[8px] text-(--tx3)"
-                    style={{ left: pctOf(i * 1000) }}
-                  >
-                    {i}s
-                  </span>
-                ))}
+                {Array.from({ length: secs + 1 }, (_, i) => {
+                  // A tick sitting on (or nearly on) 100% has no room to its
+                  // right, so its label hangs to the left of the line instead of
+                  // starting where the ruler ends. Judged on position, not
+                  // index: at a 3.5s duration the last tick is only 86% across
+                  // and reads better numbered the normal way, after its line.
+                  const last = (i * 1000) / duration > 0.96
+                  return (
+                    <span
+                      key={i}
+                      className="absolute top-0 h-full border-l border-(--line)"
+                      style={{ left: pctOf(i * 1000) }}
+                    >
+                      <span
+                        className={`absolute top-0 t-caption whitespace-nowrap text-(--tx3) ${
+                          last ? 'right-0 pr-1' : 'left-0 pl-1'
+                        }`}
+                      >
+                        {i}s
+                      </span>
+                    </span>
+                  )
+                })}
               </div>
             </div>
 
             {/* tracks */}
             <div ref={tracksRef} className="relative flex min-h-0 flex-1 flex-col overflow-y-auto">
               {tracks.length === 0 && (
-                <p className="py-3 text-center text-[10px] text-(--tx3)">
+                <p className="py-3 text-center t-caption text-(--tx3)">
                   No keyframes yet — toggle a ◆ next to any property, or apply an animation preset.
                 </p>
               )}
@@ -419,7 +468,7 @@ export function Timeline() {
                   style={{ height: ROW_H }}
                 >
                   <button
-                    className="group flex w-36 shrink-0 items-center gap-1 truncate px-1 text-left text-[10px] text-(--tx2) hover:text-(--tx)"
+                    className="group flex w-36 shrink-0 items-center gap-1 truncate px-1 text-left t-caption text-(--tx2) hover:text-(--tx)"
                     title="Remove this track (bakes the current value)"
                     onClick={() => st().toggleTrack(track.target)}
                   >
@@ -459,7 +508,7 @@ export function Timeline() {
                           style={{ left: pctOf(k.timeMs) }}
                         >
                           <span
-                            className={`block h-[9px] w-[9px] rotate-45 rounded-[2px] transition-colors ${
+                            className={`${KF_MARK} ${
                               active
                                 ? 'bg-(--accent) ring-2 ring-(--accent-soft)'
                                 : 'bg-(--tx2) hover:bg-(--tx)'
@@ -485,7 +534,7 @@ export function Timeline() {
 
       {/* live time readout while dragging keyframes */}
       {dragTime !== null && (
-        <span className="pointer-events-none absolute top-11 left-1/2 z-30 -translate-x-1/2 rounded bg-(--panel3) px-2 py-1 text-[10px] text-(--tx) tabular-nums shadow-lg">
+        <span className="pointer-events-none absolute top-11 left-1/2 z-30 -translate-x-1/2 rounded-xs bg-(--panel3) px-2 py-1 t-caption text-(--tx) tabular-nums">
           {fmtTime(dragTime)}
         </span>
       )}

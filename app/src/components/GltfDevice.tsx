@@ -1,8 +1,9 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import * as THREE from 'three'
 import { useGLTF } from '@react-three/drei'
 import type { ThreeEvent } from '@react-three/fiber'
 import type { DeviceModel } from '../lib/registry'
+import { applyTint, buildTintPlan, disposeTintPlan, type TintPlan } from '../lib/retint'
 
 /**
  * Re-map a screen mesh's UVs to a clean 0..1 planar projection.
@@ -60,11 +61,14 @@ export function GltfDevice({
   model,
   texture,
   emptyColor,
+  tint,
   onPick,
 }: {
   model: DeviceModel
   texture: THREE.Texture | null
   emptyColor: string
+  /** body colour to retint toward, or null for the model's own finish */
+  tint: string | null
   onPick: (e: ThreeEvent<PointerEvent>) => void
 }) {
   const { scene } = useGLTF(model.url)
@@ -169,6 +173,22 @@ export function GltfDevice({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [root, model.fitHeight, model.screenMesh, model.rotationEuler])
+
+  /*
+   * Body colour. The plan is built once per loaded model (it clones the
+   * materials this instance will own), then repainting on every swatch click is
+   * just writing uniforms, with no re-clone and no shader recompile.
+   */
+  const [tintPlan, setTintPlan] = useState<TintPlan | null>(null)
+  useEffect(() => {
+    const plan = buildTintPlan(root, screenOf)
+    setTintPlan(plan)
+    return () => disposeTintPlan(plan)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [root, model.screenMesh])
+  useEffect(() => {
+    if (tintPlan) applyTint(tintPlan, tint)
+  }, [tintPlan, tint])
 
   // Swap the display mesh's material for our screenshot; leave the rest alone.
   useEffect(() => {

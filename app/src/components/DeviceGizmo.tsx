@@ -14,7 +14,18 @@ export function DeviceGizmo() {
   const mode = useStudio((s) => s.gizmo)
   const selectedId = useStudio((s) => s.selectedDeviceId)
   const devices = useStudio((s) => s.project.scene.devices)
-  const controls = useRef<never>(null)
+  const controls = useRef<THREE.Object3D>(null)
+
+  // The gizmo shares the scene the exporter renders, so it has to be findable
+  // and hideable from outside React — see `setEditorObjectsVisible`.
+  useEffect(() => {
+    const node = controls.current
+    if (!node) return
+    rt.editorOnly.add(node)
+    return () => {
+      rt.editorOnly.delete(node)
+    }
+  }, [mode, selectedId])
 
   const id = selectedId ?? devices[0]?.id
   const target = id ? rt.deviceGroups.get(id) : undefined
@@ -49,7 +60,7 @@ export function DeviceGizmo() {
 
   return (
     <TransformControls
-      ref={controls}
+      ref={controls as never}
       object={target}
       mode={mode}
       size={1.25}

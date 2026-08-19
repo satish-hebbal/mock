@@ -1,4 +1,5 @@
 import deviceModels from './deviceModels.json'
+import type { DeviceInstance } from '../types'
 
 // Device registry — source of truth for every device (PRD §9).
 export type DeviceKind =
@@ -17,6 +18,8 @@ export interface DeviceColor {
   id: string
   name: string
   value: string
+  /** the model's own finish: picked means "don't tint at all" */
+  stock?: boolean
 }
 
 /** A real 3D model backing a device, instead of the procedural slab meshes. */
@@ -60,6 +63,25 @@ const PHONE_COLORS: DeviceColor[] = [
   { id: 'gold', name: 'Desert Gold', value: '#e8d9b8' },
 ]
 
+/*
+ * Finishes offered for the .glb devices. Unlike the procedural slabs, where the
+ * swatch IS the body colour, these are targets the model gets retinted toward
+ * (see lib/retint.ts) so the value here is the finish you're aiming at rather
+ * than a literal fill. "Stock" leaves the model exactly as its author shipped
+ * it, and stays first because it's the one nobody should have to hunt for.
+ */
+const BODY_COLORS: DeviceColor[] = [
+  { id: 'stock', name: 'As modelled', value: '#3a3a3e', stock: true },
+  { id: 'graphite', name: 'Graphite', value: '#4a4a4f' },
+  { id: 'silver', name: 'Silver', value: '#d8dade' },
+  { id: 'gold', name: 'Desert Gold', value: '#d9c39a' },
+  { id: 'teal', name: 'Teal', value: '#4d8f8d' },
+  { id: 'blue', name: 'Deep Blue', value: '#3f5c85' },
+  { id: 'purple', name: 'Deep Purple', value: '#6a5a86' },
+  { id: 'orange', name: 'Cosmic Orange', value: '#d1662f' },
+  { id: 'red', name: 'Red', value: '#b23b3b' },
+]
+
 const METAL_COLORS: DeviceColor[] = [
   { id: 'silver', name: 'Silver', value: '#d7d8da' },
   { id: 'black', name: 'Space Black', value: '#3c3c40' },
@@ -91,7 +113,7 @@ const MODEL_DEVICES: DeviceSpec[] = deviceModels.models
   screenAspect: m.screenAspect,
   canRotate: m.kind !== 'laptop',
   mask: 'none', // the model geometry already has its own notch/punch-hole
-  colors: [{ id: 'stock', name: 'Stock', value: '#3a3a3e' }],
+  colors: BODY_COLORS,
   model: {
     url: `/models/optimized/${m.file}`,
     screenMesh: m.screenMesh,
@@ -342,6 +364,20 @@ const DEFAULT_DEVICE: DeviceSpec =
   PICKABLE_DEVICES.find((d) => d.id === 'iphone_17_pro_max') ?? PICKABLE_DEVICES[0] ?? DEVICES[0]
 
 export const DEFAULT_DEVICE_ID = DEFAULT_DEVICE.id
+
+/**
+ * The body colour for an instance, or null to leave the model as authored.
+ *
+ * Both render paths go through here so a custom hex behaves identically on a
+ * procedural slab and on a retinted .glb, and so an unknown variant id from an
+ * older save falls back to stock instead of rendering an off-white default.
+ */
+export function resolveDeviceColor(spec: DeviceSpec, device: DeviceInstance): string | null {
+  if (device.colorVariant === 'custom') return device.customColor ?? null
+  const found = spec.colors.find((c) => c.id === device.colorVariant)
+  if (!found) return spec.colors[0]?.stock ? null : (spec.colors[0]?.value ?? null)
+  return found.stock ? null : found.value
+}
 
 export function getDevice(id: string): DeviceSpec {
   return DEVICES.find((d) => d.id === id) ?? DEFAULT_DEVICE

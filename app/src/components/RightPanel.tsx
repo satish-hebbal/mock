@@ -70,6 +70,7 @@ function useInspectorActions() {
   const [saved, setSaved] = useState(false)
 
   const capture = () => {
+    ui.snap()
     if (shots) {
       const s = useShots.getState()
       void quickCaptureShot(s.doc, s.assets).catch((e) =>
@@ -213,11 +214,11 @@ export function InspectorHeader() {
       <div className="mt-2 grid grid-cols-2 gap-2">
         <button
           onClick={a.capture}
-          title="Capture this frame straight to a PNG, at the project's own size"
+          title="One click, straight to a PNG at the project's own size. No dialog."
           className="flex h-9 items-center justify-center gap-1.5 rounded-md bg-(--field) t-button text-(--tx2) transition-colors hover:bg-(--field-h) hover:text-(--tx)"
         >
           <Camera size={15} strokeWidth={1.9} />
-          Capture
+          Quick Snap
         </button>
         <button
           onClick={a.openExport}

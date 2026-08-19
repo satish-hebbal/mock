@@ -5,10 +5,8 @@ import {
   ChevronsLeft,
   CircleMinus,
   Copy,
-  Image as ImageIcon,
   ImagePlus,
   Link2,
-  Lightbulb,
   Laptop,
   Monitor,
   Plus,
@@ -34,6 +32,9 @@ import {
 } from '../lib/presets'
 import { MESH_PALETTES, meshGradientDataURL } from '../lib/meshGradient'
 import { STUDIO_LOOKS, SWEEP_PAPERS, focalFromFov, lookSwatch } from '../lib/studio'
+import { SegmentThumb } from './controls'
+import { ENV_MOODS, moodSwatch } from '../lib/moods'
+import { SQUIRCLE_CLIP, SquircleDefs } from '../lib/squircle'
 import {
   addLogoOverlay,
   addShapeOverlay,
@@ -274,15 +275,15 @@ function DevicesSection() {
 }
 
 /**
- * Complete photographic setups. Each card carries its recipe, so picking a look
+ * Complete photographic setups. Each card carries its recipe, so picking one
  * also shows what a photographer would have rigged to get it.
  */
-function LooksTab() {
+function StudioPresetsTab() {
   const [withCamera, setWithCamera] = useState(true)
   const st = useStudio.getState
   return (
     <>
-      <Group label="Looks">
+      <Group label="Presets">
         <div className="flex flex-col gap-1">
           {STUDIO_LOOKS.map((l) => (
             <button
@@ -292,7 +293,7 @@ function LooksTab() {
               className="flex items-center gap-2.5 rounded-md p-1.5 text-left transition-colors hover:bg-(--field)"
             >
               <span
-                className="h-9 w-12 shrink-0 rounded-sm border border-(--line)"
+                className="h-9 w-12 shrink-0 rounded-sm"
                 style={{ background: lookSwatch(l) }}
               />
               <span className="flex min-w-0 flex-col">
@@ -316,6 +317,64 @@ function LooksTab() {
         </Chip>
         <p className="mt-2 t-caption leading-snug text-(--tx3)">
           Lights, sweep, shadow and grade come as one setup.
+        </p>
+      </Group>
+    </>
+  )
+}
+
+/**
+ * The world the product sits in.
+ *
+ * This is a peer of the studio presets, not a detail inside them: a preset
+ * rigs the lamps, a mood decides what those lamps are standing in. Both are
+ * decisions you make while watching the canvas, which is why they share this
+ * panel rather than living down the inspector where the choice was easy to
+ * scroll past and never find.
+ */
+function EnvironmentTab() {
+  const env = useStudio((s) => s.project.scene.environment)
+  const setEnvironment = useStudio((s) => s.setEnvironment)
+  const current = env.mood ?? 'studio'
+  return (
+    <>
+      <Group>
+        <div className="flex flex-col gap-1">
+          {ENV_MOODS.map((m) => {
+            const active = current === m.id
+            return (
+              <button
+                key={m.id}
+                onClick={() =>
+                  setEnvironment({
+                    mood: m.id,
+                    hemiSky: m.hemi.sky,
+                    hemiGround: m.hemi.ground,
+                    hemiIntensity: m.hemi.intensity,
+                  })
+                }
+                title={m.note}
+                className={`flex items-center gap-2.5 rounded-md p-1.5 text-left transition-colors ${
+                  active ? 'bg-(--sel)' : 'hover:bg-(--field)'
+                }`}
+              >
+                <span
+                  className="h-10 w-10 shrink-0"
+                  style={{ background: moodSwatch(m), clipPath: SQUIRCLE_CLIP }}
+                />
+                <span className="flex min-w-0 flex-col">
+                  <span className="truncate t-body-sm text-(--tx)">{m.name}</span>
+                  <span className="truncate t-caption text-(--tx3)">{m.note}</span>
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </Group>
+      <Group>
+        <p className="t-caption leading-snug text-(--tx3)">
+          What the world reflects in a glossy body. Your lamps stay as you set them, so a
+          mood tints the shot rather than relighting it.
         </p>
       </Group>
     </>
@@ -500,8 +559,10 @@ function BackdropTab() {
                 style={{
                   background: `radial-gradient(120% 90% at 50% 42%, ${p.hot}, ${p.color} 72%)`,
                 }}
-                className={`h-9 rounded-sm border ${
-                  bg.sweep.color === p.color ? 'is-picked' : 'border-(--line)'
+                className={`h-9 rounded-sm ${
+                  bg.sweep.color === p.color
+                    ? 'outline-2 outline-(--tx2) outline-offset-2'
+                    : ''
                 }`}
               />
             ))}
@@ -518,8 +579,8 @@ function BackdropTab() {
                   aria-label={`Background ${c}`}
                   onClick={() => setBackground({ color: c, type: 'solid' })}
                   style={{ background: c }}
-                  className={`h-9 rounded-sm border ${
-                    bg.color === c ? 'is-picked' : 'border-(--line)'
+                  className={`h-9 rounded-sm ${
+                    bg.color === c ? 'outline-2 outline-(--tx2) outline-offset-2' : ''
                   }`}
                 />
               ))}
@@ -553,7 +614,7 @@ function BackdropTab() {
                     setBackground({ type: 'gradient', gradient: { ...bg.gradient, ...g } })
                   }
                   style={{ background: `linear-gradient(${g.angle}deg, ${g.from}, ${g.to})` }}
-                  className="h-9 rounded-sm border border-(--line)"
+                  className="h-9 rounded-sm"
                 />
               ))}
             </div>
@@ -585,7 +646,7 @@ function BackdropTab() {
                   aria-label={`Mesh palette ${i + 1}`}
                   onClick={() => setBackground({ type: 'mesh', mesh: { ...bg.mesh, colors } })}
                   style={{ backgroundImage: `url(${meshGradientDataURL(bg.mesh.seed, colors)})` }}
-                  className="h-9 rounded-sm border border-(--line) bg-cover"
+                  className="h-9 rounded-sm bg-cover"
                 />
               ))}
             </div>
@@ -619,23 +680,32 @@ function BackdropTab() {
 }
 
 /*
- * Looks and backdrop share a panel because they share an outcome: a look sets
- * the lights, the sweep, the shadow and the grade in one go, so it *is* a
- * backdrop decision. Splitting them across two rail sections meant picking a
- * look, then hunting for the section that owned the paper it had just changed.
+ * The three "what does this shot look like" decisions, in one panel: how it's
+ * lit, what it's standing in, and what's behind it. They share a home because
+ * they share an outcome, and because picking one almost always makes you want
+ * to reconsider the other two.
+ *
+ * No icons on this row. At three tabs across a 280px panel the labels are what
+ * carry the meaning, and 'Environment' plus a glyph doesn't fit the cell.
  */
 const SCENE_TABS = [
-  { id: 'looks', label: 'Looks', icon: Lightbulb },
-  { id: 'backdrop', label: 'Background', icon: ImageIcon },
+  { id: 'looks', label: 'Studio' },
+  { id: 'environment', label: 'Environment' },
+  { id: 'backdrop', label: 'Background' },
 ] as const
 
 function BackgroundSection() {
-  // Looks first: it's the one that sets everything else, including the sweep.
+  // Studio first: it's the one that sets everything else, including the sweep.
   const [tab, setTab] = useState<(typeof SCENE_TABS)[number]['id']>('looks')
   return (
     <>
       <div className="border-b border-(--line) p-2">
-        <div className="grid grid-cols-2 gap-0.5 rounded-md bg-(--field) p-0.5">
+        <div className="relative grid grid-cols-3 gap-0.5 rounded-md bg-(--field) p-0.5">
+          <SegmentThumb
+            count={SCENE_TABS.length}
+            index={SCENE_TABS.findIndex((t) => t.id === tab)}
+            radius="rounded-sm"
+          />
           {SCENE_TABS.map((t) => {
             const active = tab === t.id
             return (
@@ -643,18 +713,23 @@ function BackgroundSection() {
                 key={t.id}
                 onClick={() => setTab(t.id)}
                 aria-pressed={active}
-                className={`flex h-7 items-center justify-center gap-1.5 rounded-sm t-body-sm transition-colors ${
-                  active ? 'bg-(--sel) text-(--tx)' : 'text-(--tx2) hover:text-(--tx)'
+                className={`relative z-10 flex h-7 items-center justify-center gap-1.5 rounded-sm t-body-sm transition-colors ${
+                  active ? 'text-(--tx)' : 'text-(--tx2) hover:text-(--tx)'
                 }`}
               >
-                <t.icon size={12} strokeWidth={1.8} />
                 {t.label}
               </button>
             )
           })}
         </div>
       </div>
-      {tab === 'looks' ? <LooksTab /> : <BackdropTab />}
+      {tab === 'looks' ? (
+        <StudioPresetsTab />
+      ) : tab === 'environment' ? (
+        <EnvironmentTab />
+      ) : (
+        <BackdropTab />
+      )}
     </>
   )
 }
@@ -701,6 +776,7 @@ export function ToolPanel() {
 
   return (
     <div className="flex w-[280px] shrink-0 flex-col overflow-hidden rounded-lg border border-(--line) bg-(--raised)">
+      <SquircleDefs />
       <div className="flex h-14 shrink-0 items-center gap-2 border-b border-(--line) pr-2 pl-3">
         <Icon size={13} strokeWidth={1.8} className="text-(--tx2)" />
         <span className="flex-1 t-body-sm font-semibold text-(--tx)">{meta.label}</span>

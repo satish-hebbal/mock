@@ -39,9 +39,16 @@ export interface Toast {
 interface UIState {
   request: Request | null
   toasts: Toast[]
+  /**
+   * Bumped once per quick snap. The canvas watches this and replays its shutter
+   * sweep; a counter rather than a boolean so two snaps in a row each get their
+   * own animation instead of the second being swallowed while the first is
+   * still running.
+   */
+  snap: number
 }
 
-export const useUI = create<UIState>(() => ({ request: null, toasts: [] }))
+export const useUI = create<UIState>(() => ({ request: null, toasts: [], snap: 0 }))
 
 let toastId = 0
 
@@ -67,6 +74,10 @@ export const ui = {
   },
   error(message: string) {
     ui.toast(message, 'error')
+  },
+  /** Play the capture sweep over whatever is currently framed. */
+  snap() {
+    useUI.setState((s) => ({ snap: s.snap + 1 }))
   },
 }
 

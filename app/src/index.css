@@ -306,6 +306,32 @@ body {
     transform: translateY(0);
   }
 }
+/*
+ * The quick-snap shutter. The band starts fully off the left edge and leaves
+ * past the right, so no part of the frame is lit at rest, and the edge flash
+ * runs on the same clock so they read as one event rather than two effects.
+ */
+@keyframes snap-sweep {
+  from {
+    transform: translateX(-120%);
+  }
+  to {
+    transform: translateX(340%);
+  }
+}
+
+@keyframes snap-edge {
+  0% {
+    opacity: 0;
+  }
+  18% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
 @keyframes scrim-in {
   from {
     opacity: 0;

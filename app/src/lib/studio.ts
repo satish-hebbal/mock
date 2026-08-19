@@ -1,3 +1,4 @@
+import * as THREE from 'three'
 import type {
   CameraState,
   EffectsState,
@@ -243,3 +244,18 @@ export const SWEEP_PAPERS: { name: string; color: string; hot: string }[] = [
   { name: 'Sand', color: '#c9b79c', hot: '#f3e6d2' },
   { name: 'Ink violet', color: '#1a1230', hot: '#ff9d6c' },
 ]
+
+const KEY_WARM = new THREE.Color('#ffd2a1') // tungsten
+const KEY_COOL = new THREE.Color('#cfe0ff') // daylight strobe
+
+/**
+ * Key colour for a -1 (cool) … +1 (warm) temperature dial.
+ *
+ * Lives here rather than in the viewport because the panel needs it too: the
+ * lamp colour pickers show what warmth is currently producing, so opening them
+ * starts from the colour on screen instead of jumping to white.
+ */
+export function keyColor(t: number) {
+  const c = new THREE.Color('#ffffff')
+  return t >= 0 ? c.lerp(KEY_WARM, t) : c.lerp(KEY_COOL, -t)
+}

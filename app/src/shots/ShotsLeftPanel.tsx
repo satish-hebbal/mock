@@ -27,7 +27,7 @@ import { WALLPAPERS, gradientCss } from './wallpapers'
 import { magicBackgrounds } from './palette'
 import { MESH_PALETTES, meshGradientDataURL } from '../lib/meshGradient'
 import { SIZE_PRESETS } from '../lib/presets'
-import { ColorRow, Dropdown, SliderRow } from '../components/controls'
+import { ColorRow, Dropdown, SegmentThumb, SliderRow } from '../components/controls'
 import { useStudio } from '../store'
 import { ui } from '../lib/ui'
 import { MAX_SHOTS, selectedShotsImage } from './types'
@@ -286,18 +286,32 @@ function DevicePicker() {
                     setImage({ device: d.id })
                     setOpen(false)
                   }}
-                  className={`flex flex-col gap-1 rounded-lg p-2 text-left transition-colors ${
+                  /*
+                   * Fixed height, not content height. A tile's height otherwise
+                   * follows its label, so one device with a name long enough to
+                   * wrap pushes its whole row taller than the rest and the grid
+                   * develops a ragged step halfway down. Portrait rather than
+                   * square because the things being drawn in it are portrait.
+                   */
+                  className={`flex h-[152px] flex-col gap-1 rounded-lg p-2 text-left transition-colors ${
                     active ? 'bg-(--sel)' : 'bg-(--field) hover:bg-(--field-h)'
                   }`}
                 >
+                  {/*
+                    Name, picture, then numbers. You pick a device by recognising
+                    its shape, so the drawing belongs next to the name it belongs
+                    to. The resolution is a detail you check after you've found
+                    the right tile, which makes it the caption underneath rather
+                    than something wedged between a label and its own picture.
+                  */}
                   <span className={`truncate t-caption ${active ? 'text-(--tx)' : 'text-(--tx2)'}`}>
                     {d.label}
                   </span>
+                  <span className="flex min-h-0 flex-1 items-center justify-center">
+                    <DeviceThumb deviceId={d.id} box={72} />
+                  </span>
                   <span className="t-caption text-(--tx3) tabular-nums">
                     {d.screen ? `${d.screen.w} / ${d.screen.h}` : 'bare screen'}
-                  </span>
-                  <span className="flex h-[62px] items-end justify-center pt-1">
-                    <DeviceThumb deviceId={d.id} box={58} />
                   </span>
                 </button>
               )
@@ -1062,7 +1076,12 @@ export function ShotsLeftPanel() {
   return (
     <div className="flex w-[280px] shrink-0 flex-col overflow-hidden rounded-lg border border-(--line) bg-(--raised)">
       <div className="flex h-14 shrink-0 items-center border-b border-(--line) px-2">
-        <div className="grid w-full grid-cols-2 gap-0.5 rounded-md bg-(--field) p-0.5">
+        <div className="relative grid w-full grid-cols-2 gap-0.5 rounded-md bg-(--field) p-0.5">
+          <SegmentThumb
+            count={TABS.length}
+            index={TABS.findIndex((t) => t.id === section)}
+            radius="rounded-sm"
+          />
           {TABS.map((t) => {
             const active = section === t.id
             return (
@@ -1070,8 +1089,8 @@ export function ShotsLeftPanel() {
                 key={t.id}
                 onClick={() => useStudio.getState().toggleShotsSection(t.id)}
                 aria-pressed={active}
-                className={`flex h-7 items-center justify-center gap-1.5 rounded-sm t-body-sm font-medium transition-colors ${
-                  active ? 'bg-(--sel) text-(--tx)' : 'text-(--tx2) hover:text-(--tx)'
+                className={`relative z-10 flex h-7 items-center justify-center gap-1.5 rounded-sm t-body-sm font-medium transition-colors ${
+                  active ? 'text-(--tx)' : 'text-(--tx2) hover:text-(--tx)'
                 }`}
               >
                 <t.icon {...iconProps} />

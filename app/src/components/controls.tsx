@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useStudio } from '../store'
 import { endEditRun } from '../lib/history'
 import { KF_MARK } from '../lib/marks'
@@ -270,6 +270,44 @@ export function SliderRow({
 
 // ————— segment tabs —————
 
+/**
+ * The sliding selection pill for an equal-width segmented row.
+ *
+ * Painting the active background on the button itself makes selection *jump*:
+ * one pill vanishes and another appears, and nothing connects them. A single
+ * pill that travels tells you where the selection went, which matters most on
+ * the row you use least, where the labels haven't been memorised yet.
+ *
+ * The geometry is derived rather than measured. Both callers lay their options
+ * out as equal columns with a 2px gap, so cell width is `(track - gaps) / n` and
+ * each step is exactly one cell plus one gap. Percentages in `translateX`
+ * resolve against the element's own width, so "move one cell" is literally
+ * `100% + 2px`, and it stays correct at any container width with no
+ * ResizeObserver and no layout read.
+ */
+export function SegmentThumb({
+  count,
+  index,
+  radius = 'rounded-xs',
+}: {
+  count: number
+  index: number
+  /** match the row's own corner radius */
+  radius?: string
+}) {
+  if (index < 0) return null // nothing selected: no pill rather than a stray one
+  return (
+    <span
+      aria-hidden
+      className={`pointer-events-none absolute top-0.5 bottom-0.5 left-0.5 bg-(--sel) transition-transform duration-200 ease-out motion-reduce:transition-none ${radius}`}
+      style={{
+        width: `calc((100% - ${4 + 2 * (count - 1)}px) / ${count})`,
+        transform: `translateX(calc(${index} * (100% + 2px)))`,
+      }}
+    />
+  )
+}
+
 export function Segments<T extends string>({
   options,
   value,
@@ -282,9 +320,10 @@ export function Segments<T extends string>({
 }) {
   return (
     <div
-      className="mb-2 grid gap-0.5 rounded-sm bg-(--field) p-0.5"
+      className="relative mb-2 grid gap-0.5 rounded-sm bg-(--field) p-0.5"
       style={{ gridTemplateColumns: `repeat(${options.length}, 1fr)` }}
     >
+      <SegmentThumb count={options.length} index={options.findIndex((o) => o.id === value)} />
       {options.map((o) => (
         <button
           key={o.id}
@@ -292,10 +331,8 @@ export function Segments<T extends string>({
           aria-pressed={value === o.id}
           aria-label={o.label}
           title={o.label}
-          className={`flex h-6 items-center justify-center gap-1 truncate rounded-xs px-1.5 t-body-sm transition-colors ${
-            value === o.id
-              ? 'bg-(--sel) text-(--tx)'
-              : 'text-(--tx2) hover:text-(--tx)'
+          className={`relative z-10 flex h-6 items-center justify-center gap-1 truncate rounded-xs px-1.5 t-body-sm transition-colors ${
+            value === o.id ? 'text-(--tx)' : 'text-(--tx2) hover:text-(--tx)'
           }`}
         >
           {o.icon ?? o.label}
@@ -454,6 +491,49 @@ export function ColorRow({
       <span className="t-mono text-(--tx) uppercase tabular-nums">{value.replace('#', '')}</span>
       <span className="ml-auto truncate t-caption text-(--tx3)">{label}</span>
     </label>
+  )
+}
+
+/**
+ * A labelled fold for controls that most shots never touch.
+ *
+ * The panel's default is to show everything, which is right when every row is
+ * something you reach for. It stops being right when a rarely-used group sits
+ * between two common ones and pushes the common one off-screen, so this exists
+ * for that case only.
+ */
+export function Disclosure({
+  label,
+  icon,
+  open,
+  onToggle,
+  children,
+}: {
+  label: string
+  icon?: ReactNode
+  open: boolean
+  onToggle: (v: boolean) => void
+  children: ReactNode
+}) {
+  return (
+    <div className="mb-1">
+      {/* the header is a SubHeading that grew a caret, so a foldable group and
+          a plain one still read as the same rank in the panel */}
+      <button
+        onClick={() => onToggle(!open)}
+        aria-expanded={open}
+        className="mb-1.5 flex h-6 w-full items-center gap-1.5 t-caption text-(--tx2) hover:text-(--tx)"
+      >
+        <ChevronRight
+          size={11}
+          strokeWidth={2.2}
+          className={`shrink-0 text-(--tx3) transition-transform ${open ? 'rotate-90' : ''}`}
+        />
+        {icon}
+        {label}
+      </button>
+      {open && children}
+    </div>
   )
 }
 

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useShots } from './store'
+import { CaptureFlash } from '../components/CaptureFlash'
 import { computeLayout, perspectiveFor, type CardLayout } from './layout'
 import { getWallpaper, gradientCss } from './wallpapers'
 import { meshGradientDataURL } from '../lib/meshGradient'
@@ -277,6 +278,9 @@ export function ShotsScene({
       {doc.images.map((img) => (
         <ScreenInstance key={img.id} img={img} doc={doc} W={W} H={H} f={f} interactive={interactive} />
       ))}
+
+      {/* only the live canvas gets the shutter; the thumbnails aren't what you captured */}
+      {interactive && <CaptureFlash />}
     </div>
   )
 }

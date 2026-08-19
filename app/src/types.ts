@@ -30,6 +30,8 @@ export interface DeviceInstance {
   id: string
   modelId: string
   colorVariant: string
+  /** set when colorVariant is 'custom': a raw hex from the picker */
+  customColor?: string
   orientation: 'portrait' | 'landscape'
   transform: Transform
   screen: ScreenBinding
@@ -115,6 +117,32 @@ export interface EnvironmentState {
   reflection: number
   /** white bounce card below the product, lifting the underside */
   bounce: number
+
+  /*
+   * Everything below is optional so projects saved before these existed still
+   * load. Each reader falls back to the value that reproduces the old rig, so
+   * an old file opens looking exactly as it did.
+   */
+
+  /** procedural environment mood id (lib/moods.ts); absent means 'studio' */
+  mood?: string
+  /** how strongly the mood's dome shows up; absent means 1 */
+  moodIntensity?: number
+
+  /*
+   * Explicit lamp colours. Absent means "follow the warmth slider", which is
+   * the easier control for a photographic look, so setting one of these is an
+   * opt-out of that rather than the default way to drive the rig.
+   */
+  keyColor?: string
+  fillColor?: string
+  rimColor?: string
+  ambientColor?: string
+
+  /** sky-to-ground bounce; absent or 0 means no hemisphere lamp */
+  hemiIntensity?: number
+  hemiSky?: string
+  hemiGround?: string
 }
 
 export interface GroundState {

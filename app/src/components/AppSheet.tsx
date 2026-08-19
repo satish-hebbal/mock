@@ -124,7 +124,7 @@ export function AppSheet() {
                         </span>
                       )}
                     </span>
-                    {/* the copy brightens with the card — a dim tagline under a lit
+                    {/* the copy brightens with the card: a dim tagline under a lit
                         surface reads as disabled, which is the opposite of the point */}
                     <span
                       className={`mt-0.5 block t-caption leading-snug ${

@@ -78,7 +78,7 @@ export function toolWash(tool: Tool, strength = 1): string {
  *
  * `.is-picked` is deliberately quiet: it sits over colour swatches and
  * thumbnails you're judging, so it can't add light of its own without changing
- * what you're looking at. A tool card is the opposite case — it isn't a value
+ * what you're looking at. A tool card is the opposite case: it isn't a value
  * you picked, it's the room you're standing in, and it should read as switched
  * on. So this spends exactly what that class withholds, and spends all of it
  * from the tool's own near tint: a hot spot behind the icon, a tinted edge, and

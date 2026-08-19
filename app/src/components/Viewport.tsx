@@ -16,6 +16,9 @@ import { gradeFilter } from '../lib/grade'
 import { rgba } from '../lib/color'
 import { useStudio } from '../store'
 import { ALPHA_CHECKER } from '../lib/checker'
+import { CaptureFlash } from './CaptureFlash'
+import { getMood, type EnvMood } from '../lib/moods'
+import { keyColor } from '../lib/studio'
 import { clampCamera } from '../lib/camera'
 import { Focus } from 'lucide-react'
 import { DeviceMesh } from './DeviceMesh'
@@ -107,16 +110,6 @@ function SceneRoot({ children }: { children: React.ReactNode }) {
 
 // ————— the lighting rig (PRD §6.4 — photographic three-point setup) —————
 
-const KEY_WARM = new THREE.Color('#ffd2a1') // tungsten
-const KEY_COOL = new THREE.Color('#cfe0ff') // daylight strobe
-const NEUTRAL = new THREE.Color('#ffffff')
-
-/** Key colour for a -1 (cool) … +1 (warm) temperature dial. */
-function keyColor(t: number) {
-  const c = new THREE.Color().copy(NEUTRAL)
-  return t >= 0 ? c.lerp(KEY_WARM, t) : c.lerp(KEY_COOL, -t)
-}
-
 /** Position on a sphere around the subject, in the rig's camera-relative frame. */
 function place(azimuthDeg: number, elevationDeg: number, radius: number): [number, number, number] {
   const a = THREE.MathUtils.degToRad(azimuthDeg)
@@ -132,6 +125,54 @@ function place(azimuthDeg: number, elevationDeg: number, radius: number): [numbe
  * you orbit. The same yaw is applied to the environment map so the reflections
  * in a glossy body track the lamps that are supposedly casting them.
  */
+/**
+ * The sky, ground and sun of an environment mood, drawn into the cube map the
+ * softboxes already occupy.
+ *
+ * Three planes rather than a real gradient sphere: the map is rendered once at
+ * 128px and then only ever sampled as a blurry reflection, so a zenith plane, a
+ * ground plane and the background colour between them read as a gradient at the
+ * only resolution anyone sees. A shader dome would cost a custom material and
+ * look identical after the roughness blur.
+ *
+ * `amount` scales every source, so the Studio mood (strength 0) contributes
+ * nothing and the rig behaves exactly as it did before moods existed.
+ */
+function MoodDome({ mood, amount }: { mood: EnvMood; amount: number }) {
+  if (amount <= 0) return null
+  const [zenith, , ground] = mood.dome
+  return (
+    <>
+      <Lightformer
+        form="rect"
+        intensity={amount * 3.4}
+        color={zenith}
+        position={[0, 12, 0]}
+        rotation={[Math.PI / 2, 0, 0]}
+        scale={[26, 26, 1]}
+      />
+      <Lightformer
+        form="rect"
+        intensity={amount * 1.9}
+        color={ground}
+        position={[0, -12, 0]}
+        rotation={[-Math.PI / 2, 0, 0]}
+        scale={[26, 26, 1]}
+      />
+      {mood.sun && (
+        <Lightformer
+          form="circle"
+          intensity={mood.sun.intensity * amount}
+          color={mood.sun.color}
+          position={place(mood.sun.azimuth, mood.sun.elevation, 14)}
+          scale={[mood.sun.size, mood.sun.size, 1]}
+          target={[0, 0, 0]}
+        />
+      )}
+    </>
+  )
+}
+
 function StudioRig() {
   const env = useStudio((s) => s.project.scene.environment)
   const rigRef = useRef<THREE.Group>(null)
@@ -145,10 +186,19 @@ function StudioRig() {
     }
   }, [])
 
-  const key = keyColor(env.temperature)
+  // An explicit colour, when set, wins over the warmth slider. Warmth stays the
+  // default because one dial that moves all three lamps together is how a
+  // photographer thinks about it; per-lamp colour is the escape hatch.
+  const key = env.keyColor ? new THREE.Color(env.keyColor) : keyColor(env.temperature)
   // fill is the bounce off the opposite wall: always cooler than the key
-  const fill = keyColor(-env.temperature * 0.5)
-  const rim = keyColor(-Math.abs(env.temperature) * 0.4 - 0.15)
+  const fill = env.fillColor ? new THREE.Color(env.fillColor) : keyColor(-env.temperature * 0.5)
+  const rim = env.rimColor
+    ? new THREE.Color(env.rimColor)
+    : keyColor(-Math.abs(env.temperature) * 0.4 - 0.15)
+
+  const mood = getMood(env.mood)
+  const moodAmount = (env.moodIntensity ?? 1) * mood.strength
+  const hemi = env.hemiIntensity ?? 0
 
   const keyPos = place(env.keyAzimuth, env.keyElevation, 7)
   const fillPos = place(-env.keyAzimuth * 0.85, env.keyElevation * 0.35, 6.5)
@@ -159,7 +209,16 @@ function StudioRig() {
   return (
     <>
       <group ref={rigRef}>
-        <ambientLight intensity={env.ambient} />
+        <ambientLight intensity={env.ambient} color={env.ambientColor ?? '#ffffff'} />
+        {/* sky-to-ground bounce. Yaw doesn't reach it: a hemisphere lamp is
+            defined by up and down, which orbiting the camera never changes. */}
+        {hemi > 0 && (
+          <hemisphereLight
+            intensity={hemi}
+            color={env.hemiSky ?? mood.hemi.sky}
+            groundColor={env.hemiGround ?? mood.hemi.ground}
+          />
+        )}
         <directionalLight position={keyPos} intensity={env.keyIntensity} color={key} />
         <directionalLight position={fillPos} intensity={env.fillIntensity} color={fill} />
         <directionalLight position={rimPos} intensity={env.rimIntensity} color={rim} />
@@ -177,7 +236,8 @@ function StudioRig() {
         every frame of a slider drag.
       */}
       <Environment frames={1} resolution={128} environmentIntensity={env.reflection}>
-        <color attach="background" args={['#0a0a0c']} />
+        <color attach="background" args={[mood.dome[1]]} />
+        <MoodDome mood={mood} amount={moodAmount} />
         <Lightformer
           form="rect"
           intensity={env.keyIntensity * 1.1}
@@ -488,6 +548,7 @@ export function Viewport() {
         </div>
 
         <OverlayLayer width={rect.width} height={rect.height} />
+        <CaptureFlash />
       </div>
 
       {/*

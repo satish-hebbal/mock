@@ -1,19 +1,25 @@
+import { useState } from 'react'
 import { pickMediaFile, useStudio } from '../store'
-import { ColorRow, Dropdown, MiniButton, Section, Segments, SliderRow, SubHeading } from './controls'
+import { ColorRow, Disclosure, Dropdown, MiniButton, Section, Segments, SliderRow, SubHeading } from './controls'
 import {
   Box,
   Camera,
   CircleMinus,
+  CloudSun,
   Disc,
   FileImage,
+  Globe,
   Image,
+  Link,
   Move3d,
   Palette,
   Sparkles,
   Sun,
   Type,
+  Upload,
 } from 'lucide-react'
-import { focalFromFov } from '../lib/studio'
+import { focalFromFov, keyColor } from '../lib/studio'
+import { getMood } from '../lib/moods'
 import { OVERLAY_FONTS } from '../lib/presets'
 import { getDevice } from '../lib/registry'
 import { CAMERA_LIMITS } from '../lib/camera'
@@ -96,9 +102,17 @@ function SourceSection() {
           </>
         )}
       </button>
+      {/* the glyph carries "what kind of source", so the label doesn't need a
+          trailing ellipsis to hint that more is coming */}
       <div className="mt-1.5 flex gap-1">
-        <MiniButton onClick={() => pickMediaFile((f) => void importMedia(f))}>Upload…</MiniButton>
-        <MiniButton onClick={fromURL}>From URL…</MiniButton>
+        <MiniButton onClick={() => pickMediaFile((f) => void importMedia(f))}>
+          <Upload size={13} strokeWidth={1.9} />
+          Upload
+        </MiniButton>
+        <MiniButton onClick={fromURL}>
+          <Link size={13} strokeWidth={1.9} />
+          From URL
+        </MiniButton>
       </div>
       {device && asset && (
         <>
@@ -198,6 +212,10 @@ function SceneSection() {
   const setSweep = useStudio((s) => s.setSweep)
   const setEnvironment = useStudio((s) => s.setEnvironment)
   const setGround = useStudio((s) => s.setGround)
+  // panel-local: which fold is open is a view preference, not part of the project
+  const [lampColors, setLampColors] = useState(false)
+  const [skyBounce, setSkyBounce] = useState(false)
+  const [placement, setPlacement] = useState(false)
 
   return (
     <Section title="Scene" icon={<Image {...secIcon} />}>
@@ -285,6 +303,25 @@ function SceneSection() {
       )}
 
       <div className="mt-3 border-t border-(--line) pt-3">
+        <SubHeading icon={<Globe {...subIcon} />}>Environment</SubHeading>
+        {/*
+          The choice lives in the Scene panel; this tunes it. Same split the
+          backdrop already uses, and the pointer matters more here because the
+          mood is easy to forget you ever set.
+        */}
+        <p className="mb-1 t-caption text-(--tx3)">
+          <span className="text-(--tx2)">{getMood(env.mood).name}</span>. Pick another in the
+          Scene panel.
+        </p>
+        <SliderRow
+          label="Amount"
+          value={env.moodIntensity ?? 1}
+          min={0}
+          max={2}
+          onChange={(moodIntensity) => setEnvironment({ moodIntensity })}
+          hint="How much of the world shows up in glossy surfaces"
+        />
+
         <SubHeading icon={<Sun {...subIcon} />}>Lighting</SubHeading>
         <SliderRow label="Key" value={env.keyIntensity} min={0} max={4} onChange={(keyIntensity) => setEnvironment({ keyIntensity })} hint="Main lamp — defines the form" />
         <SliderRow label="Fill" value={env.fillIntensity} min={0} max={3} onChange={(fillIntensity) => setEnvironment({ fillIntensity })} hint="Opens the shadows the key casts" />
@@ -294,59 +331,104 @@ function SceneSection() {
           Key-to-fill {ratioNote(env.keyIntensity, env.fillIntensity)}
         </p>
 
-        <SubHeading icon={<Move3d {...subIcon} />}>Key placement</SubHeading>
-        <SliderRow
-          label="Angle"
-          value={env.keyAzimuth}
-          min={-90}
-          max={90}
-          step={1}
-          format={(v) => `${v.toFixed(0)}°`}
-          onChange={(keyAzimuth) => setEnvironment({ keyAzimuth })}
-          hint="Degrees off the lens axis — 45° is the workhorse, 15–70° the useful range"
-        />
-        <SliderRow
-          label="Height"
-          value={env.keyElevation}
-          min={0}
-          max={85}
-          step={1}
-          format={(v) => `${v.toFixed(0)}°`}
-          onChange={(keyElevation) => setEnvironment({ keyElevation })}
-          hint="Elevation above the product, angled down"
-        />
-        <SliderRow
-          label="Softness"
-          value={env.softness}
-          min={0}
-          max={1}
-          onChange={(softness) => setEnvironment({ softness })}
-          hint="Apparent source size: bare bulb → big softbox"
-        />
-        <SliderRow
-          label="Warmth"
-          value={env.temperature}
-          min={-1}
-          max={1}
-          onChange={(temperature) => setEnvironment({ temperature })}
-          hint="Cool strobe ↔ tungsten warm"
-        />
-        <SliderRow
-          label="Reflections"
-          value={env.reflection}
-          min={0}
-          max={2}
-          onChange={(reflection) => setEnvironment({ reflection })}
-          hint="How strongly the softboxes show up in glossy surfaces"
-        />
-        <SliderRow
-          label="Bounce"
-          value={env.bounce}
-          min={0}
-          max={1}
-          onChange={(bounce) => setEnvironment({ bounce })}
-          hint="White card under the product, lifting its underside"
-        />
+        {/*
+          Lamp colours are folded away by default. Warmth already moves all
+          three together in the direction that matters for a product shot, and
+          opening four pickers on top of it would make the common adjustment
+          harder to find than the rare one.
+        */}
+        <Disclosure label="Lamp colours" icon={<Palette {...subIcon} />} open={lampColors} onToggle={setLampColors}>
+          <ColorRow label="Key" value={env.keyColor ?? `#${keyColor(env.temperature).getHexString()}`} onChange={(keyColor) => setEnvironment({ keyColor })} />
+          <ColorRow label="Fill" value={env.fillColor ?? `#${keyColor(-env.temperature * 0.5).getHexString()}`} onChange={(fillColor) => setEnvironment({ fillColor })} />
+          <ColorRow label="Rim" value={env.rimColor ?? `#${keyColor(-Math.abs(env.temperature) * 0.4 - 0.15).getHexString()}`} onChange={(rimColor) => setEnvironment({ rimColor })} />
+          <ColorRow label="Ambient" value={env.ambientColor ?? '#ffffff'} onChange={(ambientColor) => setEnvironment({ ambientColor })} />
+          {(env.keyColor || env.fillColor || env.rimColor || env.ambientColor) && (
+            <MiniButton
+              onClick={() =>
+                setEnvironment({
+                  keyColor: undefined,
+                  fillColor: undefined,
+                  rimColor: undefined,
+                  ambientColor: undefined,
+                })
+              }
+            >
+              Back to warmth
+            </MiniButton>
+          )}
+        </Disclosure>
+
+        <Disclosure label="Sky bounce" icon={<CloudSun {...subIcon} />} open={skyBounce} onToggle={setSkyBounce}>
+          <SliderRow
+            label="Amount"
+            value={env.hemiIntensity ?? 0}
+            min={0}
+            max={5}
+            onChange={(hemiIntensity) => setEnvironment({ hemiIntensity })}
+            hint="Light from the sky above and the floor below, filling what the lamps miss"
+          />
+          {(env.hemiIntensity ?? 0) > 0 && (
+            <>
+              <ColorRow label="Sky" value={env.hemiSky ?? getMood(env.mood).hemi.sky} onChange={(hemiSky) => setEnvironment({ hemiSky })} />
+              <ColorRow label="Ground" value={env.hemiGround ?? getMood(env.mood).hemi.ground} onChange={(hemiGround) => setEnvironment({ hemiGround })} />
+            </>
+          )}
+        </Disclosure>
+
+        <Disclosure label="Key placement" icon={<Move3d {...subIcon} />} open={placement} onToggle={setPlacement}>
+          <SliderRow
+            label="Angle"
+            value={env.keyAzimuth}
+            min={-90}
+            max={90}
+            step={1}
+            format={(v) => `${v.toFixed(0)}°`}
+            onChange={(keyAzimuth) => setEnvironment({ keyAzimuth })}
+            hint="Degrees off the lens axis — 45° is the workhorse, 15–70° the useful range"
+          />
+          <SliderRow
+            label="Height"
+            value={env.keyElevation}
+            min={0}
+            max={85}
+            step={1}
+            format={(v) => `${v.toFixed(0)}°`}
+            onChange={(keyElevation) => setEnvironment({ keyElevation })}
+            hint="Elevation above the product, angled down"
+          />
+          <SliderRow
+            label="Softness"
+            value={env.softness}
+            min={0}
+            max={1}
+            onChange={(softness) => setEnvironment({ softness })}
+            hint="Apparent source size: bare bulb → big softbox"
+          />
+          <SliderRow
+            label="Warmth"
+            value={env.temperature}
+            min={-1}
+            max={1}
+            onChange={(temperature) => setEnvironment({ temperature })}
+            hint="Cool strobe ↔ tungsten warm"
+          />
+          <SliderRow
+            label="Reflections"
+            value={env.reflection}
+            min={0}
+            max={2}
+            onChange={(reflection) => setEnvironment({ reflection })}
+            hint="How strongly the softboxes show up in glossy surfaces"
+          />
+          <SliderRow
+            label="Bounce"
+            value={env.bounce}
+            min={0}
+            max={1}
+            onChange={(bounce) => setEnvironment({ bounce })}
+            hint="White card under the product, lifting its underside"
+          />
+        </Disclosure>
       </div>
 
       <div className="mt-3 border-t border-(--line) pt-3">
@@ -438,7 +520,7 @@ function DevicesSection() {
             </p>
           )}
           {spec.colors.length > 1 && (
-            <div className="mb-2 flex gap-1.5">
+            <div className="mb-2 flex flex-wrap items-center gap-1.5">
               {spec.colors.map((c) => (
                 <button
                   key={c.id}
@@ -447,9 +529,47 @@ function DevicesSection() {
                   className={`h-6 w-6 rounded-full border-2 transition-transform hover:scale-110 ${
                     selected.colorVariant === c.id ? 'is-picked' : 'border-(--line)'
                   }`}
-                  style={{ background: c.value }}
+                  /* the stock swatch is split, so "leave it alone" doesn't
+                     masquerade as just another colour you could have picked */
+                  style={{
+                    background: c.stock
+                      ? `linear-gradient(135deg, ${c.value} 0 50%, var(--panel3) 50% 100%)`
+                      : c.value,
+                  }}
                 />
               ))}
+
+              {/*
+                Native <input type="color">: it opens the OS picker, which has
+                eyedropper and hex entry already, and no in-app wheel would beat
+                that for the one job of matching a colour you saw elsewhere. The
+                input itself is unstyleable across browsers, so it sits at zero
+                opacity over a swatch that shows the current pick.
+              */}
+              <label
+                title="Custom colour"
+                className={`relative h-6 w-6 cursor-pointer overflow-hidden rounded-full border-2 transition-transform hover:scale-110 ${
+                  selected.colorVariant === 'custom' ? 'is-picked' : 'border-(--line)'
+                }`}
+                style={{
+                  background:
+                    selected.colorVariant === 'custom' && selected.customColor
+                      ? selected.customColor
+                      : 'conic-gradient(#f2555a, #e8d9b8, #27a644, #5e6ad2, #cd5ca8, #f2555a)',
+                }}
+              >
+                <input
+                  type="color"
+                  value={selected.customColor ?? '#8899aa'}
+                  onChange={(e) =>
+                    st().updateDevice(selected.id, {
+                      colorVariant: 'custom',
+                      customColor: e.target.value,
+                    })
+                  }
+                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                />
+              </label>
             </div>
           )}
           {spec.canRotate && (

@@ -1,7 +1,7 @@
 import { Suspense, useEffect, useMemo, useState } from 'react'
 import * as THREE from 'three'
 import type { ThreeEvent } from '@react-three/fiber'
-import { getDevice, screenAspectFor, type DeviceSpec } from '../lib/registry'
+import { getDevice, resolveDeviceColor, screenAspectFor, type DeviceSpec } from '../lib/registry'
 import { rt } from '../lib/runtime'
 import { useStudio } from '../store'
 import { GltfDevice } from './GltfDevice'
@@ -313,7 +313,10 @@ export function DeviceMesh({ device }: { device: DeviceInstance }) {
   const texture = useScreenTexture(device, aspect)
   const selectDevice = useStudio((s) => s.selectDevice)
 
-  const colorValue = spec.colors.find((c) => c.id === device.colorVariant)?.value ?? '#3a3a3e'
+  // null means "as modelled": the .glb keeps its own finish, and a procedural
+  // slab falls back to the neutral body it was drawn with.
+  const tint = resolveDeviceColor(spec, device)
+  const colorValue = tint ?? '#3a3a3e'
 
   // register the group for the deterministic evaluator
   const [group, setGroup] = useState<THREE.Group | null>(null)
@@ -399,6 +402,7 @@ export function DeviceMesh({ device }: { device: DeviceInstance }) {
             model={spec.model}
             texture={texture}
             emptyColor={EMPTY_SCREEN_COLOR}
+            tint={tint}
             onPick={onPick}
           />
         </Suspense>

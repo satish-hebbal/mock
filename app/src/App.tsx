@@ -17,6 +17,8 @@ import {
   TemplatesDialog,
 } from './components/dialogs'
 import { UILayer } from './components/ui'
+import { SmallScreen } from './components/SmallScreen'
+import { useIsDesktop } from './lib/breakpoint'
 
 /** rAF playback driver (PRD §5.4). */
 function usePlayback() {
@@ -315,7 +317,7 @@ function StudioLayout() {
   )
 }
 
-export default function App() {
+function Editor() {
   const theme = useStudio((s) => s.theme)
   const mode = useStudio((s) => s.mode)
   const dialog = useStudio((s) => s.dialog)
@@ -390,4 +392,14 @@ export default function App() {
       <UILayer />
     </div>
   )
+}
+
+/*
+ * The gate sits above the editor rather than inside it, so on a phone none of
+ * Editor's hooks ever run: no hydrate, no rAF playback loop, no window
+ * listeners, no WebGL context. Crossing the breakpoint (rotating a tablet,
+ * dragging a window wider) mounts the real thing.
+ */
+export default function App() {
+  return useIsDesktop() ? <Editor /> : <SmallScreen />
 }

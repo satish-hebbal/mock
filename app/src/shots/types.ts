@@ -1,9 +1,10 @@
 import type { AssetMeta } from '../types'
 import type { ShotsDeviceId } from './devices'
+import { defaultMesh, type MeshSpec } from '../lib/meshGradient'
 
 // ————— Flat 2D "Shots" editor document (shots.so-class) —————
 
-export type ShotsBgType = 'solid' | 'gradient' | 'mesh' | 'image' | 'wallpaper' | 'transparent'
+export type ShotsBgType = 'solid' | 'gradient' | 'mesh' | 'image' | 'wallpaper' | 'photo' | 'transparent'
 
 export type ShotsFrame =
   | 'none'
@@ -11,6 +12,56 @@ export type ShotsFrame =
   | 'macos-dark'
   | 'browser-light'
   | 'browser-dark'
+
+/**
+ * Depth of field over the finished picture.
+ *
+ * 'lens' defocuses everything outside a focal circle, background and devices
+ * alike, the way a camera does. 'stage' keeps the same focus geometry but drops
+ * the surroundings into shadow instead. 'both' runs them together, defocusing
+ * first and then shading what is left.
+ */
+export type PortraitMode = 'none' | 'lens' | 'stage' | 'both'
+
+export interface ShotsPortrait {
+  mode: PortraitMode
+  /** focal centre in normalized canvas coordinates (0..1) */
+  x: number
+  y: number
+  /** radius of the fully sharp core, as a fraction of min(canvas) */
+  radius: number
+  /** width of the falloff ring outside the core, same units */
+  feather: number
+  /**
+   * 0..1 peak defocus. Separate from `shade` so that switching between modes,
+   * or running both at once, never makes one of them overwrite the other's
+   * setting.
+   */
+  strength: number
+  /** 0..1 darkness outside the focus */
+  shade: number
+}
+
+/**
+ * A shadow scene: light shaped by something off-camera, falling across the shot.
+ *
+ * 'under' lays it on the background only, so the screens sit on top of it and
+ * stay perfectly readable. 'over' lets it fall across the devices too, which is
+ * what sells the illusion and what costs legibility.
+ */
+export interface ShotsGobo {
+  /** id into SHADOW_SCENES, or 'none' */
+  id: string
+  opacity: number
+  placement: 'under' | 'over'
+  /** zoom on the pattern, 0.5..3 */
+  scale: number
+  /** degrees */
+  rotate: number
+  /** slide across the frame, as a fraction of its width and height (-0.5..0.5) */
+  x: number
+  y: number
+}
 
 export interface ShotsGradient {
   kind: 'linear' | 'radial'
@@ -23,10 +74,12 @@ export interface ShotsBackground {
   type: ShotsBgType
   color: string
   gradient: ShotsGradient
-  mesh: { seed: number; colors: string[] }
+  mesh: MeshSpec
   imageAssetId: string | null
   /** id into WALLPAPERS */
   wallpaperId: string
+  /** id into PRESET_PHOTOS */
+  photoId: string
   /** background blur px @1280w reference */
   blur: number
   brightness: number
@@ -60,6 +113,17 @@ export interface ShotsImage {
   offsetY: number
   /** in-plane rotation, degrees */
   rotate: number
+  /**
+   * Paint order, low to high, independent of this screen's place in `images`.
+   *
+   * Array order is *authoring* order: it drives the media strip, the 1-5
+   * shortcuts and which slot the next upload lands in. An arrangement that
+   * wants a different screen in front (Fan puts the middle one there) must
+   * not reshuffle that to get it, so the depth lives here instead. Optional,
+   * and absent means 0, so documents saved before it existed still stack the
+   * way they always did.
+   */
+  z?: number
   /** device bezel wrapped around the screenshot ('none' = bare screen) */
   device: ShotsDeviceId
   /** when false the screen is flat and pseudo-3D tilt (rotateX/Y) is ignored */
@@ -74,6 +138,14 @@ export interface ShotsImage {
   shadow: ShotsShadow
   border: { width: number; color: string }
   frame: ShotsFrame
+  /**
+   * Card style: the mount the screenshot sits in, id into CARD_STYLES.
+   *
+   * Only meaningful on a bare screenshot or a window. A device frame is a
+   * photograph of a real object, so wrapping a border or a paper stack round
+   * its silhouette reads as a mistake, and the renderers skip it there.
+   */
+  cardStyle?: string
   glow: { strength: number; color: string }
   /** 0..1 mirror reflection height under the card */
   reflection: number
@@ -101,6 +173,13 @@ export interface ShotsDoc {
    * pushing in crops rather than rearranging. Part of the shot, so it exports.
    */
   zoom?: number
+  /**
+   * Depth of field, applied to the composed frame after every screen is drawn.
+   * Optional so documents saved before it existed still load.
+   */
+  portrait?: ShotsPortrait
+  /** shadow scene cast over the shot; optional so older documents still load */
+  gobo?: ShotsGobo
   /** id of the screen currently being edited, or null when empty */
   selectedId: string | null
   assets: AssetMeta[]
@@ -114,6 +193,26 @@ const uid = () => crypto.randomUUID()
 /** The screen currently targeted by the inspector, or null. */
 export function selectedShotsImage(doc: ShotsDoc): ShotsImage | null {
   return doc.images.find((i) => i.id === doc.selectedId) ?? null
+}
+
+/**
+ * The screens in the order they should be drawn, back to front.
+ *
+ * Sorting is stable, so screens sharing a `z` (every arrangement that never
+ * sets one) keep authoring order and paint exactly as they did before. Both
+ * the preview and the exporter go through here, so the two cannot disagree
+ * about what is in front.
+ */
+export function paintOrder(images: ShotsImage[]): ShotsImage[] {
+  return [...images].sort((a, b) => (a.z ?? 0) - (b.z ?? 0))
+}
+
+export function defaultPortrait(): ShotsPortrait {
+  return { mode: 'none', x: 0.5, y: 0.5, radius: 0.22, feather: 0.18, strength: 0.5, shade: 0.6 }
+}
+
+export function defaultGobo(): ShotsGobo {
+  return { id: 'none', opacity: 0.4, placement: 'over', scale: 1, rotate: 0, x: 0, y: 0 }
 }
 
 export function defaultShotsImage(assetId: string): ShotsImage {
@@ -134,6 +233,7 @@ export function defaultShotsImage(assetId: string): ShotsImage {
     shadow: { blur: 0.05, y: 0.03, x: 0, opacity: 0.4, color: '#000000' },
     border: { width: 0, color: '#ffffff' },
     frame: 'none',
+    cardStyle: 'default',
     glow: { strength: 0, color: '#ffffff' },
     reflection: 0,
   }
@@ -148,9 +248,10 @@ export function defaultShotsDoc(): ShotsDoc {
       type: 'wallpaper',
       color: '#6d7cff',
       gradient: { kind: 'linear', angle: 135, from: '#7f7fd5', to: '#86a8e7' },
-      mesh: { seed: 7, colors: ['#a18cd1', '#fbc2eb', '#8ec5fc', '#e0c3fc'] },
+      mesh: defaultMesh(),
       imageAssetId: null,
       wallpaperId: 'sunset',
+      photoId: 'abstract-01',
       blur: 0,
       brightness: 1,
       vignette: 0,
@@ -158,6 +259,8 @@ export function defaultShotsDoc(): ShotsDoc {
     },
     images: [],
     parked: [],
+    portrait: defaultPortrait(),
+    gobo: defaultGobo(),
     layout: 'row',
     zoom: 1,
     selectedId: null,

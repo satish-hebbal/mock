@@ -103,7 +103,7 @@ async function paintBackground(
       }
       break
     case 'mesh':
-      paintMeshGradient(ctx, w, h, bg.mesh.seed, bg.mesh.colors)
+      paintMeshGradient(ctx, w, h, bg.mesh)
       break
     case 'studio':
       paintSweep(ctx, w, h, bg.sweep)

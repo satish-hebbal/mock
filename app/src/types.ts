@@ -1,3 +1,5 @@
+import type { MeshSpec } from './lib/meshGradient'
+
 export type Vec3 = [number, number, number]
 
 export type EasingName = 'linear' | 'easeIn' | 'easeOut' | 'easeInOut' | 'smooth'
@@ -83,7 +85,7 @@ export interface BackgroundState {
   type: BackgroundType
   color: string
   gradient: GradientSpec
-  mesh: { seed: number; colors: string[] }
+  mesh: MeshSpec
   sweep: SweepSpec
   imageAssetId: string | null
   /** blur px applied to image/mesh backgrounds */

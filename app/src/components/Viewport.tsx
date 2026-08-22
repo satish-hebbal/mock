@@ -11,7 +11,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import type { EffectComposer as EffectComposerImpl } from 'postprocessing'
 import { rt, applyAtTime } from '../lib/runtime'
-import { meshGradientDataURL } from '../lib/meshGradient'
+import { meshCss } from '../lib/meshGradient'
 import { gradeFilter } from '../lib/grade'
 import { rgba } from '../lib/color'
 import { useStudio } from '../store'
@@ -40,11 +40,7 @@ function cssBackground(bg: BackgroundState, imageUrl: string | null): React.CSSP
             : `linear-gradient(${bg.gradient.angle}deg, ${bg.gradient.from}, ${bg.gradient.to})`,
       }
     case 'mesh':
-      return {
-        backgroundImage: `url(${meshGradientDataURL(bg.mesh.seed, bg.mesh.colors)})`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-      }
+      return meshCss(bg.mesh)
     case 'studio': {
       // Painted in the same order as the export canvas: paper, then the pool of
       // light the key throws on it, the floor falloff, and the corner hold.

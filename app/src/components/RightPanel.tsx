@@ -9,7 +9,9 @@ import {
   LayoutTemplate,
   MoreHorizontal,
   PanelRightOpen,
+  MessageSquare,
   Redo2,
+  RotateCcw,
   Save as SaveIcon,
   Undo2,
   type LucideIcon,
@@ -24,6 +26,7 @@ import { persistShots, useShots } from '../shots/store'
 import { quickCapture } from '../lib/export'
 import { ui } from '../lib/ui'
 import { quickCaptureShot } from '../shots/export'
+import { FeedbackDialog } from './FeedbackDialog'
 
 function IconBtn({
   icon: Icon,
@@ -31,21 +34,40 @@ function IconBtn({
   title,
   disabled,
   active,
+  pill,
 }: {
   icon: LucideIcon
   onClick?: () => void
   title: string
   disabled?: boolean
   active?: boolean
+  /**
+   * Sit on a filled round pill rather than being bare until hovered.
+   *
+   * Only for the header's action row, where these stand beside two labelled
+   * pills. A bare icon between filled ones reads as a gap rather than as a
+   * button. Everywhere else the quiet version is right: the collapsed rail and
+   * the tool strips are dense enough that filling every icon would turn them
+   * into a wall of plates.
+   */
+  pill?: boolean
 }) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className={`flex h-7 w-7 items-center justify-center rounded-md transition-colors ${
-        active ? 'bg-(--sel) text-(--tx)' : 'text-(--tx2) hover:bg-(--panel3) hover:text-(--tx)'
-      } disabled:cursor-default disabled:opacity-35 disabled:hover:bg-transparent`}
+      className={`flex items-center justify-center transition-colors ${
+        pill ? 'h-8 w-8 rounded-full' : 'h-7 w-7 rounded-md'
+      } ${
+        active
+          ? 'bg-(--sel) text-(--tx)'
+          : pill
+            ? 'bg-(--field) text-(--tx2) hover:bg-(--field-h) hover:text-(--tx)'
+            : 'text-(--tx2) hover:bg-(--panel3) hover:text-(--tx)'
+      } disabled:cursor-default disabled:opacity-35 ${
+        pill ? 'disabled:hover:bg-(--field)' : 'disabled:hover:bg-transparent'
+      }`}
     >
       <Icon size={15} strokeWidth={1.9} />
     </button>
@@ -93,6 +115,20 @@ function useInspectorActions() {
     setName: (v: string) =>
       shots ? useShots.getState().setName(v) : useStudio.getState().setProjectName(v),
     undo: () => (shots ? useShots.getState().undo() : useStudio.getState().undo()),
+    startOver: () => {
+      void ui
+        .confirm({
+          title: 'Start over?',
+          body: 'This clears the canvas. You can undo it straight afterwards if you change your mind.',
+          confirmLabel: 'Start over',
+          danger: true,
+        })
+        .then((ok) => {
+          if (!ok) return
+          if (shots) useShots.getState().startOver()
+          else useStudio.getState().newProject()
+        })
+    },
     redo: () => (shots ? useShots.getState().redo() : useStudio.getState().redo()),
     openExport: () =>
       shots ? useShots.getState().setDialog('export') : useStudio.getState().setDialog('export'),
@@ -102,6 +138,9 @@ function useInspectorActions() {
       else await persistProject()
       setSaved(true)
       setTimeout(() => setSaved(false), 1400)
+      // the collapsed rail still shows this on its icon, but from inside a menu
+      // that flash is invisible, so say it out loud instead
+      ui.toast('Saved')
     },
   }
 }
@@ -109,6 +148,7 @@ function useInspectorActions() {
 export function InspectorHeader() {
   const a = useInspectorActions()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [feedback, setFeedback] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -152,21 +192,31 @@ export function InspectorHeader() {
           onClick={() => useStudio.getState().setPanelOpen(false)}
         />
       </div>
+      {/*
+        History on the left, document-level actions on the right, which is the
+        split people already expect: undo and redo act on the last thing you
+        did, everything on the other side acts on the whole shot.
+      */}
       <div className="mt-2 flex items-center gap-1">
-        <IconBtn icon={Undo2} title="Undo" onClick={a.undo} disabled={!a.canUndo} />
-        <IconBtn icon={Redo2} title="Redo" onClick={a.redo} disabled={!a.canRedo} />
+        <IconBtn icon={Undo2} title="Undo" onClick={a.undo} disabled={!a.canUndo} pill />
+        <IconBtn icon={Redo2} title="Redo" onClick={a.redo} disabled={!a.canRedo} pill />
 
         <div className="flex-1" />
 
-        <IconBtn
-          icon={SaveIcon}
-          title={a.saved ? 'Saved' : 'Save'}
-          onClick={() => void a.save()}
-          active={a.saved}
-        />
+        <button
+          onClick={a.startOver}
+          title="Clear the canvas and begin again"
+          className="flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-(--field) px-3 t-body-sm text-(--tx2) transition-colors hover:bg-(--field-h) hover:text-(--tx)"
+        >
+          <RotateCcw size={14} strokeWidth={2} />
+          Start over
+        </button>
 
-        {/* every entry is studio-only, so in Shots there is nothing to open */}
-        <div className={`relative ${a.shots ? 'hidden' : ''}`} ref={menuRef}>
+        {/*
+          The overflow now carries save and feedback, so it is no longer
+          studio-only and no longer hides itself in Shots.
+        */}
+        <div className="relative" ref={menuRef}>
           <IconBtn
             icon={MoreHorizontal}
             title="More"
@@ -174,35 +224,44 @@ export function InspectorHeader() {
             active={menuOpen}
           />
           {menuOpen && (
-            <div className="absolute top-8 right-0 z-30 flex w-52 flex-col gap-0.5 rounded-lg border border-(--line) bg-(--raised) p-1.5">
-              {menuItem(LayoutTemplate, 'Templates', () =>
-                useStudio.getState().setDialog('templates'),
+            <div className="absolute top-9 right-0 z-30 flex w-52 flex-col gap-0.5 rounded-lg border border-(--line) bg-(--raised) p-1.5">
+              {menuItem(SaveIcon, 'Save', () => void a.save())}
+              {menuItem(MessageSquare, 'Send feedback…', () => setFeedback(true))}
+              {/* the project entries only mean anything in the studio */}
+              {!a.shots && (
+                <>
+                  <span className="my-1 h-px bg-(--line)" />
+                  {menuItem(LayoutTemplate, 'Templates', () =>
+                    useStudio.getState().setDialog('templates'),
+                  )}
+                  {menuItem(FilePlus, 'New project', () => {
+                    void ui
+                      .confirm({
+                        title: 'Start a new project?',
+                        body: 'Your current work stays saved locally and can be reopened from a file.',
+                        confirmLabel: 'New project',
+                      })
+                      .then((ok) => {
+                        if (ok) useStudio.getState().newProject()
+                      })
+                  })}
+                  {menuItem(FileUp, 'Import project…', () => {
+                    const input = document.createElement('input')
+                    input.type = 'file'
+                    input.accept = '.json,application/json'
+                    input.onchange = () => {
+                      const f = input.files?.[0]
+                      if (f)
+                        importProjectFile(f).catch((err) =>
+                          ui.error(`Import failed: ${(err as Error).message}`),
+                        )
+                    }
+                    input.click()
+                  })}
+                  {menuItem(FileDown, 'Export project file', () => void exportProjectFile())}
+                </>
               )}
-              {menuItem(FilePlus, 'New project', () => {
-                void ui
-                  .confirm({
-                    title: 'Start a new project?',
-                    body: 'Your current work stays saved locally and can be reopened from a file.',
-                    confirmLabel: 'New project',
-                  })
-                  .then((ok) => {
-                    if (ok) useStudio.getState().newProject()
-                  })
-              })}
-              {menuItem(FileUp, 'Import project…', () => {
-                const input = document.createElement('input')
-                input.type = 'file'
-                input.accept = '.json,application/json'
-                input.onchange = () => {
-                  const f = input.files?.[0]
-                  if (f)
-                    importProjectFile(f).catch((err) =>
-                      ui.error(`Import failed: ${(err as Error).message}`),
-                    )
-                }
-                input.click()
-              })}
-              {menuItem(FileDown, 'Export project file', () => void exportProjectFile())}
+              <span className="my-1 h-px bg-(--line)" />
               {menuItem(Keyboard, 'Keyboard shortcuts', () =>
                 useStudio.getState().setDialog('shortcuts'),
               )}
@@ -229,6 +288,7 @@ export function InspectorHeader() {
           Export
         </button>
       </div>
+      {feedback && <FeedbackDialog onClose={() => setFeedback(false)} />}
     </div>
   )
 }

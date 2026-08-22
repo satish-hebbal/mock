@@ -1,4 +1,12 @@
 import {
+  AlignHorizontalDistributeCenter,
+  AlignHorizontalJustifyCenter,
+  AlignHorizontalJustifyEnd,
+  AlignHorizontalJustifyStart,
+  AlignVerticalDistributeCenter,
+  AlignVerticalJustifyCenter,
+  AlignVerticalJustifyEnd,
+  AlignVerticalJustifyStart,
   Box,
   Camera,
   FlipHorizontal2,
@@ -10,13 +18,17 @@ import {
   MoveVertical,
   RotateCw,
   Squircle,
+  StretchVertical,
   Upload,
+  Wand2,
+  type LucideIcon,
 } from 'lucide-react'
 import { useShots } from './store'
 import { MiniButton, Section, Segments, SliderRow, SubHeading } from '../components/controls'
 import { selectedShotsImage } from './types'
 import { getShotsDevice } from './devices'
 import { ShotsPreview } from './ShotsCanvas'
+import type { AlignMode } from './align'
 
 /*
  * The Shots inspector: where the selected screen *sits*. What it is (device,
@@ -58,6 +70,101 @@ function FramePreview() {
     <div className="mb-2 overflow-hidden rounded-lg border border-(--line)">
       <ShotsPreview doc={doc} />
     </div>
+  )
+}
+
+const ALIGN_H: { mode: AlignMode; label: string; icon: LucideIcon }[] = [
+  { mode: 'left', label: 'Align left', icon: AlignHorizontalJustifyStart },
+  { mode: 'center-h', label: 'Align centre', icon: AlignHorizontalJustifyCenter },
+  { mode: 'right', label: 'Align right', icon: AlignHorizontalJustifyEnd },
+]
+const ALIGN_V: { mode: AlignMode; label: string; icon: LucideIcon }[] = [
+  { mode: 'top', label: 'Align top', icon: AlignVerticalJustifyStart },
+  { mode: 'middle-v', label: 'Align middle', icon: AlignVerticalJustifyCenter },
+  { mode: 'bottom', label: 'Align bottom', icon: AlignVerticalJustifyEnd },
+]
+
+function PosBtn({
+  icon: Icon,
+  label,
+  onClick,
+  disabled,
+}: {
+  icon: LucideIcon
+  label: string
+  onClick: () => void
+  disabled?: boolean
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={label}
+      aria-label={label}
+      className="flex h-8 flex-1 items-center justify-center rounded-md bg-(--field) text-(--tx2) transition-colors hover:bg-(--field-h) hover:text-(--tx) disabled:pointer-events-none disabled:opacity-30"
+    >
+      <Icon size={14} strokeWidth={1.8} />
+    </button>
+  )
+}
+
+/**
+ * Align and distribute across every screen currently in the shot.
+ *
+ * There's nothing to select first — a shot only ever holds up to five
+ * screens, so "the things being aligned" is unambiguous. This is the tool for
+ * the moment a layout preset gets close but a hand-nudged screen (or the
+ * padding difference between two device frames) leaves everything a few
+ * pixels off from actually lining up.
+ *
+ * Lives in the right panel rather than beside Media and Layout presets on the
+ * left: those describe *what* the shot contains, this nudges *where* it sits
+ * once it's there — the same split Frame and Placement already draw.
+ */
+function PositionSection({ n }: { n: number }) {
+  const align = useShots((s) => s.alignScreens)
+  const distribute = useShots((s) => s.distributeScreens)
+  const matchHeights = useShots((s) => s.matchHeights)
+  const canDistribute = n > 2
+  const canMatch = n > 1
+
+  return (
+    <Section title="Alignment" icon={<AlignHorizontalDistributeCenter {...secIcon} />}>
+      <div className="flex gap-1">
+        {ALIGN_H.map((a) => (
+          <PosBtn key={a.mode} icon={a.icon} label={a.label} onClick={() => align(a.mode)} />
+        ))}
+      </div>
+      <div className="mt-1 flex gap-1">
+        {ALIGN_V.map((a) => (
+          <PosBtn key={a.mode} icon={a.icon} label={a.label} onClick={() => align(a.mode)} />
+        ))}
+      </div>
+      <div className="mt-2 border-t border-(--line) pt-2">
+        <SubHeading>Distribute &amp; match</SubHeading>
+      </div>
+      <div className="flex gap-1">
+        <PosBtn
+          icon={AlignHorizontalDistributeCenter}
+          label="Distribute horizontal spacing — equalize the gaps (needs 3+ screens)"
+          onClick={() => distribute('x')}
+          disabled={!canDistribute}
+        />
+        <PosBtn
+          icon={AlignVerticalDistributeCenter}
+          label="Distribute vertical spacing — equalize the gaps (needs 3+ screens)"
+          onClick={() => distribute('y')}
+          disabled={!canDistribute}
+        />
+        <PosBtn
+          icon={StretchVertical}
+          label="Match heights — rescale every screen to the same height (needs 2+ screens)"
+          onClick={() => matchHeights()}
+          disabled={!canMatch}
+        />
+        <PosBtn icon={Wand2} label="Tidy up" onClick={() => useShots.getState().applyLayout('row')} />
+      </div>
+    </Section>
   )
 }
 
@@ -206,11 +313,12 @@ function EmptyState() {
 }
 
 export function ShotsInspector() {
-  const hasScreens = useShots((s) => s.doc.images.length > 0)
-  if (!hasScreens) return <EmptyState />
+  const n = useShots((s) => s.doc.images.length)
+  if (n === 0) return <EmptyState />
   return (
     <>
       <FrameSection />
+      {n > 1 && <PositionSection n={n} />}
       <PlacementSection />
       <TiltSection />
     </>

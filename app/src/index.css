@@ -168,6 +168,27 @@
  */
 @layer components {
   /*
+   * The working surface behind a shot.
+   *
+   * A flat panel gives the eye nothing to measure against, so a shot with a
+   * pale background appears to bleed into the app and one with a dark
+   * background looks like it is missing. A faint dot grid fixes the plane
+   * without competing: it is the same move as a cutting mat, or the canvas in
+   * any design tool.
+   *
+   * Built from `--tx3` rather than a fixed grey so it tracks the theme, and
+   * kept low enough that it reads as texture rather than as content.
+   */
+  .dot-grid {
+    background-image: radial-gradient(
+      color-mix(in srgb, var(--tx3) 26%, transparent) 1px,
+      transparent 1.4px
+    );
+    background-size: 18px 18px;
+    background-position: 9px 9px;
+  }
+
+  /*
    * "This one is chosen", said quietly.
    *
    * A hard white border shouts, and over a colour swatch or a thumbnail it also
@@ -341,10 +362,34 @@ body {
   }
 }
 
+/*
+ * The empty canvas draws the eye to its prompt: rings travelling inward and
+ * dissolving as they reach it. Scale rather than width/height so the whole
+ * thing stays on the compositor, and the ring is invisible at both ends so
+ * it appears out of nowhere and vanishes into the pill instead of popping.
+ */
+@keyframes attract-in {
+  0% {
+    transform: scale(1);
+    opacity: 0;
+  }
+  14% {
+    opacity: 0.5;
+  }
+  78% {
+    opacity: 0.24;
+  }
+  100% {
+    transform: scale(0.2);
+    opacity: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   [style*="sheet-drop"],
   [class*="sheet-drop"],
-  [class*="scrim-in"] {
+  [class*="scrim-in"],
+  [style*="attract-in"] {
     animation: none !important;
   }
 }
@@ -365,19 +410,21 @@ input[type="checkbox"] {
   accent-color: var(--primary);
 }
 
-/* thin, unobtrusive scrollbars for the dark chrome */
+/*
+ * No scrollbars anywhere.
+ *
+ * These used to be thin grey bars. In a tool that is nothing but stacked panels
+ * they were on screen permanently, framing every column in a line that carries
+ * no information: the content moving is the feedback, and the panels are
+ * obviously scrollable from their content being cut off at the edge.
+ *
+ * Scrolling itself is untouched. Wheel, trackpad, keyboard, drag and
+ * scroll-snap all behave exactly as before; only the painted bar is gone.
+ */
 * {
-  scrollbar-width: thin;
-  scrollbar-color: var(--line2) transparent;
+  scrollbar-width: none;
 }
 *::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-*::-webkit-scrollbar-thumb {
-  background: var(--line2);
-  border-radius: 8px;
-}
-*::-webkit-scrollbar-track {
-  background: transparent;
+  width: 0;
+  height: 0;
 }

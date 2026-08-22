@@ -1,6 +1,17 @@
-import { buildCardLayer, compositeCard, computeLayout, paintShotBackground, renderCard } from './render'
+import {
+  applyPortrait,
+  paintShadowScene,
+  buildCardLayer,
+  compositeCard,
+  computeLayout,
+  paintShotBackground,
+  renderCard,
+} from './render'
 import { loadBezelImage } from './bezels'
+import { getShadowScene } from './shadows'
+import { getPresetPhoto } from './presetPhotos'
 import type { AssetRuntime } from '../types'
+import { paintOrder } from './types'
 import type { ShotsDoc } from './types'
 
 async function loadImage(url: string): Promise<HTMLImageElement> {
@@ -51,9 +62,27 @@ export async function renderShotToCanvas(
     const rt = runtime[doc.background.imageAssetId]
     if (rt) bgImages[doc.background.imageAssetId] = await loadImage(rt.url)
   }
+  if (doc.background.type === 'photo') {
+    const photo = getPresetPhoto(doc.background.photoId)
+    if (photo) bgImages[doc.background.photoId] = await loadImage(photo.src)
+  }
   paintShotBackground(ctx, outW, outH, doc.background, bgImages, Math.max(1, doc.zoom ?? 1))
 
-  for (const img of doc.images) {
+  /*
+   * The shadow scene is drawn twice over, in the sense that its placement
+   * decides *when*: under the screens it goes down now, on the background
+   * alone; over them it waits until every card is composited.
+   */
+  const gobo = doc.gobo
+  const scene = gobo && gobo.id !== 'none' ? getShadowScene(gobo.id) : null
+  const goboArt = scene ? await loadImage(scene.src).catch(() => null) : null
+  const paintGobo = () => {
+    if (!gobo || !goboArt) return
+    paintShadowScene(ctx, outW, outH, gobo, goboArt, goboArt.naturalWidth, goboArt.naturalHeight)
+  }
+  if (gobo?.placement === 'under') paintGobo()
+
+  for (const img of paintOrder(doc.images)) {
     const meta = doc.assets.find((a) => a.id === img.assetId)
     const rt = runtime[img.assetId]
     if (!meta || !rt) continue
@@ -65,6 +94,12 @@ export async function renderShotToCanvas(
     const layer = buildCardLayer(outW, outH, card, L, img)
     compositeCard(ctx, layer, L, img, Math.min(outW, outH))
   }
+
+  if (gobo?.placement === 'over') paintGobo()
+
+  // last, over the whole assembled frame: the lens does not know which parts of
+  // the picture were drawn separately
+  applyPortrait(out, doc.portrait)
   return out
 }
 

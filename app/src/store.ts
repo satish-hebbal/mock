@@ -204,6 +204,8 @@ interface StudioState {
   /** click a rail section: focus it, or close the panel if it's already showing */
   toggleToolSection: (id: ToolSection) => void
   toggleShotsSection: (id: ShotsSection) => void
+  /** move to a section without the toggle-shut behaviour, for the swipe pager */
+  setShotsSection: (id: ShotsSection) => void
   setSheetOpen: (v: boolean) => void
   setPanelOpen: (v: boolean) => void
   setTimelineOpen: (v: boolean) => void
@@ -790,6 +792,12 @@ export const useStudio = create<StudioState>()(
         s.toolPanelOpen = !close
       })
     },
+    setShotsSection: (id) => {
+      if (get().shotsSection === id) return
+      localStorage.setItem('ms-shots-section', id)
+      set((s) => void (s.shotsSection = id))
+    },
+
     toggleShotsSection: (id) => {
       const close = get().toolPanelOpen && get().shotsSection === id
       localStorage.setItem('ms-tool-panel', close ? 'closed' : 'open')
@@ -884,6 +892,21 @@ useStudio.subscribe((state) => {
   clearTimeout(autosaveTimer)
   autosaveTimer = setTimeout(() => void persistProject(), 600)
 })
+
+/** Same picker, but hands back every file chosen. */
+export function pickMediaFiles(onFiles: (files: File[]) => void, acceptVideo = true) {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.multiple = true
+  input.accept = acceptVideo
+    ? 'image/png,image/jpeg,image/webp,image/gif,image/svg+xml,video/mp4,video/webm'
+    : 'image/png,image/jpeg,image/webp,image/gif,image/svg+xml'
+  input.onchange = () => {
+    const files = Array.from(input.files ?? [])
+    if (files.length > 0) onFiles(files)
+  }
+  input.click()
+}
 
 export function pickMediaFile(onFile: (file: File) => void, acceptVideo = true) {
   const input = document.createElement('input')

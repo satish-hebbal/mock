@@ -30,7 +30,7 @@ import {
   frameForAspect,
   ratioLabel,
 } from '../lib/presets'
-import { MESH_PALETTES, meshGradientDataURL } from '../lib/meshGradient'
+import { MESH_PRESETS, meshCss, reshuffleMesh } from '../lib/meshGradient'
 import { STUDIO_LOOKS, SWEEP_PAPERS, focalFromFov, lookSwatch } from '../lib/studio'
 import { SegmentThumb } from './controls'
 import { ENV_MOODS, moodSwatch } from '../lib/moods'
@@ -293,7 +293,7 @@ function StudioPresetsTab() {
               className="flex items-center gap-2.5 rounded-md p-1.5 text-left transition-colors hover:bg-(--field)"
             >
               <span
-                className="h-9 w-12 shrink-0 rounded-sm"
+                className="h-9 w-12 shrink-0 rounded-xl"
                 style={{ background: lookSwatch(l) }}
               />
               <span className="flex min-w-0 flex-col">
@@ -614,7 +614,7 @@ function BackdropTab() {
                     setBackground({ type: 'gradient', gradient: { ...bg.gradient, ...g } })
                   }
                   style={{ background: `linear-gradient(${g.angle}deg, ${g.from}, ${g.to})` }}
-                  className="h-9 rounded-sm"
+                  className="h-9 rounded-xl"
                 />
               ))}
             </div>
@@ -640,13 +640,19 @@ function BackdropTab() {
         {bg.type === 'mesh' && (
           <>
             <div className="grid grid-cols-4 gap-1.5">
-              {MESH_PALETTES.map((colors, i) => (
+              {MESH_PRESETS.map((m) => (
                 <button
-                  key={i}
-                  aria-label={`Mesh palette ${i + 1}`}
-                  onClick={() => setBackground({ type: 'mesh', mesh: { ...bg.mesh, colors } })}
-                  style={{ backgroundImage: `url(${meshGradientDataURL(bg.mesh.seed, colors)})` }}
-                  className="h-9 rounded-sm bg-cover"
+                  key={m.id}
+                  aria-label={m.name}
+                  title={m.name}
+                  onClick={() =>
+                    setBackground({
+                      type: 'mesh',
+                      mesh: { ...bg.mesh, colors: m.stops.map((s) => s.color), base: m.base, stops: m.stops },
+                    })
+                  }
+                  style={meshCss({ ...bg.mesh, base: m.base, stops: m.stops })}
+                  className="h-9 rounded-xl"
                 />
               ))}
             </div>
@@ -654,7 +660,7 @@ function BackdropTab() {
               <Chip
                 full
                 onClick={() =>
-                  setBackground({ mesh: { ...bg.mesh, seed: Math.floor(Math.random() * 1e6) } })
+                  setBackground({ mesh: reshuffleMesh(bg.mesh) })
                 }
               >
                 ↻ Randomize

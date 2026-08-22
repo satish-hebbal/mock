@@ -26,3 +26,14 @@ dist-ssr
 # Source device models: multi-MB Sketchfab exports kept locally only.
 # Commit the optimized output instead (scripts/optimize-models.mjs).
 public/models/*.glb
+
+# Raw asset sources: gigabytes of originals kept locally, with the optimized
+# output under public/ being what actually ships (scripts/optimize-*.mjs).
+#
+# The preset manifest is the exception and is tracked: it maps each source file
+# to the serial id it was given, which is what keeps re-running the optimizer
+# from re-converting the whole catalog under fresh names. Losing it on a clone
+# would mean losing that mapping.
+assets-src/**
+!assets-src/preset-bgs/
+!assets-src/preset-bgs/manifest.json

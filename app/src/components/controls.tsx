@@ -312,15 +312,18 @@ export function Segments<T extends string>({
   options,
   value,
   onChange,
+  compact = false,
 }: {
   /** an `icon` turns the tab into a glyph-only button with the label as tooltip */
   options: { id: T; label: string; icon?: ReactNode }[]
   value: T
   onChange: (v: T) => void
+  /** a shorter, smaller-type row for a toggle that's a detail, not a main setting */
+  compact?: boolean
 }) {
   return (
     <div
-      className="relative mb-2 grid gap-0.5 rounded-sm bg-(--field) p-0.5"
+      className={`relative grid gap-0.5 rounded-sm bg-(--field) p-0.5 ${compact ? 'mb-1.5' : 'mb-2'}`}
       style={{ gridTemplateColumns: `repeat(${options.length}, 1fr)` }}
     >
       <SegmentThumb count={options.length} index={options.findIndex((o) => o.id === value)} />
@@ -331,9 +334,9 @@ export function Segments<T extends string>({
           aria-pressed={value === o.id}
           aria-label={o.label}
           title={o.label}
-          className={`relative z-10 flex h-6 items-center justify-center gap-1 truncate rounded-xs px-1.5 t-body-sm transition-colors ${
-            value === o.id ? 'text-(--tx)' : 'text-(--tx2) hover:text-(--tx)'
-          }`}
+          className={`relative z-10 flex items-center justify-center gap-1 truncate rounded-xs px-1.5 transition-colors ${
+            compact ? 'h-5 t-caption' : 'h-6 t-body-sm'
+          } ${value === o.id ? 'text-(--tx)' : 'text-(--tx2) hover:text-(--tx)'}`}
         >
           {o.icon ?? o.label}
         </button>
@@ -479,7 +482,9 @@ export function ColorRow({
       title={label}
       className="relative my-0.5 flex h-7 items-center gap-2 rounded-sm bg-(--field) px-2 hover:bg-(--field-h)"
     >
-      <span className="relative h-4 w-4 shrink-0 overflow-hidden rounded-xs border border-(--line2)">
+      <span
+        className="relative h-4 w-4 shrink-0 overflow-hidden rounded-md"
+      >
         <input
           type="color"
           value={value}

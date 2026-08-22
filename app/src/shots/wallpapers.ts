@@ -32,6 +32,22 @@ export function getWallpaper(id: string): Wallpaper {
   return WALLPAPERS.find((w) => w.id === id) ?? WALLPAPERS[0]
 }
 
+// ————— Curated solid-color swatches —————
+export const SOLID_COLORS: string[] = [
+  '#0a0a0c',
+  '#15151b',
+  '#ffffff',
+  '#f5f2ea',
+  '#e8e4d8',
+  '#6d7cff',
+  '#ff6b6b',
+  '#ffb86b',
+  '#3ddc97',
+  '#38bdf8',
+  '#a78bfa',
+  '#f472b6',
+]
+
 /** CSS background string for a gradient spec (preview parity with canvas export). */
 export function gradientCss(g: ShotsGradient): string {
   return g.kind === 'radial'

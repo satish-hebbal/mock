@@ -1,7 +1,16 @@
 import { paintMeshGradient } from '../lib/meshGradient'
 import { getWallpaper } from './wallpapers'
 import { computeLayout, perspectiveFor, type CardLayout } from './layout'
-import type { ShotsBackground, ShotsGradient, ShotsImage } from './types'
+import { portraitGeometry, portraitMaskGradient, portraitPasses } from './portrait'
+import { getCardStyle, stackShade } from './cardStyles'
+import { goboCover, goboTransform } from './shadows'
+import type {
+  ShotsBackground,
+  ShotsGobo,
+  ShotsGradient,
+  ShotsImage,
+  ShotsPortrait,
+} from './types'
 
 // ————— small helpers —————
 
@@ -89,10 +98,24 @@ export function paintShotBackground(
       paintGradient(ctx, gw, gh, getWallpaper(bg.wallpaperId).gradient)
       break
     case 'mesh':
-      paintMeshGradient(ctx, gw, gh, bg.mesh.seed, bg.mesh.colors)
+      paintMeshGradient(ctx, gw, gh, bg.mesh)
       break
     case 'image': {
       const img = bg.imageAssetId ? images[bg.imageAssetId] : null
+      if (img) {
+        const scale = Math.max(gw / img.naturalWidth, gh / img.naturalHeight)
+        const dw = img.naturalWidth * scale
+        const dh = img.naturalHeight * scale
+        ctx.drawImage(img, (gw - dw) / 2, (gh - dh) / 2, dw, dh)
+      } else {
+        ctx.fillStyle = '#15151b'
+        ctx.fillRect(0, 0, gw, gh)
+      }
+      break
+    }
+    case 'photo': {
+      // keyed by photoId in the same map the 'image' case uses for imageAssetId
+      const img = images[bg.photoId]
       if (img) {
         const scale = Math.max(gw / img.naturalWidth, gh / img.naturalHeight)
         const dw = img.naturalWidth * scale
@@ -211,6 +234,28 @@ export function renderCard(
   drawCover(g, media, mediaW, mediaH, sx, sy + barH, sw, sh - barH)
   g.restore()
 
+  /*
+   * The inset bevel. Stroked from the card's own edge with the clip still in
+   * force, so the outer half of the line falls away and what is left is a band
+   * of exactly the intended width lying inside the edge.
+   */
+  const mount = getCardStyle(img.cardStyle)
+  if (!L.bezel && mount.inset) {
+    const w = mount.inset.w * L.cardW
+    g.save()
+    g.beginPath()
+    g.roundRect(sx, sy, sw, sh, r)
+    g.clip()
+    g.lineWidth = w * 2
+    g.strokeStyle = mount.inset.color
+    g.shadowColor = mount.inset.color
+    g.shadowBlur = w * 1.6
+    g.shadowOffsetX = w
+    g.shadowOffsetY = w
+    g.stroke()
+    g.restore()
+  }
+
   if (L.borderPx > 0) {
     g.save()
     g.lineWidth = L.borderPx
@@ -236,14 +281,22 @@ function affineTriangle(
   s: number[][],
   d: number[][],
 ) {
-  // dilate destination triangle slightly to hide inter-triangle seams
+  /*
+   * Dilate the destination triangle to hide the seams between neighbours.
+   *
+   * Each triangle is drawn through an antialiased clip, so along a shared edge
+   * both sides land at partial alpha and the pair does not add back up to one.
+   * The shortfall reads as a fine dark line, and 0.7px of overlap was not
+   * quite enough to close it. Overlapping is free here because neighbours
+   * carry the same pixels along that edge.
+   */
   const cx = (d[0][0] + d[1][0] + d[2][0]) / 3
   const cy = (d[0][1] + d[1][1] + d[2][1]) / 3
   const dd = d.map(([x, y]) => {
     const dx = x - cx
     const dy = y - cy
     const len = Math.hypot(dx, dy) || 1
-    return [x + (dx / len) * 0.7, y + (dy / len) * 0.7]
+    return [x + (dx / len) * 1.4, y + (dy / len) * 1.4]
   })
   const [sx0, sy0] = s[0]
   const [sx1, sy1] = s[1]
@@ -297,8 +350,26 @@ export function buildCardLayer(
   const ry = ((img.style3d ? img.rotateY : 0) * Math.PI) / 180
   const rz = (img.rotate * Math.PI) / 180
 
-  if (rx === 0 && ry === 0 && rz === 0) {
-    g.drawImage(card, L.cx - L.cardW / 2, L.cy - L.cardH / 2, L.cardW, L.cardH)
+  /*
+   * No tilt means no perspective, so the mesh below is not needed.
+   *
+   * Work the projection through with rx = ry = 0 and every z comes out zero,
+   * the perspective divide becomes 1, and what is left is an in-plane rotation:
+   * exactly what `ctx.rotate` does, in one exact operation.
+   *
+   * Routing that case through the warp anyway was drawing 648 separately
+   * clipped triangles to reproduce a rotation, and each clip edge is
+   * antialiased, so the seams between them showed in the export as faint
+   * diagonal dotted lines across the screenshot. The preview never had them,
+   * because CSS transforms the element in one piece, which is why it only ever
+   * turned up in the exported file.
+   */
+  if (rx === 0 && ry === 0) {
+    g.save()
+    g.translate(L.cx, L.cy)
+    g.rotate(rz)
+    g.drawImage(card, -L.cardW / 2, -L.cardH / 2, L.cardW, L.cardH)
+    g.restore()
     return layer
   }
 
@@ -400,8 +471,209 @@ export function compositeCard(
     ctx.restore()
   }
 
+  /*
+   * The mount, drawn back to front behind the card.
+   *
+   * Every one of these is the card's own silhouette moved or scaled, which is
+   * why they survive rotation for nothing: the silhouette already carries the
+   * card's shape and angle, where a reconstructed rounded rect would have to be
+   * rotated to match and would drift the moment the layout changed.
+   *
+   * Rings scale about the card centre with separate x and y factors, so a band
+   * meant to be N pixels wide is N pixels on all four sides rather than
+   * spreading further along the card's longer axis.
+   */
+  const mount = getCardStyle(img.cardStyle)
+  if (!L.bezel) {
+    const at = (sil: HTMLCanvasElement, sx: number, sy: number, dx = 0, dy = 0) => {
+      ctx.save()
+      ctx.translate(L.cx + dx, L.cy + dy)
+      ctx.scale(sx, sy)
+      ctx.translate(-L.cx, -L.cy)
+      ctx.drawImage(sil, 0, 0)
+      ctx.restore()
+    }
+
+    if (mount.stack) {
+      const st = mount.stack
+      const sil = silhouette(layer, st.color)
+      // furthest copy first, so nearer ones cover it
+      for (let k = st.count; k >= 1; k--) {
+        const inset = st.shrink * L.cardW * k
+        const sx = (L.cardW - inset * 2) / L.cardW
+        const dx = st.dx * L.cardW * k
+        const dy = st.dy * L.cardW * k
+        // each sheet casts onto the one behind it, or the stack reads as one
+        // flat shape with a stepped edge
+        const sh = stackShade(k)
+        const shade = silhouette(layer, sh.color)
+        ctx.filter = `blur(${sh.blur * L.cardW}px)`
+        at(shade, sx, 1, dx, dy + sh.dy * L.cardW)
+        ctx.filter = 'none'
+        at(sil, sx, 1, dx, dy)
+      }
+    }
+
+    if (mount.hard) {
+      at(silhouette(layer, mount.hard.color), 1, 1, mount.hard.x * L.cardW, mount.hard.y * L.cardW)
+    }
+
+    /*
+     * Outermost first, so each inner band paints over the middle of the one
+     * behind it and what is left is a set of annuli. Walking the list forwards
+     * would draw the innermost ring at the widest reach and bury the rest.
+     */
+    const rings = mount.rings ?? []
+    let reach = rings.reduce((sum, ring) => sum + ring.w, 0) * L.cardW
+    for (let i = rings.length - 1; i >= 0; i--) {
+      at(
+        silhouette(layer, rings[i].color),
+        (L.cardW + reach * 2) / L.cardW,
+        (L.cardH + reach * 2) / L.cardH,
+      )
+      reach -= rings[i].w * L.cardW
+    }
+  }
+
   // the card itself
   ctx.drawImage(layer, 0, 0)
+}
+
+// ————— shadow scene —————
+
+/**
+ * Paint a gobo across the frame.
+ *
+ * The asset is already flat black with its darkness in alpha, so this is a
+ * plain draw rather than a multiply: a shadow that is transparent wherever the
+ * light got through composites correctly by definition.
+ *
+ * 'source-atop' is what keeps a transparent export honest. A shadow has to land
+ * on something, and without it the pattern would paint itself into the alpha
+ * channel of a background that was meant to stay empty.
+ */
+export function paintShadowScene(
+  ctx: CanvasRenderingContext2D,
+  W: number,
+  H: number,
+  gobo: ShotsGobo,
+  art: CanvasImageSource,
+  iw: number,
+  ih: number,
+) {
+  const { rad, scale } = goboTransform(gobo)
+  const { w, h } = goboCover(W, H, iw, ih)
+  ctx.save()
+  ctx.globalAlpha = gobo.opacity
+  ctx.globalCompositeOperation = 'source-atop'
+  // translate before rotate, so the slide reads in frame space rather than
+  // being turned along with the pattern. CSS lists the same order right to left.
+  ctx.translate(W / 2 + gobo.x * W, H / 2 + gobo.y * H)
+  ctx.rotate(rad)
+  ctx.scale(scale, scale)
+  ctx.drawImage(art, -w / 2, -h / 2, w, h)
+  ctx.restore()
+}
+
+// ————— portrait (depth of field over the finished frame) —————
+
+/**
+ * Blur a canvas with its edges held, rather than fading into nothing.
+ *
+ * `ctx.filter` samples transparent black past the bitmap, so a straight blur
+ * eats a soft transparent band all the way round the frame, exactly where the
+ * out-of-focus region is. Padding the source and stretching its edge pixels
+ * outward first gives the kernel something real to reach into, so the border
+ * comes back the colour it started.
+ */
+function blurCanvas(src: HTMLCanvasElement, px: number): HTMLCanvasElement {
+  const W = src.width
+  const H = src.height
+  const P = Math.max(1, Math.ceil(px * 1.5))
+
+  const pad = document.createElement('canvas')
+  pad.width = W + P * 2
+  pad.height = H + P * 2
+  const pg = pad.getContext('2d')!
+  pg.drawImage(src, P, P)
+  pg.drawImage(src, 0, 0, 1, H, 0, P, P, H)
+  pg.drawImage(src, W - 1, 0, 1, H, W + P, P, P, H)
+  pg.drawImage(src, 0, 0, W, 1, P, 0, W, P)
+  pg.drawImage(src, 0, H - 1, W, 1, P, H + P, W, P)
+  pg.drawImage(src, 0, 0, 1, 1, 0, 0, P, P)
+  pg.drawImage(src, W - 1, 0, 1, 1, W + P, 0, P, P)
+  pg.drawImage(src, 0, H - 1, 1, 1, 0, H + P, P, P)
+  pg.drawImage(src, W - 1, H - 1, 1, 1, W + P, H + P, P, P)
+
+  const out = document.createElement('canvas')
+  out.width = W
+  out.height = H
+  const og = out.getContext('2d')!
+  og.filter = `blur(${px}px)`
+  og.drawImage(pad, -P, -P)
+  /*
+   * Hand the canvas back with a clean context.
+   *
+   * `getContext` returns the same object every time, so a filter left set here
+   * is still set when the caller masks this canvas, and `ctx.filter` applies to
+   * fills as much as to images. The mask gradient would come out blurred, and
+   * blurring a fill that covers the whole canvas drags transparency in from
+   * beyond its edges, so the mask thinned out around the border and let the
+   * sharp original show through exactly there.
+   */
+  og.filter = 'none'
+  return out
+}
+
+/**
+ * Defocus the composed frame around the focal point, in place.
+ *
+ * Runs last, on everything: background, devices, shadows. That is the whole
+ * point of it, since a lens does not know which parts of a scene you consider
+ * the subject, and a blur that skipped the phone would give away that the
+ * picture was assembled rather than taken.
+ *
+ * The passes are applied in order, each over the result of the last, matching
+ * how the preview's stacked `backdrop-filter` layers compose.
+ */
+export function applyPortrait(canvas: HTMLCanvasElement, p: ShotsPortrait | undefined) {
+  if (!p || p.mode === 'none') return
+  const W = canvas.width
+  const H = canvas.height
+  const ctx = canvas.getContext('2d')!
+  const g = portraitGeometry(p, W, H)
+
+  // defocus first, then shade what is left: the shadow is cast onto the
+  // finished picture, not blurred along with it
+  for (const pass of portraitPasses(g)) {
+    const soft = blurCanvas(canvas, pass.blur)
+    const sg = soft.getContext('2d')!
+    // keep only the out-of-focus ring of the blurred copy, then lay it back on
+    sg.globalCompositeOperation = 'destination-in'
+    sg.fillStyle = portraitMaskGradient(sg, g, pass.inner, pass.outer)
+    sg.fillRect(0, 0, W, H)
+    ctx.drawImage(soft, 0, 0)
+  }
+
+  if (g.darkness > 0) {
+    const mask = document.createElement('canvas')
+    mask.width = W
+    mask.height = H
+    const mg = mask.getContext('2d')!
+    mg.fillStyle = `rgba(0,0,0,${g.darkness})`
+    mg.fillRect(0, 0, W, H)
+    mg.globalCompositeOperation = 'destination-in'
+    mg.fillStyle = portraitMaskGradient(mg, g, g.inner, g.outer)
+    mg.fillRect(0, 0, W, H)
+
+    ctx.save()
+    // 'source-atop', so the shade only lands on pixels that are already there.
+    // A transparent background has to survive this pass with its alpha intact,
+    // the same way the vignette leaves it alone.
+    ctx.globalCompositeOperation = 'source-atop'
+    ctx.drawImage(mask, 0, 0)
+    ctx.restore()
+  }
 }
 
 /** A vertically-faded copy of the layer, used for the reflection. */

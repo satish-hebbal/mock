@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react'
 import { exportProjectFile, importProjectFile, pickMediaFile, useStudio } from './store'
 import { useShots } from './shots/store'
+import { selectedShotsImage } from './shots/types'
+import { PALETTE_GROUP_SIZE } from './shots/palette'
 import { ShotsEditor } from './shots/ShotsEditor'
 import { ToolRail } from './components/ToolRail'
 import { ToolPanel } from './components/ToolPanel'
@@ -18,6 +20,7 @@ import {
 } from './components/dialogs'
 import { UILayer } from './components/ui'
 import { SmallScreen } from './components/SmallScreen'
+import { UploadPrompt } from './components/UploadPrompt'
 import { useIsDesktop } from './lib/breakpoint'
 
 /** rAF playback driver (PRD §5.4). */
@@ -48,6 +51,75 @@ function usePlayback() {
   }, [playing])
 }
 
+/*
+ * Input types with no free-text state of their own — a colour swatch, a
+ * checkbox — so there's nothing for a native undo to apply to and no reason
+ * for them to keep swallowing keyboard shortcuts once the user is done with
+ * them. `<input type="color">` is the one that bites in practice: picking a
+ * colour leaves it focused, and it stays focused (nothing else claims focus
+ * on the next click), so every shortcut goes quiet until something else
+ * happens to steal focus back. Text-like inputs are deliberately left out of
+ * this set — while one of those is focused, Ctrl+Z should still mean "undo
+ * my typing" and not "undo my last app action".
+ */
+const NON_TEXT_INPUT_TYPES = new Set([
+  'color',
+  'checkbox',
+  'radio',
+  'range',
+  'button',
+  'submit',
+  'reset',
+  'file',
+  'image',
+])
+
+/** Is `el` (or an ancestor) a field the user could plausibly still be typing into? */
+function isTextEntryTarget(el: Element | null): boolean {
+  const field = el?.closest?.('input, textarea, select, [contenteditable="true"]') as HTMLInputElement | null
+  if (!field) return false
+  if (field.tagName === 'INPUT' && NON_TEXT_INPUT_TYPES.has(field.type)) return false
+  return true
+}
+
+/*
+ * Printable keys whose physical position we bind, spelled the way the US
+ * layout prints them. Letters and digits are derived from `code` directly;
+ * this is only the punctuation, which has no regular pattern to compute.
+ */
+const PUNCTUATION_BY_CODE: Record<string, string> = {
+  BracketLeft: '[',
+  BracketRight: ']',
+  Backslash: '\\',
+  Slash: '/',
+  Comma: ',',
+  Period: '.',
+  Minus: '-',
+  Equal: '=',
+}
+
+/**
+ * A shortcut's identity, independent of the active keyboard layout.
+ *
+ * `e.key` is the character the *current layout prints*, so on a Russian
+ * layout the physical Z key arrives as 'я' and on a German one as 'y' —
+ * and every letter shortcut silently stops matching. That failure is
+ * especially confusing because it tracks the layout toggle (Alt+Shift,
+ * Win+Space) rather than anything in the app, so shortcuts appear to break
+ * and heal at random.
+ *
+ * `e.code` is the physical position, which is what Ctrl+Z has always
+ * actually meant, so letters, digits and the punctuation we bind resolve
+ * from there. Named keys (Escape, arrows, Delete) are already
+ * layout-independent in `e.key`, so they fall through unchanged.
+ */
+function keyOf(e: KeyboardEvent): string {
+  const code = e.code ?? ''
+  if (/^Key[A-Z]$/.test(code)) return code.slice(3).toLowerCase()
+  if (/^Digit[0-9]$/.test(code)) return code.slice(5)
+  return PUNCTUATION_BY_CODE[code] ?? (e.key ?? '').toLowerCase()
+}
+
 /** Open a .mockup.json from disk (Ctrl+O). */
 function pickProjectFile() {
   const input = document.createElement('input')
@@ -62,16 +134,13 @@ function pickProjectFile() {
 
 function useGlobalShortcuts() {
   useEffect(() => {
-    const isTyping = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement
-      return t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable
-    }
+    const isTyping = (e: KeyboardEvent) => isTextEntryTarget(e.target as HTMLElement)
 
     /** Shortcuts that mean the same thing in every mode. Returns true if handled. */
     const handleGlobal = (e: KeyboardEvent): boolean => {
       const s = useStudio.getState()
       const mod = e.ctrlKey || e.metaKey
-      const key = e.key.toLowerCase()
+      const key = keyOf(e)
 
       // Alt, not Ctrl: Ctrl+1/2 are browser tab switches and can't be cancelled
       if (e.altKey && (key === '1' || key === '2')) {
@@ -104,7 +173,7 @@ function useGlobalShortcuts() {
     const handleShots = (e: KeyboardEvent) => {
       const sh = useShots.getState()
       const mod = e.ctrlKey || e.metaKey
-      const key = e.key.toLowerCase()
+      const key = keyOf(e)
       const img = sh.doc.images.find((i) => i.id === sh.doc.selectedId)
       const step = e.shiftKey ? 0.05 : 0.01
 
@@ -121,6 +190,7 @@ function useGlobalShortcuts() {
         sh.setDialog(sh.dialog === 'export' ? null : 'export')
       } else if (e.key === 'Escape') {
         sh.setDialog(null)
+        sh.setFocusGuide(false)
       } else if (key >= '1' && key <= '5') {
         const target = sh.doc.images[Number(key) - 1]
         if (target) sh.selectImage(target.id)
@@ -129,7 +199,11 @@ function useGlobalShortcuts() {
       } else if (key === 'r') {
         sh.randomizeBackground()
       } else if (key === 'm') {
-        sh.applyMagicBackground(Math.floor(Math.random() * 4))
+        // a random one of the three Magic palettes, same as clicking a tab first
+        const full = selectedShotsImage(sh.doc)?.palette ?? []
+        const g = Math.floor(Math.random() * 3)
+        const palette = full.slice(g * PALETTE_GROUP_SIZE, (g + 1) * PALETTE_GROUP_SIZE)
+        sh.applyMagicBackground(Math.floor(Math.random() * 8), palette)
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
         sh.removeImage()
       } else if (img && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
@@ -138,17 +212,17 @@ function useGlobalShortcuts() {
       } else if (img && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
         e.preventDefault()
         sh.setImage({ offsetY: img.offsetY + (e.key === 'ArrowDown' ? step : -step) })
-      } else if (img && (e.key === '+' || e.key === '=' || e.key === '-')) {
-        sh.setImage({ scale: img.scale + (e.key === '-' ? -0.05 : 0.05) })
-      } else if (img && (e.key === ',' || e.key === '.')) {
-        sh.setImage({ rotate: img.rotate + (e.key === ',' ? -1 : 1) })
+      } else if (img && (key === '+' || key === '=' || key === '-')) {
+        sh.setImage({ scale: img.scale + (key === '-' ? -0.05 : 0.05) })
+      } else if (img && (key === ',' || key === '.')) {
+        sh.setImage({ rotate: img.rotate + (key === ',' ? -1 : 1) })
       }
     }
 
     const handleStudio = (e: KeyboardEvent) => {
       const s = useStudio.getState()
       const mod = e.ctrlKey || e.metaKey
-      const key = e.key.toLowerCase()
+      const key = keyOf(e)
       const frame = 1000 / s.project.fps
       const hasKfSelection = s.selectedKeyframeIds.length > 0
 
@@ -217,6 +291,14 @@ function useGlobalShortcuts() {
     }
 
     const onKey = (e: KeyboardEvent) => {
+      /*
+       * Mid-composition keystrokes belong to the IME, not to us: an input
+       * method reports every key as 'Process' until the candidate is
+       * committed, so acting on them would fire shortcuts out of what the
+       * user means as ordinary typing.
+       */
+      if (e.isComposing || e.keyCode === 229) return
+
       // Escape closes an open dialog even while a field inside it has focus,
       // so it must run before the typing guard.
       if (e.key === 'Escape') {
@@ -252,17 +334,30 @@ function useMediaDropPaste() {
       if (useStudio.getState().mode === 'shots') void useShots.getState().importMedia(file)
       else void useStudio.getState().importMedia(file)
     }
+    /*
+     * Every dropped or pasted file, not just the first. Shots can hold several
+     * screens, and its importer is the one that knows the cap, so the whole
+     * list goes there and it decides what fits. The studio still takes one.
+     */
+    const importAll = (files: File[]) => {
+      if (files.length === 0) return
+      if (useStudio.getState().mode === 'shots') void useShots.getState().importMediaFiles(files)
+      else importTo(files[0])
+    }
     const onDrop = (e: DragEvent) => {
       e.preventDefault()
-      const file = Array.from(e.dataTransfer?.files ?? []).find(
-        (f) => f.type.startsWith('image/') || f.type.startsWith('video/'),
+      importAll(
+        Array.from(e.dataTransfer?.files ?? []).filter(
+          (f) => f.type.startsWith('image/') || f.type.startsWith('video/'),
+        ),
       )
-      if (file) importTo(file)
     }
     const onPaste = (e: ClipboardEvent) => {
-      const item = Array.from(e.clipboardData?.items ?? []).find((i) => i.type.startsWith('image/'))
-      const file = item?.getAsFile()
-      if (file) importTo(file)
+      const files = Array.from(e.clipboardData?.items ?? [])
+        .filter((i) => i.type.startsWith('image/'))
+        .map((i) => i.getAsFile())
+        .filter((f): f is File => !!f)
+      importAll(files)
     }
     window.addEventListener('dragover', onDragOver)
     window.addEventListener('drop', onDrop)
@@ -287,23 +382,7 @@ function StudioLayout() {
             {hydrated && <Viewport />}
             {hydrated && !hasMedia && (
               <div className="pointer-events-none absolute inset-x-0 bottom-10 z-10 flex justify-center">
-                <div className="pointer-events-auto flex items-center gap-3 rounded-full border border-(--line) bg-(--raised) py-2 pr-2 pl-5">
-                  <span className="t-body text-(--tx2)">
-                    Upload media to get started — or paste / drop.
-                  </span>
-                  {/*
-                    Pill, not the default `rounded-md` button: this one is nested
-                    inside a pill-shaped prompt, and the radius scale carries
-                    "pill/full" precisely for that case. Keeps Linear's button
-                    padding (8px 14px) and type token.
-                  */}
-                  <button
-                    onClick={() => pickMediaFile((f) => void useStudio.getState().importMedia(f))}
-                    className="rounded-full bg-(--accent-fill) px-3.5 py-2 t-button text-(--accent-tx) transition-opacity hover:opacity-90"
-                  >
-                    Upload
-                  </button>
-                </div>
+                <UploadPrompt onFiles={(fs) => void useStudio.getState().importMedia(fs[0])} />
               </div>
             )}
           </div>
@@ -354,15 +433,14 @@ function Editor() {
      * So after any click that isn't into a field, focus goes back to the root.
      * Deferred a frame so the click itself still lands where it was aimed.
      */
-    const FIELDS = 'input, textarea, select, [contenteditable="true"]'
     const onPointerDown = (e: PointerEvent) => {
-      if ((e.target as HTMLElement | null)?.closest?.(FIELDS)) return
+      if (isTextEntryTarget(e.target as HTMLElement | null)) return
       requestAnimationFrame(() => {
-        if (!document.activeElement?.closest?.(FIELDS)) root.focus({ preventScroll: true })
+        if (!isTextEntryTarget(document.activeElement)) root.focus({ preventScroll: true })
       })
     }
     const onWindowFocus = () => {
-      if (!document.activeElement?.closest?.(FIELDS)) root.focus({ preventScroll: true })
+      if (!isTextEntryTarget(document.activeElement)) root.focus({ preventScroll: true })
     }
     window.addEventListener('pointerdown', onPointerDown)
     window.addEventListener('focus', onWindowFocus)

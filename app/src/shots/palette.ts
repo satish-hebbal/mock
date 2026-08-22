@@ -1,3 +1,4 @@
+import { meshFromColors } from '../lib/meshGradient'
 import type { ShotsBackground } from './types'
 
 // ————— color helpers —————
@@ -78,12 +79,30 @@ interface Bucket {
   b: number
 }
 
+interface ScoredBucket extends Bucket {
+  /** frequency weighted toward saturated, mid-tone pixels */
+  score: number
+  sat: number
+  hue: number
+}
+
 function dist(a: Bucket, b: Bucket) {
   return Math.abs(a.r - b.r) + Math.abs(a.g - b.g) + Math.abs(a.b - b.b)
 }
 
-/** Extract a small dominant-color palette from an image (shots.so "Magic"). */
-export function extractPalette(source: CanvasImageSource, sw: number, sh: number, count = 6): string[] {
+function hueDist(a: number, b: number) {
+  const d = Math.abs(a - b) % 360
+  return Math.min(d, 360 - d)
+}
+
+/** How many colors each of the three palettes below carries. */
+export const PALETTE_GROUP_SIZE = 6
+
+/** Exactly how many colors `extractPalette` returns: the three groups, back to back. */
+export const PALETTE_FULL_SIZE = PALETTE_GROUP_SIZE * 3
+
+/** shots.so-style "Magic": every distinct-ish color in an image, scored. */
+function scoredBuckets(source: CanvasImageSource, sw: number, sh: number): ScoredBucket[] {
   const target = 64
   const scale = Math.min(target / Math.max(1, sw), target / Math.max(1, sh), 1)
   const w = Math.max(1, Math.round(sw * scale))
@@ -110,31 +129,115 @@ export function extractPalette(source: CanvasImageSource, sw: number, sh: number
     map.set(key, e)
   }
 
-  const buckets = [...map.values()]
+  return [...map.values()]
     .map((e) => ({ count: e.count, r: e.r / e.count, g: e.g / e.count, b: e.b / e.count }))
     // weight by frequency but favor saturated/mid-tone colors over flat white/black
     .map((e) => {
-      const [, s, l] = rgbToHsl(e.r, e.g, e.b)
+      const [hue, s, l] = rgbToHsl(e.r, e.g, e.b)
       const interest = 0.4 + s * 0.8 + (1 - Math.abs(l - 0.5)) * 0.4
-      return { ...e, score: e.count * interest }
+      return { ...e, score: e.count * interest, sat: s, hue }
     })
     .sort((a, b) => b.score - a.score)
+}
 
-  const picked: Bucket[] = []
-  for (const bkt of buckets) {
+/** Greedily take the highest-ranked buckets, skipping ones too close (in raw
+ * RGB) to what's already picked; pads with next-best if too few are distinct. */
+function pickRanked(sorted: ScoredBucket[], count: number): ScoredBucket[] {
+  const picked: ScoredBucket[] = []
+  for (const bkt of sorted) {
     if (picked.length >= count) break
     if (picked.every((p) => dist(p, bkt) > 48)) picked.push(bkt)
   }
-  for (const bkt of buckets) {
+  for (const bkt of sorted) {
     if (picked.length >= Math.min(3, count)) break
     if (!picked.includes(bkt)) picked.push(bkt)
   }
-  return picked.map((p) => rgbToHex(p.r, p.g, p.b))
+  return picked
+}
+
+/** Same candidates, spread around the hue wheel by farthest-point sampling
+ * instead of ranked by prominence — so a small but real patch of green shows
+ * up even when it's nowhere near the top by pixel count. */
+function pickHueDiverse(sorted: ScoredBucket[], count: number): ScoredBucket[] {
+  if (sorted.length === 0) return []
+  const picked: ScoredBucket[] = [sorted[0]]
+  const remaining = sorted.slice(1)
+  while (picked.length < count && remaining.length > 0) {
+    let bestIdx = 0
+    let bestDist = -1
+    for (let i = 0; i < remaining.length; i++) {
+      const d = Math.min(...picked.map((p) => hueDist(p.hue, remaining[i].hue)))
+      if (d > bestDist) {
+        bestDist = d
+        bestIdx = i
+      }
+    }
+    picked.push(remaining[bestIdx])
+    remaining.splice(bestIdx, 1)
+  }
+  return picked
+}
+
+/**
+ * Extract three small palettes from an image (shots.so "Magic"), each
+ * reading the same pixels a different way, concatenated into one array of
+ * `PALETTE_GROUP_SIZE * 3` hex colors:
+ *
+ *  - Dominant (first group): frequency ranked, favoring saturated mid-tones —
+ *    the original single-palette behavior.
+ *  - Vibrant (second group): the same candidates re-ranked by saturation
+ *    alone, so a small vivid patch can outrank a big dull one.
+ *  - Diverse (third group): spread across the hue wheel instead of ranked by
+ *    prominence at all, so a color that's real but rare — the one sliver of
+ *    green in an otherwise orange screenshot — still gets a slot instead of
+ *    being out-voted by everything else every time.
+ *
+ * Callers that only want the classic single palette can just take the first
+ * `PALETTE_GROUP_SIZE` entries; nothing about that slice changed.
+ */
+export function extractPalette(
+  source: CanvasImageSource,
+  sw: number,
+  sh: number,
+  perGroup = PALETTE_GROUP_SIZE,
+): string[] {
+  const scored = scoredBuckets(source, sw, sh)
+  if (scored.length === 0) return []
+
+  /*
+   * Every group is padded out to `perGroup`, so the returned length is always
+   * exactly three groups and callers can slice group `i` by arithmetic alone.
+   *
+   * Without this a flat screenshot, which is most app UI, yields fewer than
+   * `perGroup` distinct colors, the total comes up short, and the panel can no
+   * longer tell "three groups" from "one legacy palette". It then shows the
+   * same colors under all three tabs, which is the bug this prevents. Padding
+   * repeats the last color rather than inventing one, so a two-color image
+   * honestly reads as a two-color image.
+   */
+  const pad = (list: ScoredBucket[]) => {
+    const out = list.slice(0, perGroup)
+    while (out.length > 0 && out.length < perGroup) out.push(out[out.length - 1])
+    return out
+  }
+
+  const dominant = pad(pickRanked(scored, perGroup))
+  const vibrant = pad(pickRanked([...scored].sort((a, b) => b.sat - a.sat || b.score - a.score), perGroup))
+  const diverse = pad(pickHueDiverse(scored, perGroup))
+
+  return [...dominant, ...vibrant, ...diverse].map((p) => rgbToHex(p.r, p.g, p.b))
 }
 
 // ————— background generators —————
 
 type BgPatch = Partial<ShotsBackground>
+
+/** A full mesh spec from a palette, so generated meshes get real blobs too. */
+const meshPatch = (colors: string[], seed: number) => ({
+  seed,
+  colors,
+  ...meshFromColors(colors, seed),
+})
 
 /** Build shots.so-style "Magic" backgrounds from an extracted palette. */
 export function magicBackgrounds(palette: string[]): BgPatch[] {
@@ -148,7 +251,7 @@ export function magicBackgrounds(palette: string[]): BgPatch[] {
     { type: 'gradient', gradient: { kind: 'radial', angle: 0, from: lighten(c0, 0.12), to: darken(c0, 0.4) } },
     { type: 'gradient', gradient: { kind: 'linear', angle: 145, from: darken(c0, 0.22), to: darken(c1, 0.42) } },
     { type: 'gradient', gradient: { kind: 'linear', angle: 135, from: lighten(c0, 0.4), to: lighten(c1, 0.42) } },
-    { type: 'mesh', mesh: { seed: 7, colors: palette.slice(0, 4) } },
+    { type: 'mesh', mesh: meshPatch(palette.slice(0, 4), 7) },
     { type: 'gradient', gradient: { kind: 'linear', angle: 45, from: c2, to: c0 } },
     { type: 'solid', color: c0 },
   ]
@@ -167,7 +270,7 @@ export function randomBackground(palette?: string[]): BgPatch {
     const colors = [0, 40, 200, 320].map((off) =>
       hslToHex(base + off + Math.random() * 30, 0.6 + Math.random() * 0.3, 0.55 + Math.random() * 0.2),
     )
-    return { type: 'mesh', mesh: { seed: Math.floor(Math.random() * 1e6), colors } }
+    return { type: 'mesh', mesh: meshPatch(colors, Math.floor(Math.random() * 1e6)) }
   }
   // random gradient with analogous / complementary hues
   const base = Math.random() * 360

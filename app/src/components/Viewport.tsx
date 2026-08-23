@@ -11,9 +11,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import type { EffectComposer as EffectComposerImpl } from 'postprocessing'
 import { rt, applyAtTime } from '../lib/runtime'
-import { meshCss } from '../lib/meshGradient'
+import { cssBackground } from '../lib/backgroundCss'
 import { gradeFilter } from '../lib/grade'
-import { rgba } from '../lib/color'
 import { useStudio } from '../store'
 import { ALPHA_CHECKER } from '../lib/checker'
 import { CaptureFlash } from './CaptureFlash'
@@ -24,46 +23,7 @@ import { Focus } from 'lucide-react'
 import { DeviceMesh } from './DeviceMesh'
 import { DeviceGizmo } from './DeviceGizmo'
 import { OverlayLayer } from './OverlayLayer'
-import type { BackgroundState } from '../types'
-
-// ————— background CSS (preview path; export repaints the same thing) —————
-
-function cssBackground(bg: BackgroundState, imageUrl: string | null): React.CSSProperties {
-  switch (bg.type) {
-    case 'solid':
-      return { background: bg.color }
-    case 'gradient':
-      return {
-        background:
-          bg.gradient.kind === 'radial'
-            ? `radial-gradient(circle at 50% 50%, ${bg.gradient.from}, ${bg.gradient.to})`
-            : `linear-gradient(${bg.gradient.angle}deg, ${bg.gradient.from}, ${bg.gradient.to})`,
-      }
-    case 'mesh':
-      return meshCss(bg.mesh)
-    case 'studio': {
-      // Painted in the same order as the export canvas: paper, then the pool of
-      // light the key throws on it, the floor falloff, and the corner hold.
-      const s = bg.sweep
-      const hotW = Math.round(s.spread * 200)
-      const hotH = Math.round(s.spread * 150)
-      return {
-        backgroundColor: s.color,
-        backgroundImage: [
-          `radial-gradient(120% 105% at 50% ${s.hotY * 100}%, ${rgba('#000000', 0)} 42%, ${rgba('#000000', s.vignette)} 100%)`,
-          `linear-gradient(to bottom, ${rgba('#000000', 0)} 46%, ${rgba('#000000', s.floor)} 100%)`,
-          `radial-gradient(${hotW}% ${hotH}% at 50% ${s.hotY * 100}%, ${s.hot} 0%, ${rgba(s.hot, 0)} 70%)`,
-        ].join(','),
-      }
-    }
-    case 'image':
-      return imageUrl
-        ? { backgroundImage: `url(${imageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-        : { background: '#111' }
-    case 'transparent':
-      return ALPHA_CHECKER
-  }
-}
+import { FRAME_BUTTON, FRAME_INSET, NOTCH } from '../lib/notch'
 
 // ————— bridges into the runtime —————
 
@@ -425,7 +385,20 @@ function useCameraGestures(container: React.RefObject<HTMLDivElement | null>) {
 
 // ————— frame-aspect fit —————
 
-function useFitRect(outer: React.RefObject<HTMLDivElement | null>, aspect: number) {
+/**
+ * Fit the export frame into the viewport, keeping its aspect.
+ *
+ * `reserveTop` is height the picture may not use — the notch bites into the
+ * top of the panel, and anything drawn up there would be clipped away rather
+ * than merely covered. The matching padding on the container is what actually
+ * pushes the frame down; this only stops it being sized as though that space
+ * were free.
+ */
+function useFitRect(
+  outer: React.RefObject<HTMLDivElement | null>,
+  aspect: number,
+  reserveTop = 0,
+) {
   const [rect, setRect] = useState({ width: 640, height: 360 })
   useEffect(() => {
     const el = outer.current
@@ -433,7 +406,7 @@ function useFitRect(outer: React.RefObject<HTMLDivElement | null>, aspect: numbe
     const ro = new ResizeObserver(() => {
       const pad = 24
       const availW = Math.max(80, el.clientWidth - pad * 2)
-      const availH = Math.max(80, el.clientHeight - pad * 2)
+      const availH = Math.max(80, el.clientHeight - reserveTop - pad * 2)
       let w = availW
       let h = w / aspect
       if (h > availH) {
@@ -444,7 +417,7 @@ function useFitRect(outer: React.RefObject<HTMLDivElement | null>, aspect: numbe
     })
     ro.observe(el)
     return () => ro.disconnect()
-  }, [outer, aspect])
+  }, [outer, aspect, reserveTop])
   return rect
 }
 
@@ -462,10 +435,11 @@ export function Viewport() {
   const exportSize = useStudio((s) => s.project.exportSize)
   const selectDevice = useStudio((s) => s.selectDevice)
   const selectOverlay = useStudio((s) => s.selectOverlay)
+  const selectKeyframes = useStudio((s) => s.selectKeyframes)
 
   const outerRef = useRef<HTMLDivElement>(null)
   const frameRef = useRef<HTMLDivElement>(null)
-  const rect = useFitRect(outerRef, exportSize.width / exportSize.height)
+  const rect = useFitRect(outerRef, exportSize.width / exportSize.height, NOTCH.depth)
   useCameraGestures(frameRef)
 
   const [hintsVisible, setHintsVisible] = useState(() => localStorage.getItem('ms-hints-seen') !== '1')
@@ -489,19 +463,40 @@ export function Viewport() {
 
   const bgStyle = useMemo(() => cssBackground(background, bgImageUrl), [background, bgImageUrl])
   const alphaBg = background.type === 'transparent'
+  /*
+   * Backdrop finish. Matched to the exporter, which runs the same two numbers
+   * as a canvas filter over whatever it just painted — so this applies to every
+   * backdrop rather than only the two that happen to be photographic.
+   */
   const bgFilter =
-    background.type === 'image' || background.type === 'mesh'
+    background.blur > 0 || background.brightness !== 1
       ? `blur(${(background.blur * rect.width) / 1280}px) brightness(${background.brightness})`
       : undefined
   const gradeCss = useMemo(() => gradeFilter(grade) || undefined, [grade])
 
   return (
-    <div ref={outerRef} className="relative flex h-full w-full items-center justify-center overflow-hidden">
+    <div
+      ref={outerRef}
+      style={{ paddingTop: NOTCH.depth }}
+      className="relative flex h-full w-full items-center justify-center overflow-hidden"
+    >
       <div
         ref={frameRef}
         className="relative overflow-hidden rounded-lg"
         style={{ width: rect.width, height: rect.height }}
         onPointerDown={(e) => {
+          /*
+           * Any press in the viewport drops a keyframe selection, because from
+           * here on the arrow keys should scrub again.
+           *
+           * With keyframes selected the timeline nudges them instead of moving
+           * the playhead, which is right while you are working in the timeline
+           * and a trap once you have moved on: the selection outlived every
+           * click, so arrows had quietly stopped scrubbing and only Escape —
+           * which nobody thinks to press — brought them back. Turning to the
+           * canvas is as clear a "done with those" as there is.
+           */
+          selectKeyframes([])
           if (e.target === e.currentTarget) {
             selectOverlay(null)
           }
@@ -552,14 +547,24 @@ export function Viewport() {
         gives no clue how to get back — the numbers say nothing and the canvas is
         empty. This recentres on the devices and fits them, keeping the angle,
         so a wrong drag is one click to undo rather than a hunt.
+
+        Its size and inset are the one pair that satisfies both rules the top of
+        this panel is built on. At 36 in from 4 it lands dead centre of the same
+        band the notch tools sit in — 4 + 18 is the 6 + 16 they centre on — so
+        the two groups share a centre line across the whole width of the canvas.
+        And 4 of clearance under an 8 corner puts its corner arc on exactly the
+        centre of the panel's own 12 corner, so the two curves are concentric
+        and the gap round them never opens or pinches. 32 would hold the first
+        rule and break the second; 36 holds both, and matches the tool rail.
       */}
       <button
         onClick={() => useStudio.getState().frameDevices()}
         title="Frame the devices (F)"
         aria-label="Frame the devices"
-        className="absolute top-3 right-3 z-10 flex h-8 w-8 items-center justify-center rounded-md border border-(--line) bg-(--raised) text-(--tx2) transition-colors hover:border-(--line2) hover:text-(--tx)"
+        style={{ width: FRAME_BUTTON, height: FRAME_BUTTON, top: FRAME_INSET, right: FRAME_INSET }}
+        className="absolute z-10 flex items-center justify-center rounded-md border border-(--line) bg-(--raised) text-(--tx2) transition-colors hover:border-(--line2) hover:text-(--tx)"
       >
-        <Focus size={15} strokeWidth={1.8} />
+        <Focus size={16} strokeWidth={1.8} />
       </button>
 
       {/* gesture hints — shown until the user's first orbit/zoom/pan, then never again */}

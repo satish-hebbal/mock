@@ -9,7 +9,7 @@ import {
 } from './render'
 import { loadBezelImage } from './bezels'
 import { getShadowScene } from './shadows'
-import { getPresetPhoto } from './presetPhotos'
+import { getPresetPhoto } from '../lib/presetPhotos'
 import type { AssetRuntime } from '../types'
 import { paintOrder } from './types'
 import type { ShotsDoc } from './types'

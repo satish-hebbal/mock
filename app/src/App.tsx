@@ -10,6 +10,7 @@ import { AppSheet } from './components/AppSheet'
 import { RightPanel } from './components/RightPanel'
 import { Inspector } from './components/Inspector'
 import { Viewport } from './components/Viewport'
+import { NotchedCanvas } from './components/NotchedCanvas'
 import { Timeline } from './components/Timeline'
 import { Home } from './components/Home'
 import {
@@ -145,10 +146,6 @@ function useGlobalShortcuts() {
       // Alt, not Ctrl: Ctrl+1/2 are browser tab switches and can't be cancelled
       if (e.altKey && (key === '1' || key === '2')) {
         s.setMode(key === '1' ? 'studio' : 'shots')
-        return true
-      }
-      if (key === '/' || key === '?') {
-        s.setDialog(s.dialog === 'shortcuts' ? null : 'shortcuts')
         return true
       }
       if (!mod && key === '[') {
@@ -315,12 +312,45 @@ function useGlobalShortcuts() {
         }
       }
       if (isTyping(e)) return
+
+      const st = useStudio.getState()
+      const dialogOpen = !!st.dialog || !!useShots.getState().dialog
+
+      /*
+       * The shortcut guide closes with the same key that opened it, so it has
+       * to be reachable while it is the thing on screen. It is still refused
+       * over any *other* dialog, since stacking a second panel on an open
+       * export is not what pressing `?` is asking for.
+       */
+      if (keyOf(e) === '/' && (!dialogOpen || st.dialog === 'shortcuts')) {
+        e.preventDefault()
+        st.setDialog(st.dialog === 'shortcuts' ? null : 'shortcuts')
+        return
+      }
+
+      /*
+       * A modal owns the keyboard for as long as it is up.
+       *
+       * Without this every shortcut kept firing at the scene behind it: `G`
+       * moved the gizmo under the export dialog, and `T` stacked Templates on
+       * top of Export. Both are invisible at the time and both are waiting for
+       * you when you close the thing you were actually looking at. Escape has
+       * already been handled above, so there is always a way out.
+       */
+      if (dialogOpen) return
+
       if (handleGlobal(e)) {
         e.preventDefault()
         return
       }
-      if (useStudio.getState().mode === 'shots') handleShots(e)
-      else handleStudio(e)
+
+      /*
+       * Only ever the handler for the editor you are actually in. Home used to
+       * fall through to Studio's, so `E` and `T` on the launcher opened Studio
+       * dialogs over it for a project you had not opened yet.
+       */
+      if (st.mode === 'shots') handleShots(e)
+      else if (st.mode === 'studio') handleStudio(e)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -378,14 +408,14 @@ function StudioLayout() {
       <main className="flex min-h-0 flex-1 gap-2">
         <ToolPanel />
         <div className="flex min-w-0 flex-1 flex-col">
-          <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden rounded-lg border border-(--line) bg-(--raised)">
+          <NotchedCanvas>
             {hydrated && <Viewport />}
             {hydrated && !hasMedia && (
               <div className="pointer-events-none absolute inset-x-0 bottom-10 z-10 flex justify-center">
                 <UploadPrompt onFiles={(fs) => void useStudio.getState().importMedia(fs[0])} />
               </div>
             )}
-          </div>
+          </NotchedCanvas>
         </div>
         <RightPanel>
           <Inspector />

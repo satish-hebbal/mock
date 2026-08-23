@@ -553,6 +553,27 @@ export function ShotsCanvas() {
   const outerRef = useRef<HTMLDivElement>(null)
   const rect = useFitRect(outerRef, doc.size.width / doc.size.height)
 
+  /*
+   * The empty-state prompt's own size, watched rather than assumed. The pill
+   * shrink-wraps its text, so its width depends on the copy and the font that
+   * actually loaded, and the attract rings need it exactly: they end their
+   * travel on the pill's box, and being a few pixels out is the difference
+   * between landing on it and stopping just short.
+   */
+  const promptRef = useRef<HTMLDivElement>(null)
+  const [pill, setPill] = useState({ w: 0, h: 0 })
+  const empty = doc.images.length === 0
+  useEffect(() => {
+    const el = promptRef.current
+    if (!el) return
+    const ro = new ResizeObserver(() => {
+      const r = el.getBoundingClientRect()
+      setPill({ w: Math.round(r.width), h: Math.round(r.height) })
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [empty])
+
   return (
     <div
       ref={outerRef}
@@ -573,8 +594,15 @@ export function ShotsCanvas() {
             className="relative flex items-center justify-center overflow-hidden rounded-xl"
             style={{ width: rect.width, height: rect.height }}
           >
-            <AttractRings />
-            <UploadPrompt onFiles={(fs) => void useShots.getState().importMediaFiles(fs)} />
+            {/*
+              The rings converge on the prompt, so they have to be told how big
+              it is. Measured rather than assumed: the pill shrink-wraps its
+              own text, so its width is not a number this file can know.
+            */}
+            {pill.w > 0 && <AttractRings frame={rect} pill={pill} />}
+            <div ref={promptRef}>
+              <UploadPrompt onFiles={(fs) => void useShots.getState().importMediaFiles(fs)} />
+            </div>
           </div>
         </div>
       )}
@@ -595,25 +623,61 @@ export function ShotsCanvas() {
  * gap or a moment where two rings sit on top of each other. Purely decorative,
  * so it is hidden from assistive tech and sits behind the prompt.
  */
-function AttractRings() {
+function AttractRings({
+  frame,
+  pill,
+}: {
+  frame: { width: number; height: number }
+  pill: { w: number; h: number }
+}) {
   const count = 4
   const seconds = 5
+  /*
+   * A shade larger than the frame that clips it, so every ring is already
+   * moving before any of it is visible. Proportional to the frame in both
+   * axes, which keeps the overhang even all the way round — an absolute
+   * overshoot clipped the sides long before the top and bottom, and what was
+   * left read as two drifting horizontal lines rather than a ring.
+   */
+  const from = { w: Math.round(frame.width * 1.06), h: Math.round(frame.height * 1.06) }
+
   return (
-    <div aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center">
+    <div aria-hidden className="pointer-events-none absolute inset-0">
       {Array.from({ length: count }, (_, i) => (
         <span
           key={i}
-          className="absolute rounded-full border border-(--line2)"
+          className="attract-ring absolute rounded-full"
           /*
-           * Sized against the frame rather than in pixels, so the widest ring
-           * is always just inside it. An absolute width overshot on smaller
-           * canvases and only its top and bottom edges stayed on screen, which
-           * read as two drifting horizontal lines instead of a closing ring.
+           * Pinned to the centre and offset by half its own size, so the box
+           * stays centred on the prompt as it resizes. Centring it by flex
+           * instead would recompute the static position every frame of an
+           * animation that is changing exactly that.
            */
           style={{
-            width: '86%',
-            height: '74%',
-            animation: `attract-in ${seconds}s cubic-bezier(0.33, 0, 0.2, 1) ${(i * seconds) / count}s infinite`,
+            left: '50%',
+            top: '50%',
+            transform: 'translate(-50%, -50%)',
+            ['--aw0' as string]: `${from.w}px`,
+            ['--ah0' as string]: `${from.h}px`,
+            ['--aw1' as string]: `${pill.w}px`,
+            ['--ah1' as string]: `${pill.h}px`,
+            /*
+             * Linear, with the shape carried by the keyframe stops instead.
+             * A timing function is applied to every segment between stops, so
+             * easing each one made the travel pulse — slowing at each stop and
+             * setting off again — where a ripple should drift inward at a
+             * steady rate and only its brightness should change.
+             */
+            /*
+             * `backwards` is not optional here. Three of these four rings are
+             * staggered by a delay, and an element waiting on its delay renders
+             * with its *ordinary* styles, not the animation's first frame — so
+             * they sat at full size and full opacity, three hard-edged rings
+             * stacked on the canvas, for up to 3.75s after mount. The fill mode
+             * makes the 0% keyframe apply during the wait, which is where they
+             * are already invisible and already outside the frame.
+             */
+            animation: `attract-in ${seconds}s linear ${(i * seconds) / count}s infinite backwards`,
           }}
         />
       ))}

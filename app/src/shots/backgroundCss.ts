@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
-import { getWallpaper, gradientCss } from './wallpapers'
-import { getPresetPhoto } from './presetPhotos'
+import { getWallpaper, gradientCss } from '../lib/wallpapers'
+import { getPresetPhoto } from '../lib/presetPhotos'
 import { meshCss } from '../lib/meshGradient'
 import { ALPHA_CHECKER } from '../lib/checker'
 import type { ShotsBackground } from './types'

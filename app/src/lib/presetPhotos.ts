@@ -54,7 +54,7 @@ export const PRESET_PHOTOS: PresetPhoto[] = PRESET_PHOTO_CATEGORIES.flatMap((c) 
   buildCategory(c.id, c.label, c.count),
 )
 
-export function getPresetPhoto(id: string): PresetPhoto | null {
+export function getPresetPhoto(id: string | undefined): PresetPhoto | null {
   return PRESET_PHOTOS.find((p) => p.id === id) ?? null
 }
 

@@ -6,13 +6,12 @@ import type { ToolSection } from '../store'
  * draws the bodies, so the names and glyphs live here where both can read them
  * without either file importing the other.
  *
- * Ordered by how much work each one has to offer, not by where it sits in a
- * render pipeline. Camera is deliberately low: its whole panel is eight angle
- * presets and a straighten button, so a shot is usually one click and done,
- * and holding second place meant the sections you actually live in (the
- * backdrop, the lighting, the frame) all sat below something you had finished
- * with. Add stays last because inserting an overlay is the step after the shot
- * is composed, not part of composing it.
+ * Ordered the way a shot gets built, not the way it gets rendered: pick the
+ * device, decide the shape of the picture, dress and light the set, and only
+ * then stand somewhere and frame it. Camera sits fourth for that reason rather
+ * than because it has little to offer — it carries the stage, which is the
+ * longest-lived surface in the panel. Add stays last because inserting an
+ * overlay is the step after the shot is composed, not part of composing it.
  */
 export const SECTIONS: { id: ToolSection; label: string; icon: LucideIcon }[] = [
   { id: 'devices', label: 'Devices', icon: Box },

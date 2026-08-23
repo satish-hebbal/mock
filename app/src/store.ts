@@ -8,6 +8,8 @@ import { DEFAULT_LOOK, getLook } from './lib/studio'
 import { NEUTRAL_GRADE } from './lib/grade'
 import { coalesces, endEditRun } from './lib/history'
 import { framingForDevices } from './lib/runtime'
+import { WALLPAPERS } from './lib/wallpapers'
+import { PRESET_PHOTOS } from './lib/presetPhotos'
 import type {
   AssetMeta,
   AssetRuntime,
@@ -70,6 +72,8 @@ export function defaultProject(): ProjectDoc {
         imageAssetId: null,
         blur: 0,
         brightness: 1,
+        wallpaperId: WALLPAPERS[0].id,
+        photoId: PRESET_PHOTOS[0].id,
       },
       environment: { ...look.env },
       ground: { ...look.ground },
@@ -165,8 +169,17 @@ interface StudioState {
   arrangeDevices: (mode: 'row' | 'fan' | 'stack') => void
 
   // media
-  importMedia: (file: Blob, mime?: string) => Promise<void>
-  importMediaFromURL: (url: string) => Promise<void>
+  /**
+   * Bring a file in as an asset.
+   *
+   * `bind` (the default) also drops it onto the selected device's screen,
+   * which is what an upload from the Source panel or a drop on the canvas
+   * means. Backgrounds and logos pass `false`: they are not screen media, and
+   * binding them first only to unbind them afterwards destroyed whatever
+   * screenshot the device was already showing.
+   */
+  importMedia: (file: Blob, mime?: string, opts?: { bind?: boolean }) => Promise<void>
+  importMediaFromURL: (url: string, opts?: { bind?: boolean }) => Promise<void>
 
   // overlays
   addOverlay: (o: Overlay) => void
@@ -428,7 +441,16 @@ export const useStudio = create<StudioState>()(
       set((s) => {
         s.project.scene.environment = { ...look.env }
         s.project.scene.ground = { ...look.ground }
-        s.project.scene.background.type = 'studio'
+        /*
+         * The look owns the sweep, always — so switching setups and then going
+         * back to the paper gets the paper that setup was designed around.
+         *
+         * It no longer switches the backdrop *to* the sweep, though. Once the
+         * catalog grew photos and gradients, forcing the type here meant
+         * reaching for a different key light silently threw away the backdrop
+         * you had chosen, which is not what relighting means. The Background
+         * tab is one click away when you do want the paper back.
+         */
         s.project.scene.background.sweep = { ...look.sweep }
         // a look owns the mood effects, so switching setups never leaves the
         // last one's bloom behind; grain and fringe stay as the user set them
@@ -563,7 +585,7 @@ export const useStudio = create<StudioState>()(
       })
     },
 
-    importMedia: async (file, mime) => {
+    importMedia: async (file, mime, opts) => {
       const type = mime ?? (file instanceof File ? file.type : 'image/png')
       const meta = await metaForBlob(file, type)
       const id = `asset_${uid()}`
@@ -573,6 +595,7 @@ export const useStudio = create<StudioState>()(
       set((s) => {
         s.project.assets.push({ id, kind: meta.kind, mime: type, w: meta.w, h: meta.h })
         s.assets[id] = { url, kind: meta.kind }
+        if (opts?.bind === false) return
         const dev =
           s.project.scene.devices.find((d) => d.id === s.selectedDeviceId) ??
           s.project.scene.devices[0]
@@ -583,12 +606,12 @@ export const useStudio = create<StudioState>()(
       })
     },
 
-    importMediaFromURL: async (url) => {
+    importMediaFromURL: async (url, opts) => {
       const res = await fetch(url, { mode: 'cors' })
       if (!res.ok) throw new Error(`Fetch failed (${res.status})`)
       const blob = await res.blob()
       if (!/^(image|video)\//.test(blob.type)) throw new Error('URL is not an image or video')
-      await get().importMedia(blob, blob.type)
+      await get().importMedia(blob, blob.type, opts)
     },
 
     addOverlay: (o) => {

@@ -39,7 +39,6 @@ import type { AlignMode } from './align'
 
 const iconProps = { size: 12, strokeWidth: 1.75 } as const
 const secIcon = { size: 13, strokeWidth: 1.75 } as const
-const subIcon = { size: 11, strokeWidth: 1.75 } as const
 
 const SLIDER_ICON = {
   padding: () => <Frame {...iconProps} />,
@@ -201,20 +200,18 @@ function PlacementSection() {
           onChange={(radius) => setImage({ radius })}
         />
       )}
-
-      <div className="mt-2 border-t border-(--line) pt-2">
-        <SubHeading icon={<RotateCw {...subIcon} />}>Rotate</SubHeading>
-        <SliderRow
-          icon={<SLIDER_ICON.rotate />}
-          label="Rotate"
-          value={img.rotate}
-          min={-45}
-          max={45}
-          step={0.5}
-          onChange={(rotate) => setImage({ rotate })}
-        />
-      </div>
-
+      {/* in with the rest: turning the shot is the same kind of adjustment as
+          moving or scaling it, and a rule plus a heading that only repeated
+          the slider's own label made one row look like a separate decision */}
+      <SliderRow
+        icon={<SLIDER_ICON.rotate />}
+        label="Rotate"
+        value={img.rotate}
+        min={-45}
+        max={45}
+        step={0.5}
+        onChange={(rotate) => setImage({ rotate })}
+      />
     </Section>
   )
 }

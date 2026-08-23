@@ -27,6 +27,7 @@ import { quickCapture } from '../lib/export'
 import { ui } from '../lib/ui'
 import { quickCaptureShot } from '../shots/export'
 import { FeedbackDialog } from './FeedbackDialog'
+import { HoldButton } from './HoldButton'
 
 function IconBtn({
   icon: Icon,
@@ -115,19 +116,16 @@ function useInspectorActions() {
     setName: (v: string) =>
       shots ? useShots.getState().setName(v) : useStudio.getState().setProjectName(v),
     undo: () => (shots ? useShots.getState().undo() : useStudio.getState().undo()),
+    /*
+     * No confirm dialog: the button is held rather than clicked, so the intent
+     * is already proven by the time this runs. Both stores commit to history
+     * first, so undo is still the way back if the hold was a mistake — which
+     * the toast says, since there is no dialog left to say it in.
+     */
     startOver: () => {
-      void ui
-        .confirm({
-          title: 'Start over?',
-          body: 'This clears the canvas. You can undo it straight afterwards if you change your mind.',
-          confirmLabel: 'Start over',
-          danger: true,
-        })
-        .then((ok) => {
-          if (!ok) return
-          if (shots) useShots.getState().startOver()
-          else useStudio.getState().newProject()
-        })
+      if (shots) useShots.getState().startOver()
+      else useStudio.getState().newProject()
+      ui.toast('Started over. Undo (Ctrl+Z) brings it back')
     },
     redo: () => (shots ? useShots.getState().redo() : useStudio.getState().redo()),
     openExport: () =>
@@ -203,14 +201,13 @@ export function InspectorHeader() {
 
         <div className="flex-1" />
 
-        <button
-          onClick={a.startOver}
-          title="Clear the canvas and begin again"
-          className="flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-(--field) px-3 t-body-sm text-(--tx2) transition-colors hover:bg-(--field-h) hover:text-(--tx)"
-        >
-          <RotateCcw size={14} strokeWidth={2} />
-          Start over
-        </button>
+        <HoldButton
+          icon={<RotateCcw size={14} strokeWidth={2} />}
+          label="Start over"
+          hint="Clear the canvas and begin again"
+          onHold={a.startOver}
+          spinIcon
+        />
 
         {/*
           The overflow now carries save and feedback, so it is no longer

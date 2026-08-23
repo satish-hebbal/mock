@@ -353,6 +353,158 @@ body {
   }
 }
 
+/*
+ * The receipt for a completed press-and-hold.
+ *
+ * The button has been compressing under the hold, so it releases past its
+ * resting size before settling — the overshoot is what makes it read as
+ * something springing back rather than a style simply being removed. It has
+ * to be loud enough to notice, because what the button actually did happens
+ * somewhere else on screen.
+ */
+@keyframes hold-pop {
+  0% {
+    transform: scale(0.88);
+    box-shadow:
+      0 0 26px color-mix(in srgb, var(--danger) 60%, transparent),
+      inset 0 1px 4px rgb(0 0 0 / 0.35);
+  }
+  45% {
+    transform: scale(1.06);
+    box-shadow:
+      0 0 12px color-mix(in srgb, var(--danger) 24%, transparent),
+      inset 0 0 0 rgb(0 0 0 / 0);
+  }
+  72% {
+    transform: scale(0.985);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow:
+      0 0 0 transparent,
+      inset 0 0 0 rgb(0 0 0 / 0);
+  }
+}
+
+.hold-pop {
+  animation: hold-pop 420ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+/*
+ * The nudge that appears after a couple of plain clicks.
+ *
+ * Hold-to-confirm has no affordance until you have already failed at it: you
+ * click, nothing happens, and the button gives no reason. Rather than label it
+ * permanently — which would shout the instruction at everyone forever for the
+ * sake of the first thirty seconds — it says so only once it has watched you
+ * try the wrong thing twice.
+ *
+ * It springs up out from under the button and tucks itself back down, so it
+ * reads as the button answering rather than as a message arriving. Out is fast
+ * and overshoots; the pause is long enough to read three words; going back is
+ * quieter than coming out, because leaving should not ask for attention a
+ * second time.
+ */
+@keyframes hold-hint {
+  0% {
+    transform: translate(-50%, 105%) scale(0.7);
+    opacity: 0;
+  }
+  16% {
+    transform: translate(-50%, -42%) scale(1.08);
+    opacity: 1;
+  }
+  26% {
+    transform: translate(-50%, -18%) scale(0.97);
+  }
+  34% {
+    transform: translate(-50%, -28%) scale(1.01);
+  }
+  42% {
+    transform: translate(-50%, -24%) scale(1);
+  }
+  84% {
+    transform: translate(-50%, -24%) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, 105%) scale(0.86);
+    opacity: 0;
+  }
+}
+
+.hold-hint {
+  animation: hold-hint 2600ms cubic-bezier(0.2, 0, 0, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* the spring is the funny part, but the words are the useful part */
+  .hold-hint {
+    animation: none;
+    transform: translate(-50%, -24%);
+  }
+}
+
+/*
+ * The charge itself, and the reason it is three stacked gradients rather than
+ * a colour.
+ *
+ * A flat block sliding across reads as a loading bar — something being
+ * reported, not something being built. What it should read as is a pill
+ * filling with energy, so: a horizontal ramp that deepens toward the leading
+ * edge (the charge piling up ahead of itself), a vertical one that lights the
+ * top and shades the bottom (the pill is round, so its surface has to turn
+ * away from the light), and a hairline of white along the very top where a
+ * curved glossy thing catches it.
+ *
+ * The inset shadows sit it *into* the button rather than on top of it — light
+ * from above, occlusion where the fill meets the walls — which is what stops
+ * it looking like a rectangle pasted over a pill.
+ */
+.hold-fill {
+  background:
+    linear-gradient(
+      180deg,
+      rgb(255 255 255 / 0.2) 0%,
+      rgb(255 255 255 / 0.04) 42%,
+      rgb(0 0 0 / 0.12) 78%,
+      rgb(0 0 0 / 0.24) 100%
+    ),
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--danger) 26%, transparent) 0%,
+      color-mix(in srgb, var(--danger) 46%, transparent) 55%,
+      color-mix(in srgb, var(--danger) 78%, transparent) 88%,
+      color-mix(in srgb, var(--danger) 92%, white) 100%
+    );
+  /*
+   * The gloss spans the button; the ramp spans only what has been charged, so
+   * its hot end sits on the clipped front wherever that front currently is.
+   * The front is a curve, so the heat is a curve too, with no second element
+   * needed to fake one.
+   */
+  background-repeat: no-repeat;
+  background-size:
+    100% 100%,
+    var(--charge, 100%) 100%;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.22),
+    inset 0 -2px 3px rgb(0 0 0 / 0.28),
+    inset 2px 0 4px rgb(0 0 0 / 0.18);
+}
+
+
+/*
+ * Holding still has to work without motion — the fill is the only thing
+ * telling you how far along the commitment is, so it stays. Only the spring
+ * goes, since it is decoration on top of an action that has already happened.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .hold-pop {
+    animation-duration: 1ms;
+  }
+}
+
 @keyframes scrim-in {
   from {
     opacity: 0;
@@ -368,19 +520,67 @@ body {
  * thing stays on the compositor, and the ring is invisible at both ends so
  * it appears out of nowhere and vanishes into the pill instead of popping.
  */
+/*
+ * The ripple's own surface.
+ *
+ * A bare 1px hairline was too little to see at any opacity that did not also
+ * make it look like a border. Giving it a soft glow either side of the stroke
+ * — inset for the inner falloff, a matching one outside — means the wave has
+ * some thickness to it, so it can read clearly while the hard line at its
+ * centre stays quiet. Brightness comes from `--tx3` rather than a hairline
+ * token for the same reason: this is a thing moving through the canvas, not a
+ * division between two parts of it.
+ */
+.attract-ring {
+  border: 1px solid var(--tx3);
+  box-shadow:
+    inset 0 0 16px -6px var(--tx3),
+    0 0 12px -6px var(--tx3);
+}
+
 @keyframes attract-in {
+  /*
+   * Size, not scale, and that is the whole difference.
+   *
+   * A uniform scale can only shrink a shape toward a smaller copy of itself,
+   * so a ring that started at the frame's proportions ended at the frame's
+   * proportions — a small rounded rectangle hanging in the middle, far
+   * narrower than the pill and nothing like its silhouette. Interpolating
+   * width and height independently lets the shape *become* the prompt: it
+   * starts a little larger than the canvas and lands on exactly the pill's
+   * box, so the last frame of the ripple is the thing it was travelling to.
+   *
+   * Both ends come from the live measurements, so this stays true when the
+   * prompt's text or the canvas size changes.
+   */
   0% {
-    transform: scale(1);
+    width: var(--aw0);
+    height: var(--ah0);
     opacity: 0;
   }
+  /*
+   * Still nothing at 14%. The ring starts wider than the frame that clips it,
+   * so it is already travelling before any of it is on screen — otherwise
+   * fading up from nothing at the frame's own size looked like a hard border
+   * being switched on. By here it is fully enclosed and can be seen safely.
+   */
   14% {
+    opacity: 0;
+  }
+  32% {
+    opacity: 0.62;
+  }
+  60% {
     opacity: 0.5;
   }
-  78% {
-    opacity: 0.24;
+  /* thinning out as it closes, so it dissolves into the pill rather than
+     stopping dead on top of it */
+  88% {
+    opacity: 0.16;
   }
   100% {
-    transform: scale(0.2);
+    width: var(--aw1);
+    height: var(--ah1);
     opacity: 0;
   }
 }

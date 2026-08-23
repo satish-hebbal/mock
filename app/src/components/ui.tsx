@@ -102,10 +102,22 @@ export function UILayer() {
                   : 'border-(--line) bg-(--raised) text-(--tx2)'
               }`}
             >
-              <Icon
-                size={14}
-                className={`mt-px shrink-0 ${t.kind === 'success' ? 'text-(--success)' : ''}`}
-              />
+              {/*
+                The glyph is centred inside a box exactly one line tall, which
+                is what puts it on the text's optical centre instead of near
+                it. Aligning the icon itself left it riding high — a 14px glyph
+                at the top of a 21px line box sits 2.5px above the middle — and
+                the `mt-px` that used to be here only closed a seventh of that.
+                Deriving the box from `1lh` also means it stays right if the
+                type scale ever moves, which a hand-tuned nudge would not.
+
+                The row still starts at the top, so a message long enough to
+                wrap keeps the icon beside its *first* line rather than
+                drifting to the middle of the block.
+              */}
+              <span className="flex h-[1lh] shrink-0 items-center">
+                <Icon size={14} className={t.kind === 'success' ? 'text-(--success)' : ''} />
+              </span>
               <span>{t.message}</span>
             </div>
           )

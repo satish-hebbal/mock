@@ -32,11 +32,13 @@ const subIcon = { size: 11, strokeWidth: 1.75 } as const
 
 /** Backdrop names, so the Scene section can name what the toolbar picked. */
 const BG_LABEL: Record<BackgroundType, string> = {
+  studio: 'Studio sweep',
   solid: 'Solid color',
   gradient: 'Gradient',
+  wallpaper: 'Gradient preset',
   mesh: 'Mesh gradient',
+  photo: 'Photo',
   image: 'Image',
-  studio: 'Studio sweep',
   transparent: 'Transparent',
 }
 
@@ -254,18 +256,10 @@ function SceneSection() {
         </>
       )}
 
-      {bg.type === 'mesh' && (
-        <SliderRow
-          label="Blur"
-          value={bg.blur}
-          min={0}
-          max={60}
-          step={1}
-          onChange={(blur) => setBackground({ blur })}
-        />
-      )}
-
-      {bg.type === 'image' && (
+      {/* the backdrop finish, which the preview and the exporter both run over
+          whatever they just painted — so it is offered for every backdrop
+          rather than only the two that happen to be photographic */}
+      {bg.type !== 'transparent' && bg.type !== 'studio' && (
         <>
           <SliderRow label="Blur" value={bg.blur} min={0} max={60} step={1} onChange={(blur) => setBackground({ blur })} />
           <SliderRow
@@ -750,14 +744,27 @@ function OverlaysSection() {
 
 // ————— assembled inspector —————
 
+/*
+ * Ordered by what the panel is *about*, working outward from the subject.
+ *
+ * Source is the screenshot, 3D Devices is the thing holding it, and Camera is
+ * where you stand to look at the pair — those three are one continuous train
+ * of thought and now sit together. Scene dresses what is behind them, and
+ * Effects grades the finished picture, so both are later passes over a shot
+ * that already exists. Overlays stay last: they are added on top of a frame
+ * you have finished composing.
+ *
+ * 3D Devices used to sit below Effects, which put the device's own colour and
+ * transform two whole sections beneath the camera aiming at it.
+ */
 export function Inspector() {
   return (
     <>
       <SourceSection />
       <CameraSection />
+      <DevicesSection />
       <SceneSection />
       <EffectsSection />
-      <DevicesSection />
       <OverlaysSection />
     </>
   )

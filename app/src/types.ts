@@ -51,7 +51,15 @@ export interface CameraState {
   rotateY: number
 }
 
-export type BackgroundType = 'solid' | 'gradient' | 'mesh' | 'image' | 'studio' | 'transparent'
+export type BackgroundType =
+  | 'studio'
+  | 'solid'
+  | 'gradient'
+  | 'wallpaper'
+  | 'mesh'
+  | 'photo'
+  | 'image'
+  | 'transparent'
 
 export interface GradientSpec {
   kind: 'linear' | 'radial'
@@ -88,9 +96,20 @@ export interface BackgroundState {
   mesh: MeshSpec
   sweep: SweepSpec
   imageAssetId: string | null
-  /** blur px applied to image/mesh backgrounds */
+  /** blur px applied to the backdrop, measured at a 1280px-wide frame */
   blur: number
   brightness: number
+
+  /*
+   * The two catalog backdrops, shared with Shots. Optional so projects saved
+   * before they existed still load; every reader falls back to the first entry
+   * of the catalog, which is also what a fresh project starts on.
+   */
+
+  /** id into lib/wallpapers WALLPAPERS, used when type is 'wallpaper' */
+  wallpaperId?: string
+  /** id into lib/presetPhotos PRESET_PHOTOS, used when type is 'photo' */
+  photoId?: string
 }
 
 /**

@@ -1,5 +1,5 @@
 import { paintMeshGradient } from '../lib/meshGradient'
-import { getWallpaper } from './wallpapers'
+import { getWallpaper } from '../lib/wallpapers'
 import { computeLayout, perspectiveFor, type CardLayout } from './layout'
 import { portraitGeometry, portraitMaskGradient, portraitPasses } from './portrait'
 import { getCardStyle, stackShade } from './cardStyles'

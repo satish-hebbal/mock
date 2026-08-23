@@ -1,28 +1,50 @@
 import { DEFAULT_DEVICE_ID, isPickable } from './registry'
+import { clampCamera } from './camera'
 import type { CameraState, Keyframe, ProjectDoc } from '../types'
 
 // ————— Social / platform export sizes (PRD §6.8) —————
+
+/**
+ * Where a size is destined for.
+ *
+ * Thirteen names in one column is a list you read top to bottom every time,
+ * because "App Store 6.5″" and "LinkedIn" look equally likely until you have
+ * parsed both. You almost always arrive knowing the destination — shipping a
+ * listing, posting a clip — so grouping by it turns the search into picking a
+ * heading and then one of three.
+ */
+export type SizeGroup = 'Video' | 'Social' | 'App stores' | 'Web'
+
+/** The order the groups are listed in, widest audience first. */
+export const SIZE_GROUPS: SizeGroup[] = ['Video', 'Social', 'App stores', 'Web']
+
 export interface SizePreset {
   name: string
   width: number
   height: number
+  group: SizeGroup
 }
 
 export const SIZE_PRESETS: SizePreset[] = [
-  { name: 'Full HD 1920×1080', width: 1920, height: 1080 },
-  { name: '4K 3840×2160', width: 3840, height: 2160 },
-  { name: 'Square 1080×1080', width: 1080, height: 1080 },
-  { name: 'Story / Reel 1080×1920', width: 1080, height: 1920 },
-  { name: 'App Store 6.9″ 1290×2796', width: 1290, height: 2796 },
-  { name: 'App Store 6.5″ 1242×2688', width: 1242, height: 2688 },
-  { name: 'Play Store 1080×1920', width: 1080, height: 1920 },
-  { name: 'Product Hunt 1270×760', width: 1270, height: 760 },
-  { name: 'X / Twitter 1600×900', width: 1600, height: 900 },
-  { name: 'LinkedIn 1200×627', width: 1200, height: 627 },
-  { name: 'Open Graph 1200×630', width: 1200, height: 630 },
-  { name: 'YouTube Thumb 1280×720', width: 1280, height: 720 },
-  { name: 'Dribbble 1600×1200', width: 1600, height: 1200 },
+  { name: 'Full HD 1920×1080', width: 1920, height: 1080, group: 'Video' },
+  { name: '4K 3840×2160', width: 3840, height: 2160, group: 'Video' },
+  { name: 'YouTube Thumb 1280×720', width: 1280, height: 720, group: 'Video' },
+  { name: 'Square 1080×1080', width: 1080, height: 1080, group: 'Social' },
+  { name: 'Story / Reel 1080×1920', width: 1080, height: 1920, group: 'Social' },
+  { name: 'X / Twitter 1600×900', width: 1600, height: 900, group: 'Social' },
+  { name: 'LinkedIn 1200×627', width: 1200, height: 627, group: 'Social' },
+  { name: 'App Store 6.9″ 1290×2796', width: 1290, height: 2796, group: 'App stores' },
+  { name: 'App Store 6.5″ 1242×2688', width: 1242, height: 2688, group: 'App stores' },
+  { name: 'Play Store 1080×1920', width: 1080, height: 1920, group: 'App stores' },
+  { name: 'Open Graph 1200×630', width: 1200, height: 630, group: 'Web' },
+  { name: 'Product Hunt 1270×760', width: 1270, height: 760, group: 'Web' },
+  { name: 'Dribbble 1600×1200', width: 1600, height: 1200, group: 'Web' },
 ]
+
+/** A `SizePreset.name` with its trailing "1920×1080" stripped, e.g. "Full HD". */
+export function presetLabel(name: string): string {
+  return name.replace(/\s*\d+\s*[×x]\s*\d+$/, '').trim()
+}
 
 // ————— Frame shape —————
 
@@ -77,21 +99,226 @@ export function ratioLabel(width: number, height: number): string {
 }
 
 // ————— Camera angle presets (PRD §6.3) —————
+
+/**
+ * Where the presets sit on the rail, loosely by how safe they are.
+ *
+ * 'level' and 'studio' are the angles a catalogue asks for; 'cinematic' are
+ * the ones a film grammar names, borrowed because a product shot reads the
+ * same way a face does; 'wild' are deliberately badly hung. Grouping them
+ * matters at this length — twenty-odd unlabelled chips is a wall, and the
+ * difference between Packshot and Caligari is the whole point.
+ */
+export type CameraPresetGroup = 'level' | 'studio' | 'cinematic' | 'wild'
+
 export interface CameraPreset {
   name: string
+  group: CameraPresetGroup
+  /** what the angle is for, shown on hover */
+  note: string
   cam: Partial<CameraState>
 }
 
-export const CAMERA_PRESETS: CameraPreset[] = [
-  { name: 'Front', cam: { tiltX: 0, tiltY: 0, roll: 0, panX: 0, panY: 0 } },
-  { name: 'Hero', cam: { tiltX: -12, tiltY: 32, roll: 0 } },
-  { name: 'Angled L', cam: { tiltX: -6, tiltY: -35, roll: 0 } },
-  { name: 'Angled R', cam: { tiltX: -6, tiltY: 35, roll: 0 } },
-  { name: 'Isometric', cam: { tiltX: -30, tiltY: 45, roll: 0 } },
-  { name: 'Top-down', cam: { tiltX: -78, tiltY: 0, roll: 0 } },
-  { name: 'Low Hero', cam: { tiltX: 10, tiltY: 24, roll: 0 } },
-  { name: 'Dutch', cam: { tiltX: -8, tiltY: 22, roll: -8 } },
+export const CAMERA_PRESET_GROUPS: { id: CameraPresetGroup; label: string }[] = [
+  { id: 'level', label: 'Straight on' },
+  { id: 'studio', label: 'Studio' },
+  { id: 'cinematic', label: 'Cinematic' },
+  { id: 'wild', label: 'Off-kilter' },
 ]
+
+/*
+ * Sign conventions, since they are easy to get backwards: tiltX is where the
+ * lens stands relative to the subject's horizon, and a *negative* tiltX puts
+ * it above (a high angle, looking down). tiltY sweeps around, positive to the
+ * camera's right. `roll` cants the frame.
+ *
+ * Every preset carries its own lens, because half of what these names mean is
+ * focal length — a worm's eye that isn't wide doesn't tower, and a packshot
+ * that isn't long isn't neutral. Carrying it everywhere also stops a preset
+ * being a delta on the last one: click Fisheye and then Diamond and you get
+ * Diamond, not Diamond wearing a 15mm.
+ *
+ * `presetCamera()` is what makes that bearable — it trades the new focal
+ * length against distance, so the subject stays the size it already was and
+ * the only thing that changes is how much perspective there is.
+ */
+export const CAMERA_PRESETS: CameraPreset[] = [
+  // —— level: the informational angles ——
+  {
+    name: 'Front',
+    group: 'level',
+    note: 'Dead on and level. What a store listing wants.',
+    cam: { tiltX: 0, tiltY: 0, roll: 0, fov: 30 },
+  },
+  {
+    name: 'Three-Quarter',
+    group: 'level',
+    note: 'The 45° product standard: front, side and a little top all at once.',
+    cam: { tiltX: -8, tiltY: 45, roll: 0, fov: 28 },
+  },
+  {
+    name: 'Angled L',
+    group: 'level',
+    note: 'A gentle swing to the left.',
+    cam: { tiltX: -6, tiltY: -35, roll: 0, fov: 28 },
+  },
+  {
+    name: 'Angled R',
+    group: 'level',
+    note: 'A gentle swing to the right.',
+    cam: { tiltX: -6, tiltY: 35, roll: 0, fov: 28 },
+  },
+  {
+    name: 'Profile',
+    group: 'level',
+    note: 'Pure side-on. The angle that sells how thin something is.',
+    cam: { tiltX: 0, tiltY: 90, roll: 0, fov: 26 },
+  },
+  {
+    name: 'Back',
+    group: 'level',
+    note: 'Round the back, where the finish and the colour live.',
+    cam: { tiltX: -8, tiltY: 180, roll: 0, fov: 28 },
+  },
+
+  // —— studio: the conventions of a product set ——
+  {
+    name: 'Hero',
+    group: 'studio',
+    note: 'The house angle: a touch above, swung right, flattering everything.',
+    cam: { tiltX: -12, tiltY: 32, roll: 0, fov: 28 },
+  },
+  {
+    name: 'Low Hero',
+    group: 'studio',
+    note: 'A shade below the eyeline, so the product stands over the viewer.',
+    cam: { tiltX: 10, tiltY: 24, roll: 0, fov: 30 },
+  },
+  {
+    name: 'Packshot',
+    group: 'studio',
+    note: 'Long lens, almost no angle. Deliberately uneventful — the catalogue shot.',
+    cam: { tiltX: -4, tiltY: 12, roll: 0, fov: 20 },
+  },
+  {
+    name: 'Isometric',
+    group: 'studio',
+    note: 'Equal thirds of top, front and side — the angle app icons are drawn at.',
+    cam: { tiltX: -30, tiltY: 45, roll: 0, fov: 22 },
+  },
+  {
+    name: 'Tabletop',
+    group: 'studio',
+    note: 'Looking down at a desk, the way you actually see your own phone.',
+    cam: { tiltX: -52, tiltY: 20, roll: 0, fov: 34 },
+  },
+  {
+    /*
+     * The one preset that lays the set down as well as moving the lens.
+     * Devices stand upright, so a camera straight overhead sees the top edge
+     * of a phone and nothing else — the shot people mean by "flat lay" needs
+     * the subject on its back, which is what the scene rotation is for.
+     */
+    name: 'Flat Lay',
+    group: 'studio',
+    note: 'On its back, shot straight down. Everything reads as shape, nothing as depth.',
+    cam: { tiltX: -88, tiltY: 0, roll: 0, fov: 24, rotateX: -90 },
+  },
+
+  // —— cinematic: film grammar, borrowed ——
+  {
+    name: 'High Angle',
+    group: 'cinematic',
+    note: 'Well above and looking down. Diminishes whatever it frames.',
+    cam: { tiltX: -38, tiltY: 0, roll: 0, fov: 32 },
+  },
+  {
+    name: "Bird's Eye",
+    group: 'cinematic',
+    note: 'Far above but still swung round, so it reads as a set rather than a plan.',
+    cam: { tiltX: -68, tiltY: 28, roll: 0, fov: 30 },
+  },
+  {
+    name: 'Low Angle',
+    group: 'cinematic',
+    note: 'Under the eyeline, straight on. The power angle.',
+    cam: { tiltX: 26, tiltY: 0, roll: 0, fov: 34 },
+  },
+  {
+    name: "Worm's Eye",
+    group: 'cinematic',
+    note: 'Extreme low on a wide lens, pushed in close. It towers.',
+    cam: { tiltX: 58, tiltY: 14, roll: 0, fov: 58 },
+  },
+  {
+    name: 'Long Lens',
+    group: 'cinematic',
+    note: 'Telephoto from across the room: flat, undistorted, editorial.',
+    cam: { tiltX: -6, tiltY: 30, roll: 0, fov: 14 },
+  },
+
+  // —— wild: hung on purpose wrong ——
+  {
+    name: 'Dutch',
+    group: 'wild',
+    note: 'The canted frame. Just enough tilt to feel off.',
+    cam: { tiltX: -8, tiltY: 22, roll: -10, fov: 30 },
+  },
+  {
+    name: 'Hard Dutch',
+    group: 'wild',
+    note: 'Twice the cant, thrown the other way. Unsettled on purpose.',
+    cam: { tiltX: -16, tiltY: -40, roll: 26, fov: 38 },
+  },
+  {
+    name: 'Caligari',
+    group: 'wild',
+    note: 'German expressionism: wide, low, and badly hung. Nothing sits straight.',
+    cam: { tiltX: 8, tiltY: -55, roll: -34, fov: 54 },
+  },
+  {
+    name: 'Fisheye',
+    group: 'wild',
+    note: 'Right up against one corner on the widest lens the rig has. Everything splays.',
+    cam: { tiltX: 20, tiltY: 48, roll: 0, fov: 78 },
+  },
+  {
+    name: 'Corner Peek',
+    group: 'wild',
+    note: 'From under one corner, half turned away. Found-footage energy.',
+    cam: { tiltX: 34, tiltY: 70, roll: 12, fov: 62 },
+  },
+  {
+    name: 'Diamond',
+    group: 'wild',
+    note: 'Isometric, tipped onto its corner. Graphic rather than photographic.',
+    cam: { tiltX: -22, tiltY: 45, roll: 45, fov: 24 },
+  },
+]
+
+/**
+ * A preset's camera patch, worked out against the camera you have now.
+ *
+ * Changing the lens has to change the dolly with it, or it resizes the shot
+ * as a side effect: at a fixed distance a wider lens simply makes everything
+ * smaller, which reads as "it zoomed out", not "it went wide". Trading focal
+ * length against distance to hold the subject the same size is the move a
+ * photographer makes by hand, and it's what leaves only the thing the preset
+ * is actually about — how much perspective there is — different afterwards.
+ */
+export function presetCamera(preset: CameraPreset, current: CameraState): Partial<CameraState> {
+  /*
+   * Scene rotation is declared as zero unless a preset wants it, so that
+   * leaving Flat Lay stands the set back up. Pan is left alone on purpose:
+   * where you have moved the crop to is composition, not angle, and
+   * "Snap straight-on" is there when you do want it back at the middle.
+   */
+  const patch: Partial<CameraState> = { rotateX: 0, rotateY: 0, ...preset.cam }
+  if (patch.fov === undefined || patch.fov === current.fov) return patch
+  const half = (deg: number) => Math.tan((deg * Math.PI) / 360)
+  patch.zoom = clampCamera('zoom', current.zoom * (half(patch.fov) / half(current.fov)))
+  return patch
+}
 
 // ————— Animation presets (PRD §6.9) — drop keyframes on the timeline —————
 export interface AnimationPreset {

@@ -1,30 +1,17 @@
 import type { ReactNode } from 'react'
-import {
-  Ban,
-  Blend,
-  Move3d,
-  Rotate3d,
-  Scale3d,
-  Smartphone,
-  type LucideIcon,
-} from 'lucide-react'
+import { Blend, Smartphone, type LucideIcon } from 'lucide-react'
 import { useStudio } from '../store'
 import { SECTIONS } from '../lib/sections'
 
 /*
  * The spine of the editor. Every choice you make *about the scene* enters from
- * here — the section buttons open the panel beside them, and the transform
- * tools sit below as their own group. The logo is the only thing that leaves
- * the workspace, so it drops the app menu down over the canvas instead of
- * spending a column on links you press twice a session.
+ * here, and each section button opens the panel beside it. The transform tools
+ * used to sit below in their own group and have moved to a floating bar over
+ * the canvas — they act on the thing you are looking at rather than on a
+ * panel, so they belong next to it. The logo is the only thing that leaves the
+ * workspace, so it drops the app menu down over the canvas instead of spending
+ * a column on links you press twice a session.
  */
-
-const GIZMOS = [
-  ['off', 'No gizmo', Ban],
-  ['translate', 'Move (G)', Move3d],
-  ['rotate', 'Rotate (R)', Rotate3d],
-  ['scale', 'Scale (S)', Scale3d],
-] as const
 
 /** Shots splits the same way its reference tools do: the subject, then the canvas. */
 const SHOTS_SECTIONS = [
@@ -73,7 +60,6 @@ export function ToolRail() {
   const section = useStudio((s) => s.toolSection)
   const shotsSection = useStudio((s) => s.shotsSection)
   const panelOpen = useStudio((s) => s.toolPanelOpen)
-  const gizmo = useStudio((s) => s.gizmo)
   const st = useStudio.getState
 
   const studio = mode === 'studio'
@@ -113,17 +99,6 @@ export function ToolRail() {
               </RailButton>
             )
           })}
-
-          <RailDivider />
-          {GIZMOS.map(([id, label, Icon]) => (
-            <RailButton
-              key={id}
-              icon={Icon}
-              title={label}
-              active={gizmo === id}
-              onClick={() => st().setGizmo(id)}
-            />
-          ))}
         </>
       )}
 

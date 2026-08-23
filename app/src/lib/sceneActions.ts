@@ -10,17 +10,17 @@ import type { Overlay, TextOverlay } from '../types'
 const uid = () => crypto.randomUUID()
 
 /**
- * Import a file and hand back the new asset, undoing the auto-bind to the
- * selected device — backgrounds and logos are not screen media.
+ * Import a file and hand back the new asset without touching any device.
+ *
+ * Backgrounds and logos are not screen media, so they never claim a screen.
+ * This used to import normally and unbind afterwards, which quietly threw
+ * away the screenshot the selected device was already showing — picking a
+ * backdrop blanked the phone.
  */
 async function importUnboundAsset(file: Blob) {
   const before = new Set(useStudio.getState().project.assets.map((a) => a.id))
-  await useStudio.getState().importMedia(file)
-  const added = useStudio.getState().project.assets.find((a) => !before.has(a.id))
-  if (!added) return null
-  const dev = useStudio.getState().project.scene.devices.find((d) => d.screen.assetId === added.id)
-  if (dev) useStudio.getState().updateDeviceScreen(dev.id, { assetId: null })
-  return added
+  await useStudio.getState().importMedia(file, undefined, { bind: false })
+  return useStudio.getState().project.assets.find((a) => !before.has(a.id)) ?? null
 }
 
 /** Pick an image and use it as the scene background. */

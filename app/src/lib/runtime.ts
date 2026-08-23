@@ -46,7 +46,13 @@ export function setEditorObjectsVisible(visible: boolean) {
   for (const o of rt.editorOnly) o.visible = visible
 }
 
-const BASE_DIST = 7
+/**
+ * How far the camera sits from its target at zoom 1. Every reader of the
+ * orbital camera — the render loop here, and the camera stage's schematic —
+ * measures dolly as `BASE_DIST / zoom`, so the two cannot disagree about where
+ * the lens is.
+ */
+export const BASE_DIST = 7
 
 /**
  * Pan + zoom that brings every device into frame, leaving the angle alone.

@@ -1,6 +1,8 @@
 import { Vector2 } from 'three'
 import { applyAtTime, renderFrame, rt, setEditorObjectsVisible } from './runtime'
 import { paintMeshGradient } from './meshGradient'
+import { getWallpaper } from './wallpapers'
+import { getPresetPhoto } from './presetPhotos'
 import { gradeFilter } from './grade'
 import { rgba } from './color'
 import type { AssetRuntime, BackgroundState, Overlay, ProjectDoc, SweepSpec } from '../types'
@@ -73,6 +75,25 @@ function paintSweep(ctx: CanvasRenderingContext2D, w: number, h: number, s: Swee
   }
 }
 
+/**
+ * Fill the frame with an image, cropped to cover. Shared by the uploaded
+ * backdrop and the shipped photo presets so the two crop identically.
+ */
+async function drawCover(ctx: CanvasRenderingContext2D, w: number, h: number, src: string | null) {
+  if (!src) {
+    ctx.fillStyle = '#111'
+    ctx.fillRect(0, 0, w, h)
+    return
+  }
+  const img = new Image()
+  img.src = src
+  await img.decode()
+  const scale = Math.max(w / img.naturalWidth, h / img.naturalHeight)
+  const dw = img.naturalWidth * scale
+  const dh = img.naturalHeight * scale
+  ctx.drawImage(img, (w - dw) / 2, (h - dh) / 2, dw, dh)
+}
+
 async function paintBackground(
   ctx: CanvasRenderingContext2D,
   w: number,
@@ -102,27 +123,33 @@ async function paintBackground(
         paintLinearGradient(ctx, w, h, bg.gradient.angle, bg.gradient.from, bg.gradient.to)
       }
       break
+    case 'wallpaper': {
+      const g = getWallpaper(bg.wallpaperId).gradient
+      if (g.kind === 'radial') {
+        const rg = ctx.createRadialGradient(w / 2, h * 0.4, 0, w / 2, h * 0.4, Math.max(w, h) * 0.75)
+        rg.addColorStop(0, g.from)
+        rg.addColorStop(1, g.to)
+        ctx.fillStyle = rg
+        ctx.fillRect(0, 0, w, h)
+      } else {
+        paintLinearGradient(ctx, w, h, g.angle, g.from, g.to)
+      }
+      break
+    }
     case 'mesh':
       paintMeshGradient(ctx, w, h, bg.mesh)
       break
     case 'studio':
       paintSweep(ctx, w, h, bg.sweep)
       break
+    case 'photo': {
+      const photo = getPresetPhoto(bg.photoId)
+      await drawCover(ctx, w, h, photo?.src ?? null)
+      break
+    }
     case 'image': {
       const asset = bg.imageAssetId ? assets[bg.imageAssetId] : null
-      if (!asset) {
-        ctx.fillStyle = '#111'
-        ctx.fillRect(0, 0, w, h)
-        break
-      }
-      const img = new Image()
-      img.src = asset.url
-      await img.decode()
-      // cover
-      const scale = Math.max(w / img.naturalWidth, h / img.naturalHeight)
-      const dw = img.naturalWidth * scale
-      const dh = img.naturalHeight * scale
-      ctx.drawImage(img, (w - dw) / 2, (h - dh) / 2, dw, dh)
+      await drawCover(ctx, w, h, asset?.url ?? null)
       break
     }
   }

@@ -1,12 +1,18 @@
-import type { ShotsGradient } from './types'
+import type { GradientSpec } from '../types'
 
-// Curated background "wallpapers" (shots.so-style one-click presets).
-// Kept as CSS-expressible gradients so preview and canvas export match exactly.
+/*
+ * Curated background gradients, kept as CSS-expressible specs so a preview and
+ * a canvas repaint of the same one match exactly.
+ *
+ * Shared ground: Shots offers these as its "Presets", and Studio offers the
+ * same catalog behind its Background tab. One list, so a backdrop someone
+ * picked in one editor is nameable in the other.
+ */
 
 export interface Wallpaper {
   id: string
   name: string
-  gradient: ShotsGradient
+  gradient: GradientSpec
 }
 
 export const WALLPAPERS: Wallpaper[] = [
@@ -28,7 +34,8 @@ export const WALLPAPERS: Wallpaper[] = [
   { id: 'ice', name: 'Ice', gradient: { kind: 'linear', angle: 135, from: '#e0eafc', to: '#cfdef3' } },
 ]
 
-export function getWallpaper(id: string): Wallpaper {
+/** Look up a gradient by id, falling back to the first — which is also the default. */
+export function getWallpaper(id: string | undefined): Wallpaper {
   return WALLPAPERS.find((w) => w.id === id) ?? WALLPAPERS[0]
 }
 
@@ -49,7 +56,7 @@ export const SOLID_COLORS: string[] = [
 ]
 
 /** CSS background string for a gradient spec (preview parity with canvas export). */
-export function gradientCss(g: ShotsGradient): string {
+export function gradientCss(g: GradientSpec): string {
   return g.kind === 'radial'
     ? `radial-gradient(circle at 50% 40%, ${g.from}, ${g.to})`
     : `linear-gradient(${g.angle}deg, ${g.from}, ${g.to})`

@@ -54,6 +54,30 @@ function RailDivider() {
   return <span className="my-1.5 h-px w-6 shrink-0 bg-(--line)" />
 }
 
+/*
+ * The site mark, drawn inline rather than loaded as an image so it takes
+ * currentColor and dims with the rest of the rail in either theme.
+ */
+function SiteMark({ size = 16 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 645 614"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M645 129C645 148.882 628.882 165 609 165H531C511.118 165 495 181.118 495 201V263C495 282.882 511.118 299 531 299H609C628.882 299 645 315.118 645 335V428C645 447.882 628.882 464 609 464H531C511.118 464 495 480.118 495 500V578C495 597.882 478.882 614 459 614H366C346.118 614 330 597.882 330 578V500C330 480.118 313.882 464 294 464H201C181.118 464 165 480.118 165 500V578C165 597.882 148.882 614 129 614H36C16.1177 614 0 597.882 0 578V485C0 465.118 16.1177 449 36 449H129C148.882 449 165 432.882 165 413V350C165 330.118 148.882 314 129 314H36C16.1177 314 0 297.882 0 278V185C0 165.118 16.1178 149 36 149H444C463.882 149 480 132.882 480 113V36C480 16.1178 496.118 0 516 0H645V129ZM330 413C330 432.882 346.118 449 366 449H444C463.882 449 480 432.882 480 413V350C480 330.118 463.882 314 444 314H366C346.118 314 330 330.118 330 350V413Z"
+        fill="currentColor"
+      />
+    </svg>
+  )
+}
+
 export function ToolRail() {
   const mode = useStudio((s) => s.mode)
   const sheetOpen = useStudio((s) => s.sheetOpen)
@@ -125,6 +149,22 @@ export function ToolRail() {
       )}
 
       <div className="flex-1" />
+
+      {/*
+       * The one link that leaves for the web, so it sits where nothing else
+       * competes for the eye: foot of the rail, tertiary ink until you reach
+       * for it.
+       */}
+      <a
+        href="https://www.satishhebbal.design/about"
+        target="_blank"
+        rel="noreferrer noopener"
+        title="Built by Satish Hebbal"
+        aria-label="Built by Satish Hebbal, opens satishhebbal.design in a new tab"
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-(--tx3) transition-colors hover:bg-(--panel3) hover:text-(--tx)"
+      >
+        <SiteMark />
+      </a>
     </aside>
   )
 }

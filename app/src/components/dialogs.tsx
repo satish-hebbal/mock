@@ -376,7 +376,7 @@ export function ShortcutsDialog() {
               {/* the mode a group applies to, so nothing looks broken in the other one */}
               {g.scope !== 'global' && g.scope !== mode && (
                 <span className="rounded-xs bg-(--panel3) px-1.5 py-0.5 t-caption text-(--tx3)">
-                  {g.scope === 'studio' ? '3D Studio' : 'Shots'}
+                  {g.scope === 'studio' ? '3D Studio' : g.scope === 'shots' ? 'Shots' : 'Draw'}
                 </span>
               )}
             </p>

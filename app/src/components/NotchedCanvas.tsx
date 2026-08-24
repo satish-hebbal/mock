@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { FRAME_RADIUS, fitsNotch, framePath, notchCenter } from '../lib/notch'
+import { FRAME_RADIUS, NOTCH, fitsNotch, framePath, notchCenter, type NotchGeom } from '../lib/notch'
 import { GizmoBar } from './GizmoBar'
 
 /*
@@ -12,7 +12,20 @@ import { GizmoBar } from './GizmoBar'
  * because a child of the clipped layer would be cut away by the very hole it
  * is meant to occupy.
  */
-export function NotchedCanvas({ children }: { children: ReactNode }) {
+export function NotchedCanvas({
+  children,
+  notch = NOTCH,
+  bar,
+  overlay,
+}: {
+  children: ReactNode
+  /** the hole to cut, sized around whatever row is going in it */
+  notch?: NotchGeom
+  /** what sits in the hole; Studio's transform tools by default */
+  bar?: (p: { notched: boolean; centerX: number; depth: number }) => ReactNode
+  /** anything else that floats over the canvas but outside the clip */
+  overlay?: ReactNode
+}) {
   const ref = useRef<HTMLDivElement>(null)
   const [box, setBox] = useState({ w: 0, h: 0 })
 
@@ -25,11 +38,11 @@ export function NotchedCanvas({ children }: { children: ReactNode }) {
   }, [])
 
   const measured = box.w > 0 && box.h > 0
-  const notched = measured && fitsNotch(box.w, box.h)
+  const notched = measured && fitsNotch(box.w, box.h, notch)
   // the clip runs on the true edge; the stroke half a pixel inside it, so a
   // 1px line lands on the pixel instead of straddling the boundary
-  const path = measured ? framePath(box.w, box.h) : ''
-  const edge = measured ? framePath(box.w, box.h, 0.5) : ''
+  const path = measured ? framePath(box.w, box.h, 0, notch) : ''
+  const edge = measured ? framePath(box.w, box.h, 0.5, notch) : ''
 
   return (
     <div ref={ref} className="relative min-h-0 min-w-0 flex-1">
@@ -64,7 +77,12 @@ export function NotchedCanvas({ children }: { children: ReactNode }) {
         </svg>
       )}
 
-      <GizmoBar notched={notched} centerX={measured ? notchCenter(box.w) : 0} />
+      {bar ? (
+        bar({ notched, centerX: measured ? notchCenter(box.w) : 0, depth: notch.depth })
+      ) : (
+        <GizmoBar notched={notched} centerX={measured ? notchCenter(box.w) : 0} />
+      )}
+      {overlay}
     </div>
   )
 }

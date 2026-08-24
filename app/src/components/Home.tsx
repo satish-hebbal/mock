@@ -7,7 +7,7 @@ export function Home() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="mx-auto flex min-h-full max-w-3xl flex-col justify-center px-8 py-16">
+      <div className="mx-auto flex min-h-full max-w-5xl flex-col justify-center px-8 py-16">
         {/* brand */}
         <div className="mb-10 flex flex-col items-center text-center">
           <Mascot size={128} className="mb-4" />
@@ -18,7 +18,8 @@ export function Home() {
         </div>
 
         {/* tools */}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {/* one row: three tools sit across, with room to read the taglines */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           {TOOLS.map((t) => (
             <button
               key={t.name}

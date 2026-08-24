@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { SQUEEZE, charge, useHold } from '../lib/hold'
 
 /*
  * A button you have to mean.
@@ -21,43 +22,6 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
  * without it the action fires with no acknowledgement at all, since the thing
  * it did is off in another panel.
  */
-
-/** How long the press has to be held. Long enough to be a decision. */
-const HOLD_MS = 1500
-/** How far the contents compress at full charge. */
-const SQUEEZE = 0.12
-
-/**
- * A press shorter than this was a click, not an abandoned hold.
- *
- * Someone who held for a second and let go has understood the control and
- * changed their mind; they do not need telling. This only wants to catch the
- * press-and-release that expects a button to fire.
- */
-const TAP_MS = 400
-/** Clicks before the hint shows. One is a slip; two is a misunderstanding. */
-const TAPS_BEFORE_HINT = 2
-/** Clicks further apart than this are unrelated, so the count starts over. */
-const TAP_WINDOW_MS = 4000
-
-/**
- * The shape of the charge: creeping at first, then running away with itself.
- *
- * Linear was the honest readout and the wrong feeling: a constant crawl reads
- * as a progress bar being reported to you, when what this wants to be is
- * something winding up. Accelerating gives it that: the last third arrives in
- * a rush, so the moment it fires is the peak of a build rather than the end of
- * a wait.
- *
- * The exponent is the whole argument. Squared is the textbook ease-in and it
- * sat dead for the first half a second, which is exactly the window where the
- * fill has to prove holding is doing something or you let go. At 1.75 there is
- * visible travel from the first frames and the acceleration still lands.
- *
- * Only the *look* is curved. Completion is still keyed off raw elapsed time,
- * so the hold takes the 1500ms it says it does either way.
- */
-const charge = (t: number) => t ** 1.75
 
 /** Points sampled down the edge. Enough that the curve reads as a curve. */
 const EDGE_STEPS = 20
@@ -144,8 +108,6 @@ function chargeFront(p: number, amp: number): { clip: string; reach: number } {
   return { clip: `polygon(0% 0%, ${edge.join(', ')}, 0% 100%)`, reach: centre + Math.max(0, bow) }
 }
 
-type Phase = 'idle' | 'holding' | 'fired'
-
 export function HoldButton({
   icon,
   label,
@@ -170,14 +132,11 @@ export function HoldButton({
   spinIcon?: boolean
   className?: string
 }) {
-  const [progress, setProgress] = useState(0)
-  const [phase, setPhase] = useState<Phase>('idle')
+  const { progress, phase, nudge, clearNudge, reset, handlers } = useHold(onHold)
   /* the bow is a share of the width but is drawn across the height, so it can
      only be worked out from the box the button actually occupies */
   const btnRef = useRef<HTMLButtonElement>(null)
   const [bow, setBow] = useState(0)
-  const [nudge, setNudge] = useState(false)
-  const taps = useRef({ n: 0, at: 0 })
   /*
    * Completed holds, and the reason the icon never rewinds.
    *
@@ -189,68 +148,6 @@ export function HoldButton({
    * animate. Abandoning still unwinds, because that genuinely is going back.
    */
   const [turns, setTurns] = useState(0)
-  const raf = useRef(0)
-  const start = useRef(0)
-  /* keydown repeats while a key is held, so the first one owns the charge */
-  const keyHeld = useRef(false)
-  /* read by the handlers, which would otherwise close over a stale phase */
-  const phaseRef = useRef<Phase>('idle')
-  phaseRef.current = phase
-
-  const stop = useCallback(() => {
-    cancelAnimationFrame(raf.current)
-    raf.current = 0
-  }, [])
-
-  const cancel = useCallback(() => {
-    keyHeld.current = false
-    stop()
-    /*
-     * Letting go *after* a hold completes is not an abandonment. The pointer is
-     * still down at the moment it fires, so the release that follows would
-     * otherwise land here and reset the state out from under the pop, the
-     * animation would be cut off a frame or two in, every single time.
-     */
-    if (phaseRef.current === 'fired') return
-
-    /*
-     * A release this early is someone clicking a button, so start counting.
-     * Only while actually holding: `cancel` also runs for a stray pointerup
-     * and on window blur, neither of which is a click at this control.
-     */
-    if (phaseRef.current === 'holding' && performance.now() - start.current < TAP_MS) {
-      const now = performance.now()
-      const t = taps.current
-      t.n = now - t.at > TAP_WINDOW_MS ? 1 : t.n + 1
-      t.at = now
-      if (t.n >= TAPS_BEFORE_HINT) {
-        t.n = 0
-        setNudge(true)
-      }
-    }
-
-    setPhase('idle')
-    setProgress(0)
-  }, [stop])
-
-  const begin = useCallback(() => {
-    if (raf.current) return
-    setPhase('holding')
-    start.current = performance.now()
-    const tick = (now: number) => {
-      const p = Math.min(1, (now - start.current) / HOLD_MS)
-      setProgress(p)
-      if (p < 1) {
-        raf.current = requestAnimationFrame(tick)
-        return
-      }
-      stop()
-      keyHeld.current = false
-      setPhase('fired')
-      onHold()
-    }
-    raf.current = requestAnimationFrame(tick)
-  }, [onHold, stop])
 
   useEffect(() => {
     const el = btnRef.current
@@ -262,16 +159,6 @@ export function HoldButton({
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
-
-  // a hold interrupted by the tab going away should not survive the trip
-  useEffect(() => {
-    const onBlur = () => cancel()
-    window.addEventListener('blur', onBlur)
-    return () => {
-      window.removeEventListener('blur', onBlur)
-      cancelAnimationFrame(raf.current)
-    }
-  }, [cancel])
 
   const fired = phase === 'fired'
   const holding = phase === 'holding'
@@ -324,7 +211,7 @@ export function HoldButton({
       {nudge && (
         <span
           aria-hidden
-          onAnimationEnd={() => setNudge(false)}
+          onAnimationEnd={clearNudge}
           className="hold-hint pointer-events-none absolute bottom-full left-1/2 z-0 whitespace-nowrap rounded-full border border-(--line) bg-(--raised) px-2.5 py-1 t-caption text-(--tx2)"
         >
           Press and hold
@@ -332,31 +219,12 @@ export function HoldButton({
       )}
       <button
         ref={btnRef}
-      onPointerDown={(e) => {
-        // primary button only; a right-click should not arm anything
-        if (e.button !== 0) return
-        e.currentTarget.setPointerCapture(e.pointerId)
-        begin()
-      }}
-      onPointerUp={cancel}
-      onPointerCancel={cancel}
-      /* keyboard parity: hold Space or Enter, release to abandon */
-      onKeyDown={(e) => {
-        if (e.key !== ' ' && e.key !== 'Enter') return
-        e.preventDefault()
-        if (keyHeld.current) return
-        keyHeld.current = true
-        begin()
-      }}
-      onKeyUp={(e) => {
-        if (e.key === ' ' || e.key === 'Enter') cancel()
-      }}
+      {...handlers}
       onAnimationEnd={() => {
         // bank the revolution as the charge resets, so the two cancel exactly
         // and the arrow does not move on this frame
         setTurns((t) => (t + 1) % 1000)
-        setPhase('idle')
-        setProgress(0)
+        reset()
       }}
       style={{ boxShadow: pressure }}
       title={`${hint} (press and hold)`}

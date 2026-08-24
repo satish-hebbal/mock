@@ -55,18 +55,44 @@ export const NOTCH_GAP = 4
 /** Air between the button row and the walls of the pocket it sits in. */
 export const NOTCH_PAD = 6
 
-const BUTTONS = 4
+/** A hairline divider inside the row: one pixel, with the usual gap after it. */
+export const NOTCH_DIVIDER = 1
 
-export const NOTCH = {
+export interface NotchGeom {
   /** width of the straight-walled part; the mouth is this plus two fillets */
-  width: BUTTONS * NOTCH_BUTTON + (BUTTONS - 1) * NOTCH_GAP + 2 * NOTCH_PAD,
+  width: number
   /** how far it hangs into the canvas */
-  depth: NOTCH_BUTTON + 2 * NOTCH_PAD,
-  /** concentric with the button corners it wraps: 8 of button + 6 of air */
-  radius: BUTTON_RADIUS + NOTCH_PAD,
+  depth: number
+  /** concentric with the button corners it wraps */
+  radius: number
   /** the roll where the notch meets the top edge, flaring the mouth open */
-  fillet: FRAME_RADIUS,
-} as const
+  fillet: number
+}
+
+/**
+ * Size a pocket around the row that will sit in it.
+ *
+ * The comment at the top of this file says the pocket is sized around the row
+ * rather than the row nudged to fit the pocket, and that only stays true if the
+ * count is an argument. Studio's four transform tools and Draw's dozen-odd
+ * drawing tools want very different holes cut from the same shape.
+ */
+export function notchFor(buttons: number, dividers = 0): NotchGeom {
+  const items = buttons + dividers
+  return {
+    width:
+      buttons * NOTCH_BUTTON +
+      dividers * NOTCH_DIVIDER +
+      (items - 1) * NOTCH_GAP +
+      2 * NOTCH_PAD,
+    depth: NOTCH_BUTTON + 2 * NOTCH_PAD,
+    radius: BUTTON_RADIUS + NOTCH_PAD,
+    fillet: FRAME_RADIUS,
+  }
+}
+
+/** Studio's, and the default everything below falls back to. */
+export const NOTCH: NotchGeom = notchFor(4)
 
 /*
  * The lone button in the top-right corner, derived rather than placed by eye.
@@ -94,9 +120,10 @@ export const FRAME_INSET = FRAME_RADIUS - BUTTON_RADIUS
  * path with a notch wider than its own box would fold inside out, and silently
  * drawing that is worse than dropping the flourish.
  */
-const MIN_WIDTH = NOTCH.width + 2 * (NOTCH.fillet + FRAME_RADIUS) + 48
+const minWidth = (n: NotchGeom) => n.width + 2 * (n.fillet + FRAME_RADIUS) + 48
 
-export const fitsNotch = (w: number, h: number) => w >= MIN_WIDTH && h >= NOTCH.depth * 3
+export const fitsNotch = (w: number, h: number, n: NotchGeom = NOTCH) =>
+  w >= minWidth(n) && h >= n.depth * 3
 
 /**
  * Where the notch is centred, snapped to a whole pixel.
@@ -118,7 +145,7 @@ export const notchCenter = (w: number) => Math.round(w / 2)
  * and the notch's concave ones open up, because the material is receding from
  * them rather than advancing.
  */
-export function framePath(w: number, h: number, inset = 0): string {
+export function framePath(w: number, h: number, inset = 0, n: NotchGeom = NOTCH): string {
   const r = Math.max(0, FRAME_RADIUS - inset)
   const left = inset
   const top = inset
@@ -127,7 +154,7 @@ export function framePath(w: number, h: number, inset = 0): string {
 
   return [
     `M ${left + r} ${top}`,
-    ...(fitsNotch(w, h) ? notchSegments(w, inset) : []),
+    ...(fitsNotch(w, h, n) ? notchSegments(w, inset, n) : []),
     `H ${right - r}`,
     `A ${r} ${r} 0 0 1 ${right} ${top + r}`,
     `V ${bottom - r}`,
@@ -140,13 +167,13 @@ export function framePath(w: number, h: number, inset = 0): string {
   ].join(' ')
 }
 
-function notchSegments(w: number, inset: number): string[] {
-  const nr = NOTCH.radius + inset
-  const f = Math.max(0, NOTCH.fillet - inset)
+function notchSegments(w: number, inset: number, n: NotchGeom): string[] {
+  const nr = n.radius + inset
+  const f = Math.max(0, n.fillet - inset)
   const top = inset
-  const a = notchCenter(w) - NOTCH.width / 2 - inset
-  const b = notchCenter(w) + NOTCH.width / 2 + inset
-  const floor = NOTCH.depth + inset
+  const a = notchCenter(w) - n.width / 2 - inset
+  const b = notchCenter(w) + n.width / 2 + inset
+  const floor = n.depth + inset
 
   return [
     `H ${a - f}`,

@@ -4,7 +4,7 @@
  * (or miss one we do) as long as both sides are edited together.
  */
 
-export type ShortcutScope = 'global' | 'studio' | 'shots'
+export type ShortcutScope = 'global' | 'studio' | 'shots' | 'draw'
 
 export interface Shortcut {
   /** key combo, or a mouse gesture written out */
@@ -25,6 +25,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     items: [
       { keys: 'Alt+1', desc: 'Switch to 3D Studio' },
       { keys: 'Alt+2', desc: 'Switch to Shots' },
+      { keys: 'Alt+3', desc: 'Switch to Draw' },
       { keys: 'Ctrl+Z', desc: 'Undo' },
       { keys: 'Ctrl+Shift+Z / Ctrl+Y', desc: 'Redo' },
       { keys: 'E', desc: 'Export dialog' },
@@ -100,6 +101,40 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { keys: '+ / −', desc: 'Scale the shot up / down' },
       { keys: ', / .', desc: 'Rotate 1° left / right' },
       { keys: 'Delete', desc: 'Remove the selected screen' },
+    ],
+  },
+  {
+    title: 'Draw · tools',
+    scope: 'draw',
+    items: [
+      { keys: '1 … 0', desc: 'Select, rectangle, diamond, ellipse, arrow, line, draw, text, image, eraser' },
+      { keys: 'V / R / D / O', desc: 'Selection, rectangle, diamond, ellipse' },
+      { keys: 'A / L / X / T', desc: 'Arrow, line, freehand, text' },
+      { keys: 'E', desc: 'Eraser (Export moves to Ctrl+Shift+E on this canvas)' },
+      { keys: 'H / Space', desc: 'Pan the canvas' },
+      { keys: 'P / N / F', desc: 'Pencil, pen, fineliner' },
+      { keys: 'M / G / B / K', desc: 'Marker, highlighter, brush, fountain pen' },
+      { keys: '[ / ]', desc: 'Nib smaller / bigger' },
+    ],
+  },
+  {
+    title: 'Draw · canvas',
+    scope: 'draw',
+    items: [
+      { keys: 'Ctrl+Z', desc: 'Undo' },
+      { keys: 'Ctrl+Shift+Z / Ctrl+Y', desc: 'Redo' },
+      { keys: 'Ctrl+A', desc: 'Select everything' },
+      { keys: 'Ctrl+D', desc: 'Duplicate the selection' },
+      { keys: 'Delete', desc: 'Delete the selection' },
+      { keys: 'Ctrl+Shift+E', desc: 'Export the drawing' },
+      { keys: 'Ctrl + wheel', desc: 'Zoom about the pointer' },
+      { keys: 'Ctrl+0', desc: 'Reset to 100%' },
+      { keys: 'Shift+1', desc: 'Fit the drawing to the window' },
+      { keys: 'Shift (while drawing)', desc: 'Lock to the nearest of eight directions' },
+      { keys: 'Shift (while dragging)', desc: 'Constrain to one axis' },
+      { keys: 'Alt (while drawing)', desc: 'Draw a shape from its centre' },
+      { keys: 'Double-click', desc: 'Start a label, or edit the one under the pointer' },
+      { keys: "'", desc: 'Show / hide the grid' },
     ],
   },
 ]

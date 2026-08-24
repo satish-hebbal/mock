@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react'
-import { Blend, Boxes, Image as ImageIcon, Terminal, type LucideIcon } from 'lucide-react'
+import { Boxes, Image as ImageIcon, PenLine, type LucideIcon } from 'lucide-react'
 import type { AppMode } from '../store'
 
 /**
@@ -41,19 +41,10 @@ export const TOOLS: Tool[] = [
     tint: ['224, 138, 62', '236, 186, 96'],
   },
   {
-    id: 'home',
-    name: 'Gradients',
-    tagline: 'Mesh and gradient wallpapers, made to measure.',
-    icon: Blend,
-    soon: true,
-    tint: ['205, 92, 168', '150, 96, 220'],
-  },
-  {
-    id: 'home',
-    name: 'ANCII',
-    tagline: 'Turn any image into ASCII art.',
-    icon: Terminal,
-    soon: true,
+    id: 'draw',
+    name: 'Draw',
+    tagline: 'A hand-drawn whiteboard, and a tray of pens that behave like pens.',
+    icon: PenLine,
     tint: ['64, 176, 140', '96, 200, 176'],
   },
 ]

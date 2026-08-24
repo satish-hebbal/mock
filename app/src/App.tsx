@@ -4,6 +4,10 @@ import { useShots } from './shots/store'
 import { selectedShotsImage } from './shots/types'
 import { PALETTE_GROUP_SIZE } from './shots/palette'
 import { ShotsEditor } from './shots/ShotsEditor'
+import { DrawEditor } from './draw/DrawEditor'
+import { useDraw } from './draw/store'
+import { PENS, PEN_ORDER } from './draw/pens'
+import { SHAPE_TOOLS } from './draw/shapeTools'
 import { ToolRail } from './components/ToolRail'
 import { ToolPanel } from './components/ToolPanel'
 import { AppSheet } from './components/AppSheet'
@@ -97,6 +101,7 @@ const PUNCTUATION_BY_CODE: Record<string, string> = {
   Period: '.',
   Minus: '-',
   Equal: '=',
+  Quote: "'",
 }
 
 /**
@@ -143,11 +148,18 @@ function useGlobalShortcuts() {
       const mod = e.ctrlKey || e.metaKey
       const key = keyOf(e)
 
-      // Alt, not Ctrl: Ctrl+1/2 are browser tab switches and can't be cancelled
-      if (e.altKey && (key === '1' || key === '2')) {
-        s.setMode(key === '1' ? 'studio' : 'shots')
+      // Alt, not Ctrl: Ctrl+1/2/3 are browser tab switches and can't be cancelled
+      if (e.altKey && (key === '1' || key === '2' || key === '3')) {
+        s.setMode(key === '1' ? 'studio' : key === '2' ? 'shots' : 'draw')
         return true
       }
+      /*
+       * The brackets belong to whoever needs them most. In the editors they
+       * open and close the panels; in Draw they are the pen size, which is the
+       * binding Drawesome documents and the one you reach for every few
+       * strokes. Draw has no left tool panel for `[` to toggle anyway.
+       */
+      if (!mod && (key === '[' || key === ']') && s.mode === 'draw') return false
       if (!mod && key === '[') {
         s.setToolPanelOpen(!s.toolPanelOpen)
         return true
@@ -213,6 +225,106 @@ function useGlobalShortcuts() {
         sh.setImage({ scale: img.scale + (key === '-' ? -0.05 : 0.05) })
       } else if (img && (key === ',' || key === '.')) {
         sh.setImage({ rotate: img.rotate + (key === ',' ? -1 : 1) })
+      }
+    }
+
+    /**
+     * Draw's keyboard.
+     *
+     * Excalidraw's bindings, because they are the ones anyone arriving at a
+     * canvas like this already has in their fingers, plus Drawesome's pen keys
+     * fitted into the letters Excalidraw leaves free. The one deliberate
+     * departure is E: it is Export everywhere else in this app and Eraser in
+     * both of the tools this one is modelled on, and on a drawing canvas the
+     * eraser wins. Export moves to Ctrl+Shift+E.
+     */
+    const handleDraw = (e: KeyboardEvent) => {
+      const d = useDraw.getState()
+      const mod = e.ctrlKey || e.metaKey
+      const key = keyOf(e)
+
+      if (mod && e.shiftKey && key === 'e') {
+        e.preventDefault()
+        d.setDialog(d.dialog === 'export' ? null : 'export')
+        return
+      }
+      if (mod && key === 'z') {
+        e.preventDefault()
+        if (e.shiftKey) d.redo()
+        else d.undo()
+        return
+      }
+      if (mod && key === 'y') {
+        e.preventDefault()
+        d.redo()
+        return
+      }
+      if (mod && key === 'a') {
+        e.preventDefault()
+        d.selectAll()
+        return
+      }
+      if (mod && key === 'd') {
+        e.preventDefault()
+        d.duplicateSelection()
+        return
+      }
+      if (mod && (key === '=' || key === '+' || key === '-' || key === '0')) {
+        e.preventDefault()
+        if (key === '0') d.resetZoom()
+        else d.zoomBy(key === '-' ? 1 / 1.2 : 1.2)
+        return
+      }
+      if (mod) return // every other Ctrl combo is the browser's
+
+      if (e.key === 'Escape') {
+        if (d.dialog) d.setDialog(null)
+        else if (d.editingTextId) d.setEditingText(null)
+        else d.select([])
+        return
+      }
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        d.removeElements(d.selectedIds)
+        return
+      }
+
+      // Shift+1 fits the drawing to the window, as it does in Excalidraw
+      if (e.shiftKey && key === '1') {
+        e.preventDefault()
+        d.zoomToFit()
+        return
+      }
+      if (e.shiftKey) return
+
+      // the pen size, on Drawesome's own binding
+      if (key === '[' || key === ']') {
+        const step = key === '[' ? -1 : 1
+        if (d.tool === 'eraser') d.setEraserSize(d.eraserSize + step * 4)
+        else d.setPenSize(d.penSize[d.pen] + step)
+        return
+      }
+      if (key === "'") {
+        // off -> lines -> dots -> off, so one key reaches all three
+        const next = { off: 'lines', lines: 'dots', dots: 'off' } as const
+        d.setGrid(next[d.doc.grid])
+        return
+      }
+      if (key === 'h') {
+        d.setTool('hand')
+        return
+      }
+
+      // a pen, by its own letter
+      const penHit = PEN_ORDER.find((id) => PENS[id].key === key)
+      if (penHit) {
+        d.setPen(penHit)
+        return
+      }
+      // a tool, by its digit or its letter
+      const toolHit = SHAPE_TOOLS.find((t) => t.digit === key || (t.letter && t.letter === key))
+      if (toolHit) {
+        if (toolHit.id === 'image') pickMediaFile((f) => void d.importImage(f))
+        else d.setTool(toolHit.id)
       }
     }
 
@@ -310,11 +422,32 @@ function useGlobalShortcuts() {
           useShots.getState().setDialog(null)
           return
         }
+        if (useDraw.getState().dialog) {
+          e.preventDefault()
+          useDraw.getState().setDialog(null)
+          return
+        }
       }
       if (isTyping(e)) return
 
+      /*
+       * A label being typed owns the keyboard, full stop.
+       *
+       * The textarea stops propagation of its own key events, which is enough
+       * while it holds focus. This is the belt to that pair of braces: single
+       * letters are tools here, so any gap between "a label is open" and "the
+       * caret is in it" turns typing a word into a tour of the toolbar. Escape
+       * is the one key that still gets through, because it is how you leave.
+       */
+      if (useDraw.getState().editingTextId) {
+        if (e.key !== 'Escape') return
+        e.preventDefault()
+        useDraw.getState().endTextEdit()
+        return
+      }
+
       const st = useStudio.getState()
-      const dialogOpen = !!st.dialog || !!useShots.getState().dialog
+      const dialogOpen = !!st.dialog || !!useShots.getState().dialog || !!useDraw.getState().dialog
 
       /*
        * The shortcut guide closes with the same key that opened it, so it has
@@ -351,6 +484,7 @@ function useGlobalShortcuts() {
        */
       if (st.mode === 'shots') handleShots(e)
       else if (st.mode === 'studio') handleStudio(e)
+      else if (st.mode === 'draw') handleDraw(e)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -361,7 +495,9 @@ function useMediaDropPaste() {
   useEffect(() => {
     const onDragOver = (e: DragEvent) => e.preventDefault()
     const importTo = (file: Blob) => {
-      if (useStudio.getState().mode === 'shots') void useShots.getState().importMedia(file)
+      const mode = useStudio.getState().mode
+      if (mode === 'shots') void useShots.getState().importMedia(file)
+      else if (mode === 'draw') void useDraw.getState().importImage(file)
       else void useStudio.getState().importMedia(file)
     }
     /*
@@ -371,7 +507,11 @@ function useMediaDropPaste() {
      */
     const importAll = (files: File[]) => {
       if (files.length === 0) return
-      if (useStudio.getState().mode === 'shots') void useShots.getState().importMediaFiles(files)
+      const mode = useStudio.getState().mode
+      if (mode === 'shots') void useShots.getState().importMediaFiles(files)
+      // the board takes them all: dropping three screenshots onto a canvas is a
+      // normal thing to do, and only one of them landing is baffling
+      else if (mode === 'draw') for (const f of files) void useDraw.getState().importImage(f)
       else importTo(files[0])
     }
     const onDrop = (e: DragEvent) => {
@@ -463,13 +603,23 @@ function Editor() {
      * So after any click that isn't into a field, focus goes back to the root.
      * Deferred a frame so the click itself still lands where it was aimed.
      */
+    /*
+     * A live text edit owns the keyboard, even though the click that started it
+     * landed on the canvas rather than in a field. Without this the root takes
+     * focus back a frame later, the editor blurs, and an untouched label
+     * commits as empty and is deleted before anything can be typed into it.
+     */
+    const editingLabel = () => !!useDraw.getState().editingTextId
+
     const onPointerDown = (e: PointerEvent) => {
       if (isTextEntryTarget(e.target as HTMLElement | null)) return
       requestAnimationFrame(() => {
+        if (editingLabel()) return
         if (!isTextEntryTarget(document.activeElement)) root.focus({ preventScroll: true })
       })
     }
     const onWindowFocus = () => {
+      if (editingLabel()) return
       if (!isTextEntryTarget(document.activeElement)) root.focus({ preventScroll: true })
     }
     window.addEventListener('pointerdown', onPointerDown)
@@ -488,7 +638,15 @@ function Editor() {
     <div ref={rootRef} tabIndex={-1} className="flex h-full bg-(--panel2) text-(--tx) outline-none">
       <ToolRail />
       <div className="flex min-w-0 flex-1 flex-col gap-2 py-2 pr-2">
-        {mode === 'home' ? <Home /> : mode === 'studio' ? <StudioLayout /> : <ShotsEditor />}
+        {mode === 'home' ? (
+          <Home />
+        ) : mode === 'studio' ? (
+          <StudioLayout />
+        ) : mode === 'draw' ? (
+          <DrawEditor />
+        ) : (
+          <ShotsEditor />
+        )}
       </div>
 
       <AppSheet />

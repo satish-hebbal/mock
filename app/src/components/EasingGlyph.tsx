@@ -3,7 +3,7 @@ import type { EasingName } from '../types'
 /*
  * Easing curves drawn as themselves.
  *
- * A glyph library has no mark that distinguishes "ease in" from "ease out" —
+ * A glyph library has no mark that distinguishes "ease in" from "ease out",
  * they'd both end up as some arrow, and the reader would be back to trusting
  * the label. The curve *is* the meaning here, so each one is its own path:
  * time runs left to right, value bottom to top, and the shape tells you where

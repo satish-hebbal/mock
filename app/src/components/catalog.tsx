@@ -4,7 +4,7 @@ import { Check, ChevronDown, ChevronUp } from 'lucide-react'
 /*
  * The catalog primitives, shared by both editors.
  *
- * Shots grew these first — a swatch, and a grid that shows one row of them and
+ * Shots grew these first: a swatch, and a grid that shows one row of them and
  * folds the rest behind a tile that wears what it is hiding. Studio's Scene
  * panel now carries the same catalogs (the same gradients, the same shipped
  * photos), so it uses the same components rather than a second implementation

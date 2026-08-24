@@ -1,8 +1,8 @@
 /**
  * The keyframe mark: a rhombus with its corners taken off, not a dot.
  *
- * It appears twice — as the diamond beside an animatable property in the
- * inspector, and as a key on a timeline lane — and the two are the same object,
+ * It appears twice (as the diamond beside an animatable property in the
+ * inspector, and as a key on a timeline lane) and the two are the same object,
  * so they share one class string. They drifted apart once already: a sweep over
  * the radius tokens rounded the timeline's copy into a circle while leaving the
  * inspector's with sharp corners, and neither spot named the other.

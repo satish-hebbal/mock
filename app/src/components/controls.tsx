@@ -11,7 +11,7 @@ import { KF_MARK } from '../lib/marks'
  * accent is reserved for "this is on".
  */
 
-// ————— collapsible section —————
+// ----- collapsible section -----
 
 export function Section({
   title,
@@ -71,7 +71,7 @@ export function SubHeading({ children, icon }: { children: ReactNode; icon?: Rea
   )
 }
 
-// ————— keyframe diamond —————
+// ----- keyframe diamond -----
 
 export function KFDiamond({ target }: { target: string }) {
   const timeMs = useStudio((s) => s.timeMs)
@@ -123,7 +123,7 @@ export function KFDiamond({ target }: { target: string }) {
   )
 }
 
-// ————— numeric field (icon + value, drag to scrub, click to type) —————
+// ----- numeric field (icon + value, drag to scrub, click to type) -----
 
 /** decimals implied by the step, so scrubbing doesn't produce 0.30000000004 */
 function decimalsFor(step: number) {
@@ -268,7 +268,7 @@ export function SliderRow({
   )
 }
 
-// ————— segment tabs —————
+// ----- segment tabs -----
 
 /**
  * The sliding selection pill for an equal-width segmented row.
@@ -374,7 +374,7 @@ export function IconToggle({
   )
 }
 
-// ————— dropdown (replaces native <select>, which can't be themed) —————
+// ----- dropdown (replaces native <select>, which can't be themed) -----
 
 export function Dropdown<T extends string | number>({
   value,
@@ -400,7 +400,7 @@ export function Dropdown<T extends string | number>({
 
   const toggle = () => {
     if (!open) {
-      // open toward whichever side has room — the timeline sits at the bottom
+      // open toward whichever side has room: the timeline sits at the bottom
       const r = ref.current?.getBoundingClientRect()
       const below = window.innerHeight - (r?.bottom ?? 0)
       setDropUp(below < 220 && (r?.top ?? 0) > below)
@@ -466,7 +466,7 @@ export function Dropdown<T extends string | number>({
   )
 }
 
-// ————— color row —————
+// ----- color row -----
 
 export function ColorRow({
   label,
@@ -542,7 +542,7 @@ export function Disclosure({
   )
 }
 
-// ————— small button —————
+// ----- small button -----
 
 export function MiniButton({
   children,

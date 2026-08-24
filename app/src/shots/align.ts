@@ -5,7 +5,7 @@ import type { ShotsDoc, ShotsImage } from './types'
 /*
  * Alignment and distribution across every screen in the shot.
  *
- * There's no multi-select in this editor — a shot only ever has up to five
+ * There's no multi-select in this editor: a shot only ever has up to five
  * screens, and `computeLayout` already treats each one independently, so
  * "align" and "distribute" operate on the whole set rather than needing a
  * selection to gather first. That matches what these tools are for anyway:
@@ -23,7 +23,7 @@ export interface ScreenRect {
   bottom: number
 }
 
-/** A screen's on-canvas bounding box, in export pixels — same numbers the renderer draws. */
+/** A screen's on-canvas bounding box, in export pixels, same numbers the renderer draws. */
 export function screenRect(
   img: ShotsImage,
   meta: AssetMeta | undefined,
@@ -48,7 +48,7 @@ export function screenRect(
  * The `{ offsetX, offsetY }` that puts a screen's centre at `(cx, cy)`.
  *
  * Inverts the same arithmetic `computeLayout` uses to go the other way
- * (`cx = W/2 + offsetX * boxW * zoom`), using this screen's own padding —
+ * (`cx = W/2 + offsetX * boxW * zoom`), using this screen's own padding,
  * padding can differ screen to screen, so the box it's normalized against
  * isn't shared.
  */
@@ -95,8 +95,8 @@ export function alignedCenter(
 }
 
 /**
- * New centres for every screen so the *gaps* between their edges — not their
- * centre-to-centre distance — come out equal along `axis`.
+ * New centres for every screen so the *gaps* between their edges, not their
+ * centre-to-centre distance, come out equal along `axis`.
  *
  * Gap-based rather than centre-based because screens are not always the same
  * size (a hero shot scaled up next to two smaller ones, say), and centring
@@ -129,7 +129,7 @@ export function distributedCenters(
 }
 
 /**
- * New `scale` for every screen so their rendered heights come out equal —
+ * New `scale` for every screen so their rendered heights come out equal,
  * for undoing the case where scaling one screen by hand (a hero shot bigger
  * than its neighbours, say) leaves the row uneven.
  *
@@ -169,7 +169,7 @@ export function groupBounds(rects: ScreenRect[]) {
 export function allScreenRects(doc: ShotsDoc): { id: string; rect: ScreenRect }[] {
   const { width: W, height: H } = doc.size
   // unclamped, matching the exact value both the preview and the exporter
-  // hand to computeLayout — anything else and "align left" would target a
+  // hand to computeLayout: anything else and "align left" would target a
   // bounding box that doesn't match what's actually on screen
   const zoom = doc.zoom ?? 1
   return doc.images.map((im) => ({

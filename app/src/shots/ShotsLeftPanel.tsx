@@ -56,8 +56,8 @@ import type { ShotsBackground, ShotsBgType, ShotsDoc, ShotsFrame, ShotsImage } f
 
 /*
  * The Shots left panel. Two tabs split the editor along the line the work
- * actually falls on: **Mockup** is the subject — which device, what's on its
- * screen, how it's lit — and **Frame** is everything it sits on, from the
+ * actually falls on: **Mockup** is the subject (which device, what's on its
+ * screen, how it's lit) and **Frame** is everything it sits on, from the
  * canvas shape to the backdrop. Fine positioning (padding, scale, offset,
  * tilt) stays in the right-hand inspector, so nothing is offered twice.
  */
@@ -65,7 +65,7 @@ import type { ShotsBackground, ShotsBgType, ShotsDoc, ShotsFrame, ShotsImage } f
 const iconProps = { size: 12, strokeWidth: 1.75 } as const
 const subIcon = { size: 11, strokeWidth: 1.75 } as const
 
-// ————— primitives —————
+// ----- primitives -----
 
 /** Quiet all-caps heading, the way the reference tools label a block. */
 function GroupLabel({ children, action }: { children: ReactNode; action?: ReactNode }) {
@@ -86,7 +86,7 @@ function Group({ label, children, action }: { label?: string; children: ReactNod
   )
 }
 
-/** Square tile with a glyph over a caption — the reference's control shape. */
+/** Square tile with a glyph over a caption, the reference's control shape. */
 function Tile({
   icon,
   label,
@@ -148,7 +148,7 @@ function pickImage(onFile: (f: File) => void) {
   input.click()
 }
 
-// ————— Mockup · device picker —————
+// ----- Mockup · device picker -----
 
 const DEVICE_TABS: { id: DeviceCategory | 'all'; label: string; icon: LucideIcon }[] = [
   { id: 'all', label: 'All', icon: LayoutGrid },
@@ -167,7 +167,7 @@ function deviceSub(d: DeviceSpec): string {
 const BLANK_SCREEN = 'linear-gradient(155deg, #f6f3ec 0%, #dcd8ce 52%, #c2beb4 100%)'
 
 /**
- * The frame's own PNG is the thumbnail — a drawn approximation would be a
+ * The frame's own PNG is the thumbnail: a drawn approximation would be a
  * second source of truth for something the asset already answers exactly.
  *
  * The frames are near-black with the screen punched out, so on a dark panel a
@@ -182,8 +182,8 @@ function DeviceThumb({ deviceId, box = 56 }: { deviceId: string; box?: number })
   if (!dev.bezel) {
     /*
      * The bare entry: just the screen, no enclosure. Its thumbnail matches
-     * the phone tiles beside it — same portrait silhouette, same screen
-     * fill — with no bezel drawn around it, so it reads as "a phone without
+     * the phone tiles beside it (same portrait silhouette, same screen
+     * fill) with no bezel drawn around it, so it reads as "a phone without
      * the case" rather than an unrelated shape.
      */
     const a = 0.46 // close to a modern phone's own screen aspect
@@ -279,7 +279,7 @@ function DevicePicker() {
         </span>
         <span className="min-w-0 flex-1">
           {/* a screen is always selected once one exists, so the empty case
-              here means none has been added yet — not that nothing is picked */}
+              here means none has been added yet, not that nothing is picked */}
           <span className="block truncate t-body-sm font-semibold text-(--tx)">
             {img ? current.label : 'No screen yet'}
           </span>
@@ -414,7 +414,7 @@ function ApplyScopeRow() {
   )
 }
 
-// ————— Mockup · media —————
+// ----- Mockup · media -----
 
 function MediaGroup() {
   const images = useShots((s) => s.doc.images)
@@ -433,7 +433,7 @@ function MediaGroup() {
    *
    * `order[i]` is the index, into `images` as it stood when the drag began, of
    * whatever is currently previewed at slot `i`. It only exists while a drag is
-   * live — null the rest of the time, so the strip normally just reads `images`
+   * live, null the rest of the time, so the strip normally just reads `images`
    * directly.
    *
    * The tiles reorder in the DOM as you drag over them, which is what makes
@@ -448,17 +448,17 @@ function MediaGroup() {
    * FLIP (First, Last, Invert, Play), so a shift is a slide rather than a
    * jump-cut.
    *
-   * A plain reorder swaps DOM position instantly — correct, but silent: a tile
+   * A plain reorder swaps DOM position instantly. Correct, but silent: a tile
    * teleports rather than moving out of the way. This records where every tile
    * sat right before the array changes, and once React has repainted them into
    * their new spots, snaps each one back to its old position with a transform
-   * and immediately releases it into a transition — so what actually renders
+   * and immediately releases it into a transition, so what actually renders
    * is the tile sliding from old to new, even though the DOM update itself was
    * instant.
    */
   const tileRefs = useRef(new Map<string, HTMLButtonElement>())
   const flipFrom = useRef<Map<string, DOMRect> | null>(null)
-  // the id being dragged, stable for the whole gesture — `dragAt` is a
+  // the id being dragged, stable for the whole gesture, `dragAt` is a
   // position and moves every time the preview reorders, so it can't be used
   // to recognise "the tile under the pointer" from one dragover to the next
   const draggingId = useRef<string | null>(null)
@@ -476,7 +476,7 @@ function MediaGroup() {
     tileRefs.current.forEach((el, id) => {
       // the dragged tile wears its own lift transform (scale + shadow, via
       // class), so correcting it here would fight that transform rather than
-      // add to it — it skips FLIP and gets a plain fade instead
+      // add to it: it skips FLIP and gets a plain fade instead
       if (id === draggingId.current) return
       const prev = from.get(id)
       if (!prev) return
@@ -595,13 +595,13 @@ function MediaGroup() {
               onDragOver={dragOver(i)}
               onDrop={(e) => e.preventDefault()}
               onDragEnd={dragEnd}
-              title={images.length > 1 ? `Screen ${i + 1} — drag to reorder` : 'Screen 1'}
+              title={images.length > 1 ? `Screen ${i + 1} (drag to reorder)` : 'Screen 1'}
               onClick={() => selectImage(im.id)}
               /*
                * The dragged tile itself gets picked up rather than just faded:
                * a touch of scale and a real shadow read as "lifted off the
                * strip", which is what a mouse drag is actually doing. The
-               * neighbours it displaces get the FLIP slide above instead — two
+               * neighbours it displaces get the FLIP slide above instead, two
                * different motions for two different things happening at once.
                */
               className={`relative h-14 w-11 overflow-hidden rounded-lg border-2 bg-(--panel2) transition-[transform,box-shadow,opacity] duration-150 ${
@@ -621,7 +621,7 @@ function MediaGroup() {
         })}
         {/*
           Screens the count control set aside. They stay on show, dimmed, so
-          lowering the count reads as putting media away rather than losing it —
+          lowering the count reads as putting media away rather than losing it,
           clicking one raises the count enough to bring it back.
         */}
         {parked.map((im, i) => {
@@ -629,7 +629,7 @@ function MediaGroup() {
           return (
             <button
               key={im.id}
-              title="Not in the shot — click to bring it back"
+              title="Not in the shot, click to bring it back"
               onClick={() => setScreenCount(images.length + i + 1)}
               className="relative h-14 w-11 overflow-hidden rounded-lg border-2 border-dashed border-(--line) bg-(--panel2) opacity-45 transition-opacity hover:opacity-80"
             >
@@ -669,7 +669,7 @@ function MediaGroup() {
   )
 }
 
-// ————— Mockup · layout —————
+// ----- Mockup · layout -----
 
 /**
  * Screen count, then the arrangements available at that count.
@@ -719,7 +719,7 @@ function LayoutGroup() {
           ))}
         </div>
         <p className="mt-2 t-caption leading-snug text-(--tx3)">
-          Adding a screen copies the last one — swap its media with Replace.
+          Adding a screen copies the last one. Swap its media with Replace.
         </p>
       </Group>
 
@@ -760,7 +760,7 @@ function LayoutGroup() {
   )
 }
 
-// ————— Mockup · shadow —————
+// ----- Mockup · shadow -----
 
 /**
  * Named shadows, the way a photographer would ask for them, instead of four
@@ -819,7 +819,7 @@ function CornerPreview({
         className="relative block aspect-square w-full overflow-hidden rounded-xl"
         style={{ background: 'linear-gradient(145deg, #e2e2e7 0%, #bcbcc5 52%, #9c9ca7 100%)' }}
       >
-        {/* same "chosen" mark every swatch grid uses — see Swatch below */}
+        {/* same "chosen" mark every swatch grid uses (see Swatch below) */}
         {active && (
           <span className="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-black/25">
             <Check size={22} strokeWidth={2.6} className="text-white drop-shadow" />
@@ -975,7 +975,7 @@ function ShadowGroup() {
   )
 }
 
-// ————— Mockup · card style —————
+// ----- Mockup · card style -----
 
 /*
  * The tile shows a card corner, and the card it depicts is bigger than the
@@ -1028,7 +1028,7 @@ function StyleGroup() {
   )
 }
 
-// ————— Mockup · finish (glow / border / reflection) —————
+// ----- Mockup · finish (glow / border / reflection) -----
 
 function FinishGroup() {
   const img = useShots((s) => selectedShotsImage(s.doc))
@@ -1051,7 +1051,7 @@ function FinishGroup() {
   )
 }
 
-// ————— Frame · canvas size —————
+// ----- Frame · canvas size -----
 
 const RATIOS: { label: string; w: number; h: number }[] = [
   { label: '16:9', w: 16, h: 9 },
@@ -1089,8 +1089,8 @@ function RatioSwatch({
 /**
  * Frame size, one control for the whole decision, collapsed by default.
  *
- * This used to be three controls for one decision — a plain summary card, a
- * dropdown for named export sizes, and a separate grid for abstract ratios —
+ * This used to be three controls for one decision (a plain summary card, a
+ * dropdown for named export sizes, and a separate grid for abstract ratios)
  * stacked on top of each other and costing that much panel height whether or
  * not anyone was picking a size right now. Closed shows the current match:
  * a named preset if the size is exactly one (e.g. "Dribbble"), else the
@@ -1294,7 +1294,7 @@ function CanvasGroup() {
   )
 }
 
-// ————— Frame · shadow scene —————
+// ----- Frame · shadow scene -----
 
 /**
  * The tiles show the asset itself, on a light field.
@@ -1442,7 +1442,7 @@ function ShadowSceneGroup() {
   )
 }
 
-// ————— Frame · portrait (depth of field) —————
+// ----- Frame · portrait (depth of field) -----
 
 const PORTRAIT_MODES: { id: PortraitMode; label: string; icon: ReactNode; title: string }[] = [
   { id: 'none', label: 'None', icon: <X size={14} strokeWidth={1.8} />, title: 'Everything in focus' },
@@ -1556,7 +1556,7 @@ function PortraitGroup() {
   )
 }
 
-// ————— Frame · background —————
+// ----- Frame · background -----
 
 /**
  * CSS preview for a generated background patch (Magic swatches).
@@ -1565,7 +1565,7 @@ function PortraitGroup() {
  * only ever need the `background` shorthand, mesh needs the longhand
  * `backgroundImage`/`backgroundSize`/`backgroundPosition` trio, and mixing
  * shorthand with longhand in the same style object between renders is
- * exactly what React's dev-mode style warning exists to catch — the 8
+ * exactly what React's dev-mode style warning exists to catch, the 8
  * swatches switch between both shapes every time the palette tab changes.
  */
 function patchStyle(patch: Partial<ShotsBackground>): React.CSSProperties {
@@ -1580,7 +1580,7 @@ const EMPTY_SCREENS: ShotsImage[] = []
 
 /*
  * `extractPalette` returns three `PALETTE_GROUP_SIZE`-color palettes back to
- * back — the same pixels read three ways, so a real color the frequency
+ * back, the same pixels read three ways, so a real color the frequency
  * ranking buries (a sliver of green in an orange screenshot) still gets a
  * tab where it's the point rather than being out-voted every time.
  */
@@ -1630,7 +1630,7 @@ function BackgroundGroup() {
 
   /*
    * A real photo makes stale Effects sliders obvious in a way a solid or
-   * gradient never did — someone picks "Nature 20" expecting what the thumb
+   * gradient never did: someone picks "Nature 20" expecting what the thumb
    * showed and gets it dimmed, blurred and grainy from whatever they were
    * tuning before. Presets are a fresh start, so effects reset back to
    * neutral here; nothing stops turning them on again afterward.
@@ -1671,7 +1671,7 @@ function BackgroundGroup() {
         )}
       </Group>
 
-      {/* Magic — backgrounds sampled from the screenshot's own palette */}
+      {/* Magic: backgrounds sampled from the screenshot's own palette */}
       <Group
         label="Magic ✨"
         action={
@@ -1867,7 +1867,7 @@ function EffectsGroup() {
     return (
       <Group label="Effects">
         <p className="t-caption leading-snug text-(--tx3)">
-          Exports with a real alpha channel — pick PNG or WebP (JPG has no transparency).
+          Exports with a real alpha channel. Pick PNG or WebP (JPG has no transparency).
         </p>
       </Group>
     )
@@ -1908,7 +1908,7 @@ function EffectsGroup() {
   )
 }
 
-// ————— panel —————
+// ----- panel -----
 
 const TABS = [
   { id: 'mockup', label: 'Mockup', icon: Smartphone },

@@ -9,7 +9,7 @@ import type {
 } from '../types'
 
 /*
- * Studio looks — complete photographic setups, not just slider values.
+ * Studio looks: complete photographic setups, not just slider values.
  *
  * Each one is a real product-photography lighting plan translated into the
  * scene: where the key sits relative to the lens, how far the fill is pulled
@@ -44,7 +44,7 @@ export interface StudioLook {
 }
 
 /**
- * 35mm-equivalent focal length for a vertical FOV — the number a photographer
+ * 35mm-equivalent focal length for a vertical FOV, the number a photographer
  * actually thinks in. 24mm tall frame, so f = 12 / tan(fov/2).
  */
 export function focalFromFov(fov: number): number {
@@ -228,7 +228,7 @@ export function getLook(id: string): StudioLook | undefined {
   return STUDIO_LOOKS.find((l) => l.id === id)
 }
 
-/** Card preview for a look — the sweep it puts behind the product. */
+/** Card preview for a look, the sweep it puts behind the product. */
 export function lookSwatch(l: StudioLook): string {
   return `radial-gradient(120% 90% at 50% ${l.sweep.hotY * 100}%, ${l.sweep.hot}, ${l.sweep.color} 72%)`
 }

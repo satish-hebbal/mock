@@ -33,7 +33,7 @@ import type { AlignMode } from './align'
 /*
  * The Shots inspector: where the selected screen *sits*. What it is (device,
  * media, shadow) and what it sits on (canvas, backdrop) both live in the left
- * panel, so this rail stays short and every control here moves the same thing —
+ * panel, so this rail stays short and every control here moves the same thing,
  * the screen's placement in the frame.
  */
 
@@ -52,13 +52,13 @@ const SLIDER_ICON = {
 }
 
 /**
- * A live thumbnail of the whole frame — a map, not a viewport.
+ * A live thumbnail of the whole frame, a map, not a viewport.
  *
  * It always shows the entire composition at a fixed size, so when the canvas is
  * zoomed past the viewport and showing a detail, this still says what the
  * finished picture looks like.
  *
- * The block used to hold a "3D style required" placeholder — a box explaining
+ * The block used to hold a "3D style required" placeholder, a box explaining
  * why it was empty. Showing the composition instead means the panel is worth
  * looking at whichever style is on, and the Zoom below it has something to act
  * against while you drag.
@@ -110,7 +110,7 @@ function PosBtn({
 /**
  * Align and distribute across every screen currently in the shot.
  *
- * There's nothing to select first — a shot only ever holds up to five
+ * There's nothing to select first: a shot only ever holds up to five
  * screens, so "the things being aligned" is unambiguous. This is the tool for
  * the moment a layout preset gets close but a hand-nudged screen (or the
  * padding difference between two device frames) leaves everything a few
@@ -118,7 +118,7 @@ function PosBtn({
  *
  * Lives in the right panel rather than beside Media and Layout presets on the
  * left: those describe *what* the shot contains, this nudges *where* it sits
- * once it's there — the same split Frame and Placement already draw.
+ * once it's there, the same split Frame and Placement already draw.
  */
 function PositionSection({ n }: { n: number }) {
   const align = useShots((s) => s.alignScreens)
@@ -145,19 +145,19 @@ function PositionSection({ n }: { n: number }) {
       <div className="flex gap-1">
         <PosBtn
           icon={AlignHorizontalDistributeCenter}
-          label="Distribute horizontal spacing — equalize the gaps (needs 3+ screens)"
+          label="Distribute horizontal spacing: equalize the gaps (needs 3+ screens)"
           onClick={() => distribute('x')}
           disabled={!canDistribute}
         />
         <PosBtn
           icon={AlignVerticalDistributeCenter}
-          label="Distribute vertical spacing — equalize the gaps (needs 3+ screens)"
+          label="Distribute vertical spacing: equalize the gaps (needs 3+ screens)"
           onClick={() => distribute('y')}
           disabled={!canDistribute}
         />
         <PosBtn
           icon={StretchVertical}
-          label="Match heights — rescale every screen to the same height (needs 2+ screens)"
+          label="Match heights: rescale every screen to the same height (needs 2+ screens)"
           onClick={() => matchHeights()}
           disabled={!canMatch}
         />
@@ -220,7 +220,7 @@ function PlacementSection() {
  * The camera: what the shot looks like, and how close you're standing.
  *
  * Its own section above Placement because it describes the whole picture, while
- * Placement moves one screen inside it — and because a preview is the first
+ * Placement moves one screen inside it, and because a preview is the first
  * thing you want to see, not something to scroll to.
  */
 function FrameSection() {
@@ -240,7 +240,7 @@ function FrameSection() {
             step={0.01}
             onChange={setZoom}
             format={(v) => `${Math.round(v * 100)}%`}
-            hint="Dollies the camera in or out — magnifies the whole shot, and crops"
+            hint="Dollies the camera in or out. Magnifies the whole shot, and crops"
           />
         </div>
         <MiniButton title="Back to 100%" onClick={() => setZoom(1)}>
@@ -277,7 +277,7 @@ function TiltSection() {
           <SliderRow icon={<SLIDER_ICON.tiltY />} label="Tilt Y" value={img.rotateY} min={-45} max={45} step={0.5} onChange={(rotateY) => setImage({ rotateY })} hint="Pseudo-3D yaw" />
           {dev.bezel && (
             <p className="mt-1.5 t-caption leading-snug text-(--tx3)">
-              The {dev.label} frame is hidden while tilted — a frame is a photo lit from one
+              The {dev.label} frame is hidden while tilted, because a frame is a photo lit from one
               angle, and turning it stops matching the pose. Switch to Flat to bring it back.
             </p>
           )}

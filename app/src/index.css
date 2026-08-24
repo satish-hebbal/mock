@@ -2,7 +2,7 @@
 
 /*
  * Linear's design system, applied verbatim.
- * Source: voltagent/awesome-design-md — design-md/linear.app/DESIGN.md
+ * Source: voltagent/awesome-design-md, design-md/linear.app/DESIGN.md
  *
  * Every value below is quoted from that document. Where the app needs a role
  * the document doesn't name, the mapping onto Linear's own tokens is written
@@ -12,14 +12,14 @@
  */
 
 :root {
-  /* ————— Colors · Brand & Accent ————— */
+  /* ----- Colors · Brand & Accent ----- */
   --primary: #5e6ad2;
   --on-primary: #ffffff;
   --primary-hover: #828fff;
   --primary-focus: #5e69d1;
   --brand-secure: #7a7fad;
 
-  /* ————— Colors · Surface ————— */
+  /* ----- Colors · Surface ----- */
   --canvas: #08090a; /* the black Linear actually ships */
   --surface-1: #0f1011;
   --surface-2: #141516;
@@ -32,24 +32,24 @@
   --inverse-surface-1: #f5f6f6;
   --inverse-surface-2: #f6f7f7;
 
-  /* ————— Colors · Text ————— */
+  /* ----- Colors · Text ----- */
   --ink: #f7f8f8;
   --ink-muted: #d0d6e0;
   --ink-subtle: #8a8f98;
   --ink-tertiary: #62666d;
 
-  /* ————— Colors · Semantic ————— */
+  /* ----- Colors · Semantic ----- */
   --success: #27a644;
   --overlay: #000000;
 
-  /* ————— Typography ————— */
+  /* ----- Typography ----- */
   --font-display: "Linear Display", "SF Pro Display", -apple-system, system-ui, "Segoe UI", Roboto,
     sans-serif;
   --font-text: "Linear Text", "SF Pro Display", -apple-system, system-ui, "Segoe UI", Roboto,
     sans-serif;
   --font-mono: "Linear Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
-  /* ————— Spacing ————— */
+  /* ----- Spacing ----- */
   --space-xxs: 4px;
   --space-xs: 8px;
   --space-sm: 12px;
@@ -60,25 +60,25 @@
   --space-section: 96px;
 
   /*
-   * ————— App roles, mapped onto the ladder above —————
+   * ----- App roles, mapped onto the ladder above -----
    * The editor was already written against these names, so pointing them at
    * Linear tokens re-skins every panel at once. The ladder is Linear's:
    * canvas underneath, surfaces stepping up, hairlines doing the separating.
    */
   /*
    * Docked chrome is NOT a lifted surface. Sampling Linear's own sidebar gives
-   * the canvas black, not surface-1 — the rails, side panels and timeline sit
+   * the canvas black, not surface-1: the rails, side panels and timeline sit
    * flat on the same ground as the content and are separated by a hairline
    * alone. Painting them surface-1 is what made the app read grey next to it.
    */
   --panel2: var(--canvas); /* app backdrop */
-  --panel: var(--canvas); /* rails, side panels, timeline — same ground */
+  --panel: var(--canvas); /* rails, side panels, timeline: same ground */
   /* Things that genuinely float (dialogs, menus, toasts) do lift: Level 1. */
   --raised: var(--surface-1);
   --panel3: var(--surface-3); /* hover surfaces / insets */
   /*
    * DERIVED. Linear names no "selected surface", and reaching for --hairline
-   * turned every active tab into a pale grey slab — the ladder is meant to be
+   * turned every active tab into a pale grey slab: the ladder is meant to be
    * felt, not read. This sits a single step above the hover surface, which is
    * all the separation Linear's own selected rows use.
    */
@@ -101,7 +101,7 @@
   --accent-tx: var(--on-primary);
   --accent-soft: color-mix(in srgb, var(--primary) 18%, transparent);
   --accent2: var(--brand-secure);
-  --danger: #f2555a; /* DERIVED — the spec names no destructive colour */
+  --danger: #f2555a; /* DERIVED: the spec names no destructive colour */
 
   /* "Focus ring: 2px primary-focus outline at 50% opacity." */
   --focus: color-mix(in srgb, var(--primary-focus) 50%, transparent);
@@ -131,14 +131,14 @@
 }
 
 /*
- * ————— Border radius —————
+ * ----- Border radius -----
  * "xs: 4px | sm: 6px | md: 8px | lg: 12px | xl: 16px | xxl: 24px | pill/full"
  * Fed to Tailwind's radius namespace so `rounded-md` *is* Linear's md.
  */
 @theme {
   /*
    * Tailwind's default is 150ms on an ease-in-out curve, which spends its first
-   * frames barely moving — on a hover that reads as the UI thinking before it
+   * frames barely moving: on a hover that reads as the UI thinking before it
    * answers. A decelerating curve puts the whole change at the start, so the
    * highlight appears the instant the pointer lands and settles from there.
    */
@@ -161,7 +161,7 @@
 }
 
 /*
- * ————— Type scale —————
+ * ----- Type scale -----
  * One class per row of the document's typography table. They live in the
  * components layer so a Tailwind utility (`font-semibold`, `tracking-…`) still
  * wins where a specific spot needs to depart from the token.
@@ -193,7 +193,7 @@
    *
    * A hard white border shouts, and over a colour swatch or a thumbnail it also
    * changes what you're judging. This is a hairline in the ink colour at low
-   * strength, lifted off the panel by a soft contrasted shadow — the shadow does
+   * strength, lifted off the panel by a soft contrasted shadow: the shadow does
    * the separating, so the border never has to get loud.
    */
   .is-picked {
@@ -315,7 +315,7 @@ body {
 }
 
 /*
- * The app menu drops in from above the viewport rather than fading in place —
+ * The app menu drops in from above the viewport rather than fading in place,
  * it reads as one sheet pulled down off the top edge, which is what the logo
  * button promises.
  */
@@ -357,7 +357,7 @@ body {
  * The receipt for a completed press-and-hold.
  *
  * The button has been compressing under the hold, so it releases past its
- * resting size before settling — the overshoot is what makes it read as
+ * resting size before settling: the overshoot is what makes it read as
  * something springing back rather than a style simply being removed. It has
  * to be loud enough to notice, because what the button actually did happens
  * somewhere else on screen.
@@ -395,8 +395,8 @@ body {
  *
  * Hold-to-confirm has no affordance until you have already failed at it: you
  * click, nothing happens, and the button gives no reason. Rather than label it
- * permanently — which would shout the instruction at everyone forever for the
- * sake of the first thirty seconds — it says so only once it has watched you
+ * permanently (which would shout the instruction at everyone forever for the
+ * sake of the first thirty seconds) it says so only once it has watched you
  * try the wrong thing twice.
  *
  * It springs up out from under the button and tucks itself back down, so it
@@ -449,7 +449,7 @@ body {
  * The charge itself, and the reason it is three stacked gradients rather than
  * a colour.
  *
- * A flat block sliding across reads as a loading bar — something being
+ * A flat block sliding across reads as a loading bar, something being
  * reported, not something being built. What it should read as is a pill
  * filling with energy, so: a horizontal ramp that deepens toward the leading
  * edge (the charge piling up ahead of itself), a vertical one that lights the
@@ -457,8 +457,8 @@ body {
  * away from the light), and a hairline of white along the very top where a
  * curved glossy thing catches it.
  *
- * The inset shadows sit it *into* the button rather than on top of it — light
- * from above, occlusion where the fill meets the walls — which is what stops
+ * The inset shadows sit it *into* the button rather than on top of it: light
+ * from above, occlusion where the fill meets the walls, which is what stops
  * it looking like a rectangle pasted over a pill.
  */
 .hold-fill {
@@ -495,7 +495,7 @@ body {
 
 
 /*
- * Holding still has to work without motion — the fill is the only thing
+ * Holding still has to work without motion: the fill is the only thing
  * telling you how far along the commitment is, so it stays. Only the spring
  * goes, since it is decoration on top of an action that has already happened.
  */
@@ -525,7 +525,7 @@ body {
  *
  * A bare 1px hairline was too little to see at any opacity that did not also
  * make it look like a border. Giving it a soft glow either side of the stroke
- * — inset for the inner falloff, a matching one outside — means the wave has
+ * (inset for the inner falloff, a matching one outside) means the wave has
  * some thickness to it, so it can read clearly while the hard line at its
  * centre stays quiet. Brightness comes from `--tx3` rather than a hairline
  * token for the same reason: this is a thing moving through the canvas, not a
@@ -544,7 +544,7 @@ body {
    *
    * A uniform scale can only shrink a shape toward a smaller copy of itself,
    * so a ring that started at the frame's proportions ended at the frame's
-   * proportions — a small rounded rectangle hanging in the middle, far
+   * proportions, a small rounded rectangle hanging in the middle, far
    * narrower than the pill and nothing like its silhouette. Interpolating
    * width and height independently lets the shape *become* the prompt: it
    * starts a little larger than the canvas and lands on exactly the pill's
@@ -560,7 +560,7 @@ body {
   }
   /*
    * Still nothing at 14%. The ring starts wider than the frame that clips it,
-   * so it is already travelling before any of it is on screen — otherwise
+   * so it is already travelling before any of it is on screen, otherwise
    * fading up from nothing at the frame's own size looked like a hard border
    * being switched on. By here it is fully enclosed and can be seen safely.
    */

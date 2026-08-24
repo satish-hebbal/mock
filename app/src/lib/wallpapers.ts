@@ -34,12 +34,12 @@ export const WALLPAPERS: Wallpaper[] = [
   { id: 'ice', name: 'Ice', gradient: { kind: 'linear', angle: 135, from: '#e0eafc', to: '#cfdef3' } },
 ]
 
-/** Look up a gradient by id, falling back to the first — which is also the default. */
+/** Look up a gradient by id, falling back to the first, which is also the default. */
 export function getWallpaper(id: string | undefined): Wallpaper {
   return WALLPAPERS.find((w) => w.id === id) ?? WALLPAPERS[0]
 }
 
-// ————— Curated solid-color swatches —————
+// ----- Curated solid-color swatches -----
 export const SOLID_COLORS: string[] = [
   '#0a0a0c',
   '#15151b',

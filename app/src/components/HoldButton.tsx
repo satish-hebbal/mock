@@ -8,15 +8,15 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
  * question you answer without reading, and the "are you sure" reflex means the
  * second click is barely more considered than the first would have been.
  *
- * Holding is the deliberation instead. The commitment is continuous — you can
- * feel it filling and let go at any point — so the intent is proven by the
+ * Holding is the deliberation instead. The commitment is continuous: you can
+ * feel it filling and let go at any point, so the intent is proven by the
  * gesture rather than asserted in a second click, and nothing has to interrupt
  * to ask. The fill is a live progress bar and also the escape hatch: it is
  * obvious at every moment both that something is about to happen and how to
  * stop it.
  *
- * The scale is doing quiet work too. The contents shrink as the hold builds —
- * the button appears to compress under the pressure — so the release can spring
+ * The scale is doing quiet work too. The contents shrink as the hold builds,
+ * the button appears to compress under the pressure, so the release can spring
  * back past its resting size and land. That overshoot is the whole receipt:
  * without it the action fires with no acknowledgement at all, since the thing
  * it did is off in another panel.
@@ -43,7 +43,7 @@ const TAP_WINDOW_MS = 4000
 /**
  * The shape of the charge: creeping at first, then running away with itself.
  *
- * Linear was the honest readout and the wrong feeling — a constant crawl reads
+ * Linear was the honest readout and the wrong feeling: a constant crawl reads
  * as a progress bar being reported to you, when what this wants to be is
  * something winding up. Accelerating gives it that: the last third arrives in
  * a rush, so the moment it fires is the peak of a build rather than the end of
@@ -66,7 +66,7 @@ const EDGE_STEPS = 20
  * How far the front bows out of vertical, as a share of the button's width.
  *
  * Measured, not chosen. `clip-path` percentages are of the box, and this box
- * is about three times wider than it is tall — so a bow written as a flat
+ * is about three times wider than it is tall, so a bow written as a flat
  * percentage of the width gets a fraction of the height to bend across and
  * arrives looking perfectly straight. A hard-coded 5% here worked out at four
  * pixels of travel over thirty-two of height, which is vertical to the eye.
@@ -88,7 +88,7 @@ const bowFor = (w: number, h: number) => (w > 0 ? ((h / 2) / w) * 100 : 0)
  * covers everything and the last thing you see is the fill tracing the cap
  * instead of stopping flat against it. In between the bow eases through zero,
  * so the front stands straight exactly where the pill's own sides are
- * straight. Nothing here is a bump added on top of the shape — it is the shape.
+ * straight. Nothing here is a bump added on top of the shape: it is the shape.
  *
  * The profile is a true semicircle, not a sine. A sine of the same depth is
  * noticeably more pointed through the quarter heights, which reads as a bulge
@@ -104,7 +104,7 @@ function chargeFront(p: number, amp: number): { clip: string; reach: number } {
    * The bow saturates rather than ramping.
    *
    * Straight linear, the deep concave bows all happen in the first fifth of
-   * the hold — while the fill is still buried in the left cap and there is
+   * the hold, while the fill is still buried in the left cap and there is
    * nothing to see. By the time any of it is on screen the concave side has
    * already faded to almost nothing, so the charge read as starting flat and
    * only becoming curved on the convex half. Pulling the magnitude up with a
@@ -119,7 +119,7 @@ function chargeFront(p: number, amp: number): { clip: string; reach: number } {
   /*
    * Sampled evenly around the arc, not evenly down the button. A circle's ends
    * turn fastest, so stepping uniformly through the height spent over half the
-   * first step's worth of curvature in one straight chord — a visible diagonal
+   * first step's worth of curvature in one straight chord, a visible diagonal
    * facet cutting the corner off the fill. Walking the angle instead spaces
    * the points along the curve, so the ends come out as round as the middle.
    */
@@ -136,7 +136,7 @@ function chargeFront(p: number, amp: number): { clip: string; reach: number } {
    * along the charge is. While the front is concave its furthest point is the
    * centre, at the top and bottom; once convex it is the centre plus the bow,
    * at mid-height. The colour ramp is sized to this rather than to the raw
-   * progress — sized to progress it stopped short of its own clip, and the
+   * progress, sized to progress it stopped short of its own clip, and the
    * strip between the two got the grey gloss with no red beneath it. That was
    * the dark wedge sitting on the front, worst at the very start where the
    * gap is widest.
@@ -163,7 +163,7 @@ export function HoldButton({
    * Turn the glyph through a full revolution across the hold.
    *
    * Opt-in, because it only means anything when the icon is itself about
-   * turning — on Start over the arrow winds all the way round and lands where
+   * turning: on Start over the arrow winds all the way round and lands where
    * it began, which is the action drawn out in miniature. On a glyph with a
    * fixed upright, spinning it would just be a glyph spinning.
    */
@@ -182,7 +182,7 @@ export function HoldButton({
    * Completed holds, and the reason the icon never rewinds.
    *
    * Resetting the rotation to zero after a turn looked like the arrow
-   * *unwinding* — the transition that makes an abandoned hold spring back was
+   * *unwinding*, the transition that makes an abandoned hold spring back was
    * happily animating the full 360 in reverse. Counting turns instead means
    * the angle only ever grows: a finished hold banks its revolution, and the
    * frame after is the same angle it already sat at, so there is nothing to
@@ -208,7 +208,7 @@ export function HoldButton({
     /*
      * Letting go *after* a hold completes is not an abandonment. The pointer is
      * still down at the moment it fires, so the release that follows would
-     * otherwise land here and reset the state out from under the pop — the
+     * otherwise land here and reset the state out from under the pop, the
      * animation would be cut off a frame or two in, every single time.
      */
     if (phaseRef.current === 'fired') return
@@ -290,15 +290,15 @@ export function HoldButton({
    * One full turn, counter-clockwise to match the arrow's own direction, and
    * held at the full -360 while the pop runs. A revolution is congruent with
    * where it started, so when the state resets to zero there is nothing to
-   * see — it lands rather than snapping back. Abandon the hold and it unwinds
+   * see: it lands rather than snapping back. Abandon the hold and it unwinds
    * on the same transition as everything else, which is the charge visibly
    * running backwards out of it.
    */
   const spin = spinIcon ? -(turns * 360 + 360 * p) : 0
 
   /*
-   * The button is pressed *into* the panel as it charges — an inset shadow
-   * deepening with progress — while an outer glow builds around it. Read
+   * The button is pressed *into* the panel as it charges, an inset shadow
+   * deepening with progress, while an outer glow builds around it. Read
    * together they are one thing gathering energy: the surface gives under the
    * pressure, and what it is storing leaks out at the edges. The pop then
    * discharges both, so the release is the energy going rather than a style
@@ -359,7 +359,7 @@ export function HoldButton({
         setProgress(0)
       }}
       style={{ boxShadow: pressure }}
-      title={`${hint} — press and hold`}
+      title={`${hint} (press and hold)`}
       aria-label={`${label}. Press and hold to confirm.`}
       className={`relative isolate flex h-8 shrink-0 items-center gap-1.5 overflow-hidden rounded-full bg-(--field) px-3 t-body-sm text-(--tx2) select-none hover:bg-(--field-h) hover:text-(--tx) ${
         fired ? 'hold-pop' : ''
@@ -367,8 +367,8 @@ export function HoldButton({
     >
       {/*
         The charge, revealed by a clip rather than a scale. Scaling stretched
-        the gradients with it — the ramp flattened out and the top highlight
-        smeared — so the fill is painted full width and uncovered, which keeps
+        the gradients with it (the ramp flattened out and the top highlight
+        smeared) so the fill is painted full width and uncovered, which keeps
         every one of its layers the shape it was drawn at.
       */}
       <span
@@ -394,7 +394,7 @@ export function HoldButton({
            * Nothing at all when there is no charge.
            *
            * At rest the clip traces the button's left cap, which encloses no
-           * area inside the pill — but the clip and the parent's rounded
+           * area inside the pill, but the clip and the parent's rounded
            * corner are rasterised independently, so the two anti-aliased
            * curves do not quite cancel and a sub-pixel arc of the fill's top
            * highlight showed at the caps of an idle button. Geometry alone

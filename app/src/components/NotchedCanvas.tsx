@@ -55,7 +55,7 @@ export function NotchedCanvas({ children }: { children: ReactNode }) {
           {/*
             One stroke for the whole outline. The notch used to get a second,
             brighter pass over the top to make the cut easier to pick out in
-            dark theme — but a doubled line reads as a seam where the border
+            dark theme, but a doubled line reads as a seam where the border
             changes colour halfway along, which is a worse problem than the
             one it solved. The canvas is a peer of every other panel, so it
             carries the same `--line` the rest of them do, all the way round.

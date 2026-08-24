@@ -1,7 +1,7 @@
 import { meshFromColors } from '../lib/meshGradient'
 import type { ShotsBackground } from './types'
 
-// ————— color helpers —————
+// ----- color helpers -----
 
 function clamp255(n: number) {
   return Math.max(0, Math.min(255, Math.round(n)))
@@ -70,7 +70,7 @@ function vivid(hex: string): string {
   return hslToHex(h, Math.min(1, s * 1.25 + 0.1), Math.max(0.35, Math.min(0.72, l)))
 }
 
-// ————— palette extraction —————
+// ----- palette extraction -----
 
 interface Bucket {
   count: number
@@ -156,7 +156,7 @@ function pickRanked(sorted: ScoredBucket[], count: number): ScoredBucket[] {
 }
 
 /** Same candidates, spread around the hue wheel by farthest-point sampling
- * instead of ranked by prominence — so a small but real patch of green shows
+ * instead of ranked by prominence, so a small but real patch of green shows
  * up even when it's nowhere near the top by pixel count. */
 function pickHueDiverse(sorted: ScoredBucket[], count: number): ScoredBucket[] {
   if (sorted.length === 0) return []
@@ -183,13 +183,13 @@ function pickHueDiverse(sorted: ScoredBucket[], count: number): ScoredBucket[] {
  * reading the same pixels a different way, concatenated into one array of
  * `PALETTE_GROUP_SIZE * 3` hex colors:
  *
- *  - Dominant (first group): frequency ranked, favoring saturated mid-tones —
+ *  - Dominant (first group): frequency ranked, favoring saturated mid-tones,
  *    the original single-palette behavior.
  *  - Vibrant (second group): the same candidates re-ranked by saturation
  *    alone, so a small vivid patch can outrank a big dull one.
  *  - Diverse (third group): spread across the hue wheel instead of ranked by
- *    prominence at all, so a color that's real but rare — the one sliver of
- *    green in an otherwise orange screenshot — still gets a slot instead of
+ *    prominence at all, so a color that's real but rare, the one sliver of
+ *    green in an otherwise orange screenshot, still gets a slot instead of
  *    being out-voted by everything else every time.
  *
  * Callers that only want the classic single palette can just take the first
@@ -228,7 +228,7 @@ export function extractPalette(
   return [...dominant, ...vibrant, ...diverse].map((p) => rgbToHex(p.r, p.g, p.b))
 }
 
-// ————— background generators —————
+// ----- background generators -----
 
 type BgPatch = Partial<ShotsBackground>
 

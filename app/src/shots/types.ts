@@ -2,7 +2,7 @@ import type { AssetMeta } from '../types'
 import type { ShotsDeviceId } from './devices'
 import { defaultMesh, type MeshSpec } from '../lib/meshGradient'
 
-// ————— Flat 2D "Shots" editor document (shots.so-class) —————
+// ----- Flat 2D "Shots" editor document (shots.so-class) -----
 
 export type ShotsBgType = 'solid' | 'gradient' | 'mesh' | 'image' | 'wallpaper' | 'photo' | 'transparent'
 
@@ -133,7 +133,7 @@ export interface ShotsImage {
   rotateY: number
   /** corner radius as fraction of card width (0..0.12) */
   radius: number
-  /** inset around the image as fraction of min(canvas) (0..0.45) — the "balance" */
+  /** inset around the image as fraction of min(canvas) (0..0.45), the "balance" */
   padding: number
   shadow: ShotsShadow
   border: { width: number; color: string }
@@ -161,15 +161,15 @@ export interface ShotsDoc {
   /**
    * Screens the count control has set aside, newest first out of the shot.
    * Lowering the count parks them here rather than deleting them, so their
-   * media — and their device, shadow and finish — come back untouched when the
+   * media (and their device, shadow and finish) come back untouched when the
    * count goes up again.
    */
   parked?: ShotsImage[]
   /** id of the active layout preset, so the picker can mark it */
   layout?: string
   /**
-   * Camera zoom. Magnifies the whole composition about the frame centre —
-   * every screen's size *and* its distance from centre, plus the backdrop — so
+   * Camera zoom. Magnifies the whole composition about the frame centre,
+   * every screen's size *and* its distance from centre, plus the backdrop, so
    * pushing in crops rather than rearranging. Part of the shot, so it exports.
    */
   zoom?: number

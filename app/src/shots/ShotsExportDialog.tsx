@@ -60,7 +60,7 @@ export function ShotsExportDialog() {
   return (
     <Modal title="Export shot" onClose={() => setDialog(null)}>
       <label className="mb-2 block t-eyebrow text-(--tx3) uppercase">
-        Resolution — {SIZE_PRESETS.find((p) => p.width === doc.size.width && p.height === doc.size.height)?.name ?? `${doc.size.width}×${doc.size.height}`}
+        Resolution: {SIZE_PRESETS.find((p) => p.width === doc.size.width && p.height === doc.size.height)?.name ?? `${doc.size.width}×${doc.size.height}`}
       </label>
       <div className="mb-3 flex gap-1">
         {([1, 2, 3] as const).map((s) => (
@@ -81,7 +81,7 @@ export function ShotsExportDialog() {
       />
       {doc.background.type === 'transparent' && format === 'jpg' && (
         <p className="mb-2 t-body-sm text-(--danger)">
-          JPG can't store transparency — this shot will export on a black background. Use PNG or WebP.
+          JPG can't store transparency, so this shot will export on a black background. Use PNG or WebP.
         </p>
       )}
       {format !== 'png' && <SliderRow label="Quality" value={quality} min={0.5} max={1} onChange={setQuality} />}

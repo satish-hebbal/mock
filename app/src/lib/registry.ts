@@ -1,7 +1,7 @@
 import deviceModels from './deviceModels.json'
 import type { DeviceInstance } from '../types'
 
-// Device registry — source of truth for every device (PRD §9).
+// Device registry, source of truth for every device (PRD §9).
 export type DeviceKind =
   | 'phone'
   | 'tablet'
@@ -102,7 +102,7 @@ const CATEGORY_FOR: Record<string, DeviceSpec['category']> = {
 }
 
 const MODEL_DEVICES: DeviceSpec[] = deviceModels.models
-  // Only ship models whose screen mesh has been confirmed by rendering — an
+  // Only ship models whose screen mesh has been confirmed by rendering, an
   // unverified one shows the screenshot on the wrong face (or not at all).
   .filter((m) => m.verified)
   .map((m) => ({
@@ -316,7 +316,7 @@ export const DEVICES: DeviceSpec[] = [
   },
   {
     id: 'browser_light',
-    name: 'Browser — Light',
+    name: 'Browser Light',
     category: 'Frames',
     kind: 'browser',
     screenAspect: 16 / 10,
@@ -326,7 +326,7 @@ export const DEVICES: DeviceSpec[] = [
   },
   {
     id: 'browser_dark',
-    name: 'Browser — Dark',
+    name: 'Browser Dark',
     category: 'Frames',
     kind: 'browser',
     screenAspect: 16 / 10,
@@ -349,7 +349,7 @@ export const DEVICES: DeviceSpec[] = [
 
 /**
  * What the picker offers: real .glb models only. The procedural slab bodies
- * stay in DEVICES so projects saved against them still resolve and render —
+ * stay in DEVICES so projects saved against them still resolve and render,
  * they're just not something you can reach for any more. Verify another model
  * in deviceModels.json and it shows up here on its own.
  */

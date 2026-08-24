@@ -10,7 +10,7 @@ import type { BackgroundState } from '../types'
  * CSS for a Studio backdrop.
  *
  * The live viewport paints the scene through this, and the exporter repaints
- * the same thing onto a canvas — so anything else that wants a faithful
+ * the same thing onto a canvas, so anything else that wants a faithful
  * miniature of the current backdrop can share it rather than approximating.
  * The frame-ratio previews do exactly that: each candidate shape is filled
  * with the backdrop you are actually going to export, which is what makes

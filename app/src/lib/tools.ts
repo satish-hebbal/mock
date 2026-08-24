@@ -6,7 +6,7 @@ import type { AppMode } from '../store'
  * The tools, in one place.
  *
  * The app menu and the home screen both list them, and their copy had already
- * drifted apart — the same tool described two different ways depending on where
+ * drifted apart, the same tool described two different ways depending on where
  * you read it.
  *
  * Each carries a `tint`: two colours for the soft blobs behind its card. A flat
@@ -60,7 +60,7 @@ export const TOOLS: Tool[] = [
 
 /**
  * The soft blob wash behind a tool card. Two off-centre radials over the panel
- * surface — `strength` is scaled right down for tools that aren't built yet, so
+ * surface: `strength` is scaled right down for tools that aren't built yet, so
  * they recede without needing a separate style.
  */
 export function toolWash(tool: Tool, strength = 1): string {

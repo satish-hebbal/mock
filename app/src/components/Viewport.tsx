@@ -25,7 +25,7 @@ import { DeviceGizmo } from './DeviceGizmo'
 import { OverlayLayer } from './OverlayLayer'
 import { FRAME_BUTTON, FRAME_INSET, NOTCH } from '../lib/notch'
 
-// ————— bridges into the runtime —————
+// ----- bridges into the runtime -----
 
 function RuntimeBridge() {
   const { gl, scene, camera, setFrameloop } = useThree()
@@ -39,8 +39,8 @@ function RuntimeBridge() {
   // The single deterministic driver: evaluate keyframes at the playhead and
   // write into the three scene every frame (PRD §5.4).
   useFrame(() => {
-    // Several passes borrow the renderer mid-frame — the post-processing
-    // composer, the contact-shadow FBO, the environment cube — and each one
+    // Several passes borrow the renderer mid-frame (the post-processing
+    // composer, the contact-shadow FBO, the environment cube) and each one
     // toggles autoClear around its own render. If any of them unmounts between
     // the set and the restore, the canvas stops clearing and every frame paints
     // on top of the last one (the device smears into a fan of ghosts while you
@@ -64,7 +64,7 @@ function SceneRoot({ children }: { children: React.ReactNode }) {
   return <group ref={ref}>{children}</group>
 }
 
-// ————— the lighting rig (PRD §6.4 — photographic three-point setup) —————
+// ----- the lighting rig (PRD §6.4, photographic three-point setup) -----
 
 /** Position on a sphere around the subject, in the rig's camera-relative frame. */
 function place(azimuthDeg: number, elevationDeg: number, radius: number): [number, number, number] {
@@ -186,7 +186,7 @@ function StudioRig() {
         Softboxes as geometry: they are what a glossy phone body actually
         reflects. Without them the metal frames read as flat grey plastic.
 
-        No `key` here on purpose — drei re-renders the cube map whenever these
+        No `key` here on purpose: drei re-renders the cube map whenever these
         children change identity, which is every time a lighting dial moves.
         Remounting instead would throw away and reallocate the render target on
         every frame of a slider drag.
@@ -238,7 +238,7 @@ function StudioRig() {
  * can't be leaned toward or away from the key: offsetting it only slides the
  * capture window until the blurred shadow runs off the edge of its own plane,
  * which shows up as a hard diagonal line across the backdrop. It stays centred,
- * and softness only nudges the blur — past roughly 3 the shadow stops reading
+ * and softness only nudges the blur: past roughly 3 the shadow stops reading
  * as contact and becomes a grey cloud hanging in frame.
  */
 function GroundShadow() {
@@ -275,7 +275,7 @@ function EffectsStack() {
 
   // Switching studio looks turns effects on and off, which mounts and unmounts
   // the composer under a live renderer. Hand the plain render path back a clean
-  // slate — screen target, clearing enabled, buffer wiped — so the first frame
+  // slate (screen target, clearing enabled, buffer wiped) so the first frame
   // after the swap isn't drawn over the composer's leftovers.
   useEffect(() => {
     if (enabled) return
@@ -307,7 +307,7 @@ function EffectsStack() {
   )
 }
 
-// ————— camera gestures (PRD §7.2: drag orbit · scroll zoom · right-drag pan) —————
+// ----- camera gestures (PRD §7.2: drag orbit · scroll zoom · right-drag pan) -----
 
 function useCameraGestures(container: React.RefObject<HTMLDivElement | null>) {
   useEffect(() => {
@@ -383,12 +383,12 @@ function useCameraGestures(container: React.RefObject<HTMLDivElement | null>) {
   }, [container])
 }
 
-// ————— frame-aspect fit —————
+// ----- frame-aspect fit -----
 
 /**
  * Fit the export frame into the viewport, keeping its aspect.
  *
- * `reserveTop` is height the picture may not use — the notch bites into the
+ * `reserveTop` is height the picture may not use: the notch bites into the
  * top of the panel, and anything drawn up there would be clipped away rather
  * than merely covered. The matching padding on the container is what actually
  * pushes the frame down; this only stops it being sized as though that space
@@ -421,7 +421,7 @@ function useFitRect(
   return rect
 }
 
-// ————— main viewport —————
+// ----- main viewport -----
 
 export function Viewport() {
   const background = useStudio((s) => s.project.scene.background)
@@ -465,7 +465,7 @@ export function Viewport() {
   const alphaBg = background.type === 'transparent'
   /*
    * Backdrop finish. Matched to the exporter, which runs the same two numbers
-   * as a canvas filter over whatever it just painted — so this applies to every
+   * as a canvas filter over whatever it just painted, so this applies to every
    * backdrop rather than only the two that happen to be photographic.
    */
   const bgFilter =
@@ -492,8 +492,8 @@ export function Viewport() {
            * With keyframes selected the timeline nudges them instead of moving
            * the playhead, which is right while you are working in the timeline
            * and a trap once you have moved on: the selection outlived every
-           * click, so arrows had quietly stopped scrubbing and only Escape —
-           * which nobody thinks to press — brought them back. Turning to the
+           * click, so arrows had quietly stopped scrubbing and only Escape,
+           * which nobody thinks to press, brought them back. Turning to the
            * canvas is as clear a "done with those" as there is.
            */
           selectKeyframes([])
@@ -544,13 +544,13 @@ export function Viewport() {
 
       {/*
         Lost-the-subject button. Orbiting past the edge of the frame is easy and
-        gives no clue how to get back — the numbers say nothing and the canvas is
+        gives no clue how to get back: the numbers say nothing and the canvas is
         empty. This recentres on the devices and fits them, keeping the angle,
         so a wrong drag is one click to undo rather than a hunt.
 
         Its size and inset are the one pair that satisfies both rules the top of
         this panel is built on. At 36 in from 4 it lands dead centre of the same
-        band the notch tools sit in — 4 + 18 is the 6 + 16 they centre on — so
+        band the notch tools sit in (4 + 18 is the 6 + 16 they centre on) so
         the two groups share a centre line across the whole width of the canvas.
         And 4 of clearance under an 8 corner puts its corner arc on exactly the
         centre of the panel's own 12 corner, so the two curves are concentric
@@ -567,7 +567,7 @@ export function Viewport() {
         <Focus size={16} strokeWidth={1.8} />
       </button>
 
-      {/* gesture hints — shown until the user's first orbit/zoom/pan, then never again */}
+      {/* gesture hints, shown until the user's first orbit/zoom/pan, then never again */}
       {hintsVisible && (
         <div
           className={`pointer-events-none absolute bottom-3 left-4 flex gap-2 t-caption tracking-widest text-(--tx3) transition-opacity duration-300 ${

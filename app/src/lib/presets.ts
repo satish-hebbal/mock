@@ -2,15 +2,15 @@ import { DEFAULT_DEVICE_ID, isPickable } from './registry'
 import { clampCamera } from './camera'
 import type { CameraState, Keyframe, ProjectDoc } from '../types'
 
-// ————— Social / platform export sizes (PRD §6.8) —————
+// ----- Social / platform export sizes (PRD §6.8) -----
 
 /**
  * Where a size is destined for.
  *
  * Thirteen names in one column is a list you read top to bottom every time,
  * because "App Store 6.5″" and "LinkedIn" look equally likely until you have
- * parsed both. You almost always arrive knowing the destination — shipping a
- * listing, posting a clip — so grouping by it turns the search into picking a
+ * parsed both. You almost always arrive knowing the destination (shipping a
+ * listing, posting a clip) so grouping by it turns the search into picking a
  * heading and then one of three.
  */
 export type SizeGroup = 'Video' | 'Social' | 'App stores' | 'Web'
@@ -46,7 +46,7 @@ export function presetLabel(name: string): string {
   return name.replace(/\s*\d+\s*[×x]\s*\d+$/, '').trim()
 }
 
-// ————— Frame shape —————
+// ----- Frame shape -----
 
 /** An aspect the frame can be set to, independent of its pixel size. */
 export interface AspectPreset {
@@ -58,16 +58,16 @@ export interface AspectPreset {
 }
 
 export const ASPECT_PRESETS: AspectPreset[] = [
-  { id: '16:9', label: '16:9', w: 16, h: 9, note: 'Landscape — slides, YouTube, site heroes' },
+  { id: '16:9', label: '16:9', w: 16, h: 9, note: 'Landscape: slides, YouTube, site heroes' },
   { id: '21:9', label: '21:9', w: 21, h: 9, note: 'Ultra-wide banner' },
   { id: '3:2', label: '3:2', w: 3, h: 2, note: 'Classic photo landscape' },
   { id: '4:3', label: '4:3', w: 4, h: 3 },
-  { id: '1:1', label: '1:1', w: 1, h: 1, note: 'Square — feed posts' },
-  { id: '4:5', label: '4:5', w: 4, h: 5, note: 'Portrait — the tallest Instagram allows in-feed' },
+  { id: '1:1', label: '1:1', w: 1, h: 1, note: 'Square: feed posts' },
+  { id: '4:5', label: '4:5', w: 4, h: 5, note: 'Portrait: the tallest Instagram allows in-feed' },
   { id: '3:4', label: '3:4', w: 3, h: 4 },
   { id: '2:3', label: '2:3', w: 2, h: 3, note: 'Classic photo portrait' },
   { id: '9:16', label: '9:16', w: 9, h: 16, note: 'Story / Reel / TikTok' },
-  { id: '9:19.5', label: '9:19.5', w: 9, h: 19.5, note: 'Modern phone screen — App Store shots' },
+  { id: '9:19.5', label: '9:19.5', w: 9, h: 19.5, note: 'Modern phone screen: App Store shots' },
 ]
 
 /** Video encoders reject odd dimensions, so every frame lands on even pixels. */
@@ -98,7 +98,7 @@ export function ratioLabel(width: number, height: number): string {
   return `${(width / height).toFixed(2)}:1`
 }
 
-// ————— Camera angle presets (PRD §6.3) —————
+// ----- Camera angle presets (PRD §6.3) -----
 
 /**
  * Where the presets sit on the rail, loosely by how safe they are.
@@ -106,7 +106,7 @@ export function ratioLabel(width: number, height: number): string {
  * 'level' and 'studio' are the angles a catalogue asks for; 'cinematic' are
  * the ones a film grammar names, borrowed because a product shot reads the
  * same way a face does; 'wild' are deliberately badly hung. Grouping them
- * matters at this length — twenty-odd unlabelled chips is a wall, and the
+ * matters at this length: twenty-odd unlabelled chips is a wall, and the
  * difference between Packshot and Caligari is the whole point.
  */
 export type CameraPresetGroup = 'level' | 'studio' | 'cinematic' | 'wild'
@@ -133,17 +133,17 @@ export const CAMERA_PRESET_GROUPS: { id: CameraPresetGroup; label: string }[] = 
  * camera's right. `roll` cants the frame.
  *
  * Every preset carries its own lens, because half of what these names mean is
- * focal length — a worm's eye that isn't wide doesn't tower, and a packshot
+ * focal length: a worm's eye that isn't wide doesn't tower, and a packshot
  * that isn't long isn't neutral. Carrying it everywhere also stops a preset
  * being a delta on the last one: click Fisheye and then Diamond and you get
  * Diamond, not Diamond wearing a 15mm.
  *
- * `presetCamera()` is what makes that bearable — it trades the new focal
+ * `presetCamera()` is what makes that bearable: it trades the new focal
  * length against distance, so the subject stays the size it already was and
  * the only thing that changes is how much perspective there is.
  */
 export const CAMERA_PRESETS: CameraPreset[] = [
-  // —— level: the informational angles ——
+  // -- level: the informational angles --
   {
     name: 'Front',
     group: 'level',
@@ -181,7 +181,7 @@ export const CAMERA_PRESETS: CameraPreset[] = [
     cam: { tiltX: -8, tiltY: 180, roll: 0, fov: 28 },
   },
 
-  // —— studio: the conventions of a product set ——
+  // -- studio: the conventions of a product set --
   {
     name: 'Hero',
     group: 'studio',
@@ -197,13 +197,13 @@ export const CAMERA_PRESETS: CameraPreset[] = [
   {
     name: 'Packshot',
     group: 'studio',
-    note: 'Long lens, almost no angle. Deliberately uneventful — the catalogue shot.',
+    note: 'Long lens, almost no angle. Deliberately uneventful: the catalogue shot.',
     cam: { tiltX: -4, tiltY: 12, roll: 0, fov: 20 },
   },
   {
     name: 'Isometric',
     group: 'studio',
-    note: 'Equal thirds of top, front and side — the angle app icons are drawn at.',
+    note: 'Equal thirds of top, front and side: the angle app icons are drawn at.',
     cam: { tiltX: -30, tiltY: 45, roll: 0, fov: 22 },
   },
   {
@@ -216,7 +216,7 @@ export const CAMERA_PRESETS: CameraPreset[] = [
     /*
      * The one preset that lays the set down as well as moving the lens.
      * Devices stand upright, so a camera straight overhead sees the top edge
-     * of a phone and nothing else — the shot people mean by "flat lay" needs
+     * of a phone and nothing else: the shot people mean by "flat lay" needs
      * the subject on its back, which is what the scene rotation is for.
      */
     name: 'Flat Lay',
@@ -225,7 +225,7 @@ export const CAMERA_PRESETS: CameraPreset[] = [
     cam: { tiltX: -88, tiltY: 0, roll: 0, fov: 24, rotateX: -90 },
   },
 
-  // —— cinematic: film grammar, borrowed ——
+  // -- cinematic: film grammar, borrowed --
   {
     name: 'High Angle',
     group: 'cinematic',
@@ -257,7 +257,7 @@ export const CAMERA_PRESETS: CameraPreset[] = [
     cam: { tiltX: -6, tiltY: 30, roll: 0, fov: 14 },
   },
 
-  // —— wild: hung on purpose wrong ——
+  // -- wild: hung on purpose wrong --
   {
     name: 'Dutch',
     group: 'wild',
@@ -304,7 +304,7 @@ export const CAMERA_PRESETS: CameraPreset[] = [
  * smaller, which reads as "it zoomed out", not "it went wide". Trading focal
  * length against distance to hold the subject the same size is the move a
  * photographer makes by hand, and it's what leaves only the thing the preset
- * is actually about — how much perspective there is — different afterwards.
+ * is actually about (how much perspective there is) different afterwards.
  */
 export function presetCamera(preset: CameraPreset, current: CameraState): Partial<CameraState> {
   /*
@@ -320,7 +320,7 @@ export function presetCamera(preset: CameraPreset, current: CameraState): Partia
   return patch
 }
 
-// ————— Animation presets (PRD §6.9) — drop keyframes on the timeline —————
+// ----- Animation presets (PRD §6.9), drop keyframes on the timeline -----
 export interface AnimationPreset {
   id: string
   name: string
@@ -392,7 +392,7 @@ export const ANIMATION_PRESETS: AnimationPreset[] = [
   },
 ]
 
-// ————— Gradient presets (PRD §10.3) —————
+// ----- Gradient presets (PRD §10.3) -----
 export const GRADIENT_PRESETS: { from: string; to: string; angle: number }[] = [
   { from: '#c7b9f0', to: '#9fc4ee', angle: 135 },
   { from: '#fbc2eb', to: '#a6c1ee', angle: 120 },
@@ -406,9 +406,9 @@ export const GRADIENT_PRESETS: { from: string; to: string; angle: number }[] = [
   { from: '#f5f7fa', to: '#c3cfe2', angle: 135 },
 ]
 
-// ————— Overlay fonts (curated Google Fonts + system fallbacks, PRD §6.7/§10.4).
+// ----- Overlay fonts (curated Google Fonts + system fallbacks, PRD §6.7/§10.4).
 // The Google families are loaded via a stylesheet in index.html; exports wait on
-// document.fonts before rasterizing text so previews and files match. —————
+// document.fonts before rasterizing text so previews and files match. -----
 export const OVERLAY_FONTS = [
   'Inter',
   'Poppins',
@@ -424,14 +424,14 @@ export const OVERLAY_FONTS = [
   'Impact',
 ]
 
-// ————— Scene templates (PRD §6.8) —————
+// ----- Scene templates (PRD §6.8) -----
 export interface Template {
   id: string
   name: string
   desc: string
   /** CSS background for the gallery card */
   swatch: string
-  /** device models the layout needs — the template hides while any is missing */
+  /** device models the layout needs: the template hides while any is missing */
   needs: string[]
   apply: (p: ProjectDoc) => void
 }

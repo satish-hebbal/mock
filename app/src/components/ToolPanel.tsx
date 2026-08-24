@@ -58,7 +58,7 @@ import type { CameraState } from '../types'
 
 /*
  * The panel the rail opens. It carries the choices you make *while looking at
- * the scene* — which device, which angle, which backdrop — as browsable
+ * the scene* (which device, which angle, which backdrop) as browsable
  * catalogs. Going vertical is what buys that: a column can show a whole
  * catalog at once where the old ribbon had to scroll it sideways past the
  * canvas. The inspector on the right keeps the fine-tuning.
@@ -75,12 +75,12 @@ const KIND_ICON: Record<DeviceKind, LucideIcon> = {
   card: Square,
 }
 
-// ————— primitives —————
+// ----- primitives -----
 
 /**
  * A titled block. Quiet heading, so the catalog under it stays the loud part.
  *
- * `action` puts a verb on the heading row — Shuffle beside Mesh — where Shots
+ * `action` puts a verb on the heading row, Shuffle beside Mesh, where Shots
  * already puts its own, rather than parking it under the grid as a full-width
  * button pretending to be another preset.
  */
@@ -180,7 +180,7 @@ function ListRow({
   )
 }
 
-// ————— sections —————
+// ----- sections -----
 
 function DevicesSection() {
   const devices = useStudio((s) => s.project.scene.devices)
@@ -316,7 +316,7 @@ function StudioPresetsTab() {
       </Group>
       <Group>
         <label
-          title="Looks are designed around a framing — check this to take that framing too"
+          title="Looks are designed around a framing. Check this to take that framing too"
           className="flex cursor-pointer items-center gap-2 t-body-sm text-(--tx2)"
         >
           <input
@@ -449,7 +449,7 @@ function CameraSection() {
           Snap straight-on
         </button>
         <p className="mt-2 t-caption leading-snug text-(--tx3)">
-          Each angle brings its own lens, and dollies in or out to match — so the subject
+          Each angle brings its own lens, and dollies in or out to match, so the subject
           stays the size it was and only the perspective changes.
         </p>
       </Group>
@@ -498,7 +498,7 @@ function NumField({
  *
  * An empty outline tells you the proportions and nothing else. Filling it with
  * the live scene turns the picker into a set of thumbnails of the same shot at
- * different crops, which is the decision being made — a photo backdrop under
+ * different crops, which is the decision being made, a photo backdrop under
  * 9:16 and under 21:9 are visibly different pictures, and the outlines were
  * identical. `box` is the square the shape is fitted into, so every preview in
  * a row sits on the same baseline whichever way round it is.
@@ -576,7 +576,7 @@ function FrameSection() {
           <NumField value={size.height} onCommit={setHeight} label="Frame height" />
           <Chip
             active={linked}
-            title={linked ? 'Ratio locked — editing one side moves the other' : 'Lock the ratio'}
+            title={linked ? 'Ratio locked, editing one side moves the other' : 'Lock the ratio'}
             onClick={() => setLinked(!linked)}
           >
             {linked ? <Link2 size={12} /> : <Unlink size={12} />}
@@ -615,7 +615,7 @@ function FrameSection() {
         </div>
       </Group>
 
-      {/* one block per destination — you arrive knowing where the shot is going */}
+      {/* one block per destination: you arrive knowing where the shot is going */}
       {SIZE_GROUPS.map((g) => (
         <Group key={g} label={g} divider={false}>
           <div className="flex flex-col gap-0.5">
@@ -657,8 +657,8 @@ function FrameSection() {
  * Stacked rather than gated behind a type picker: every group is browsable at
  * once and clicking a swatch sets both the kind of backdrop and its value, so
  * finding one is looking rather than choosing a category first and then
- * looking. The three that have no swatch to show — the sweep, an uploaded
- * image, and no backdrop at all — lead as tiles.
+ * looking. The three that have no swatch to show (the sweep, an uploaded
+ * image, and no backdrop at all) lead as tiles.
  */
 function BackdropTab() {
   const bg = useStudio((s) => s.project.scene.background)
@@ -704,7 +704,7 @@ function BackdropTab() {
           <Chip
             full
             active={bg.type === 'transparent'}
-            title="No backdrop — exports with a true alpha channel"
+            title="No backdrop, exports with a true alpha channel"
             onClick={() => setBackground({ type: 'transparent' })}
           >
             None
@@ -1046,7 +1046,7 @@ function AddSection() {
   )
 }
 
-// ————— panel —————
+// ----- panel -----
 
 const BODY = {
   devices: DevicesSection,

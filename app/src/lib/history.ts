@@ -2,7 +2,7 @@
  * Undo granularity.
  *
  * A slider drag fires a change per pointer move, so committing each one made
- * undo replay a scrub frame by frame — dragging zoom from 20% to 50% cost
+ * undo replay a scrub frame by frame: dragging zoom from 20% to 50% cost
  * thirty presses to walk back. What people expect, and what Figma and its peers
  * do, is one entry per *gesture*: the whole drag collapses to a single step.
  *
@@ -14,8 +14,8 @@
  *   2. A quiet gap. Stop for `WINDOW` and the run closes, so a deliberate second
  *      nudge to the same slider is its own step rather than joining the first.
  *
- * Controls that know when an interaction ends — the scrub handle releasing, a
- * typed value committing — call `endEditRun()` so the next touch always starts
+ * Controls that know when an interaction ends (the scrub handle releasing, a
+ * typed value committing) call `endEditRun()` so the next touch always starts
  * fresh, instead of waiting out the timer.
  */
 
@@ -27,7 +27,7 @@ let runAt = 0
 /**
  * Should this edit fold into the entry already on the stack?
  *
- * Pass no label for discrete actions (delete, apply a preset, import) — those
+ * Pass no label for discrete actions (delete, apply a preset, import), those
  * always earn their own entry.
  */
 export function coalesces(label?: string): boolean {

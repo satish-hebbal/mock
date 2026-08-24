@@ -7,7 +7,7 @@ import { rt } from '../lib/runtime'
 /*
  * The app menu. Switching tool, theme or reading the shortcut guide are things
  * you do between sessions, not while composing a shot, so they don't get to own
- * a permanent column — they live behind the logo and drop down over the canvas
+ * a permanent column. They live behind the logo and drop down over the canvas
  * when asked for. Everything the rail and panels do stays reachable underneath.
  */
 
@@ -42,7 +42,7 @@ export function AppSheet() {
 
   /*
    * Park the render loop while the sheet is over the canvas. The 3D view draws
-   * continuously, and it sits directly behind a backdrop-filter — so every
+   * continuously, and it sits directly behind a backdrop-filter, so every
    * frame invalidates the blur and forces the compositor to redo it, which is
    * what makes hovering in here feel a beat late. Nothing behind the sheet
    * needs to animate while it's open.
@@ -84,7 +84,7 @@ export function AppSheet() {
           <div className="mb-4 flex items-center gap-2.5">
             <img src="/frog-logo.svg" alt="" width={22} height={22} />
             <span className="t-body font-semibold text-(--tx)">Ribbit</span>
-            <span className="t-body-sm text-(--tx3)">— a personal toolkit for visual work</span>
+            <span className="t-body-sm text-(--tx3)">a personal toolkit for visual work</span>
           </div>
 
           <p className="mb-2 t-eyebrow text-(--tx3) uppercase">

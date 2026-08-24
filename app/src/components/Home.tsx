@@ -13,7 +13,7 @@ export function Home() {
           <Mascot size={128} className="mb-4" />
           <h1 className="t-headline text-(--tx)">Ribbit</h1>
           <p className="mt-1.5 t-body text-(--tx2)">
-            A personal toolkit for visual work — mock it up, dress it up, ship it.
+            A personal toolkit for visual work. Mock it up, dress it up, ship it.
           </p>
         </div>
 

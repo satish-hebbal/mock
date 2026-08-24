@@ -84,7 +84,7 @@ function reflow(doc: ShotsDoc) {
  * Re-run the active preset because the frame it was measured against changed.
  *
  * Presets work out their spacing from the box aspect and the device aspect, so
- * a new canvas size, padding, or device leaves the stored offsets stale — which
+ * a new canvas size, padding, or device leaves the stored offsets stale, which
  * is why changing the frame used to mean going back and clicking the same
  * preset again. Does nothing once the arrangement has been edited by hand:
  * those offsets are already relative to the box and survive a resize, and
@@ -95,7 +95,7 @@ function remeasure(doc: ShotsDoc) {
   applyLayoutToDoc(doc, doc.layout)
 }
 
-/** Placement the presets own — touching these by hand makes the layout custom. */
+/** Placement the presets own: touching these by hand makes the layout custom. */
 const HAND_PLACED = ['scale', 'offsetX', 'offsetY', 'rotate'] as const
 
 /**
@@ -199,7 +199,7 @@ interface ShotsState {
   /** back to an empty shot, as one undoable step */
   startOver: () => void
   setSize: (width: number, height: number) => void
-  /** dolly the camera in or out — magnifies the whole composition */
+  /** dolly the camera in or out, magnifies the whole composition */
   setZoom: (zoom: number) => void
   setBackground: (patch: Partial<ShotsBackground>) => void
   /** depth of field over the whole frame */
@@ -219,7 +219,7 @@ interface ShotsState {
    * Rearrange which media occupies which slot, without touching layout.
    *
    * `order[slot]` names the *current* index whose media should end up in
-   * `slot`, so `order` is a permutation of `0..images.length-1` — the same
+   * `slot`, so `order` is a permutation of `0..images.length-1`, the same
    * shape a drag-reorder produces as you preview it.
    *
    * Only the media moves: `assetId` and the palette sampled from it. Position,
@@ -290,7 +290,7 @@ export const useShots = create<ShotsState>()(
          * Skip past entries that would not change anything on screen.
          *
          * Any control that commits before writing can leave a duplicate of
-         * the current state behind — re-picking the option already selected,
+         * the current state behind, re-picking the option already selected,
          * or blurring a field nobody edited. Undo would then consume a press
          * per duplicate while the picture sat still, which is indistinguishable
          * from the shortcut being broken. An undo should always show its work.
@@ -485,7 +485,7 @@ export const useShots = create<ShotsState>()(
     /*
      * Align and distribute don't need a selection: there's no multi-select in
      * this editor, and a shot only ever holds up to five screens, so "the
-     * things being aligned" is unambiguous — it's whatever is in the shot.
+     * things being aligned" is unambiguous: it's whatever is in the shot.
      * Both write straight to offsetX/offsetY on every image and, like any
      * other hand placement, that means the doc can no longer claim to be a
      * preset's exact output.
@@ -623,8 +623,8 @@ export const useShots = create<ShotsState>()(
           selected.palette = palette
         } else {
           /*
-           * A new screen matches whatever look the last one settled into —
-           * device, style, shadow, finish — rather than resetting to a bare
+           * A new screen matches whatever look the last one settled into (
+           * device, style, shadow, finish) rather than resetting to a bare
            * screenshot. Screens the count control adds already did this
            * ("adding a screen copies the last one"); dropping in a new file
            * had quietly been the odd one out, landing bare and making

@@ -2,7 +2,7 @@
  * The bite taken out of the canvas.
  *
  * The transform tools have to sit within reach of the thing they transform,
- * which put them on a floating bar over the top of the shot — close, but still
+ * which put them on a floating bar over the top of the shot, close, but still
  * a slab of chrome laid on the picture. Cutting them *into* the panel instead
  * means they cost the shot nothing: the tools live in the hole rather than on
  * top of the image, the way a phone's front camera lives in its island.
@@ -12,7 +12,7 @@
  * to an SVG overlay as a stroke, so the hairline border follows the cut
  * instead of stopping at a rectangle.
  *
- * ————— the geometry —————
+ * ----- the geometry -----
  *
  * Two rules decide every number below; nothing here is eyeballed.
  *
@@ -23,8 +23,8 @@
  *    corners, at 12 it pinches. Get it exact and the button's corner and the
  *    notch's corner stay precisely 6pt apart the whole way round the arc.
  *
- * 2. ONE RADIUS PER DIRECTION OF CURVE. Every corner that bulges outward — the
- *    panel's four, and the two where the notch flares open at the top edge —
+ * 2. ONE RADIUS PER DIRECTION OF CURVE. Every corner that bulges outward (the
+ *    panel's four, and the two where the notch flares open at the top edge)
  *    is the same 12. Every corner that cuts inward is the same 14. So the
  *    outline reads as one shape cut by one tool, rather than a collection of
  *    corners that each got their own guess.
@@ -32,13 +32,13 @@
 
 /*
  * These two are read off the app's own radius scale, which is Linear's and
- * *not* Tailwind's defaults — index.css redefines the namespace, so `rounded-md`
+ * *not* Tailwind's defaults, index.css redefines the namespace, so `rounded-md`
  * here is 8 where stock Tailwind would give 6, and `rounded-lg` is 12 where
  * stock would give 8. Hard-coding the stock numbers is how you end up with a
  * canvas whose corner quietly disagrees with every other panel's.
  */
 
-/** `--radius-lg`: every convex corner — the panel's four and the notch's two. */
+/** `--radius-lg`: every convex corner, the panel's four and the notch's two. */
 export const FRAME_RADIUS = 12
 
 /**
@@ -114,7 +114,7 @@ export const notchCenter = (w: number) => Math.round(w / 2)
  * stroked copy is kept crisp: a 1px line centred on the panel's true edge
  * spills half its width outside the SVG and renders as a washed-out hairline,
  * so the stroke is drawn half a pixel in and lands on the pixel exactly. Note
- * which way each radius moves under that offset — convex corners tighten,
+ * which way each radius moves under that offset, convex corners tighten,
  * and the notch's concave ones open up, because the material is receding from
  * them rather than advancing.
  */

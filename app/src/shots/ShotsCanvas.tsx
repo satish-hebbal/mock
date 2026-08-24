@@ -41,7 +41,7 @@ function useFitRect(outer: React.RefObject<HTMLDivElement | null>, aspect: numbe
   return rect
 }
 
-// ————— the screenshot card (device bezel + frame chrome + image), mirrors render.ts —————
+// ----- the screenshot card (device bezel + frame chrome + image), mirrors render.ts -----
 
 function Card({ img, url, f, L }: { img: ShotsImage; url: string; f: number; L: CardLayout }) {
   const dark = img.frame === 'macos-dark' || img.frame === 'browser-dark'
@@ -399,7 +399,7 @@ function PortraitHandle({
  * The composition itself, at whatever pixel size it's handed.
  *
  * Split out from the viewport so the layout-preset thumbnails can render the
- * *actual* shot — this screenshot, this background, this shadow — rather than a
+ * *actual* shot (this screenshot, this background, this shadow) rather than a
  * drawn approximation. A preset picker that lies about the result is worse than
  * no picker, and a second renderer would drift from this one the first time
  * either changed.
@@ -453,7 +453,7 @@ export function ShotsScene({
    * The backdrop pushes in with the camera, so zooming magnifies the picture
    * rather than just the phones. It never goes below 1: pulling back would
    * otherwise shrink the backdrop off the frame edges, and a backdrop is meant
-   * to be endless — pulling back just shows more of it.
+   * to be endless: pulling back just shows more of it.
    */
   const bgZoom = Math.max(1, doc.zoom ?? 1)
 
@@ -471,7 +471,7 @@ export function ShotsScene({
    */
   return (
     <div className="relative isolate overflow-hidden rounded-lg" style={{ width, height }}>
-      {/* background — the checkerboard takes no blur/vignette, matching the exporter */}
+      {/* background: the checkerboard takes no blur/vignette, matching the exporter */}
       <div
         className="absolute inset-0"
         style={
@@ -519,7 +519,7 @@ export function ShotsScene({
 
 /**
  * A preview that fills whatever width it's given and takes the frame's own
- * aspect — square frame, square preview.
+ * aspect, square frame, square preview.
  *
  * ShotsScene needs real pixel dimensions (it scales the composition by
  * `width / doc.size.width`), so the container is measured rather than guessed.
@@ -635,7 +635,7 @@ function AttractRings({
   /*
    * A shade larger than the frame that clips it, so every ring is already
    * moving before any of it is visible. Proportional to the frame in both
-   * axes, which keeps the overhang even all the way round — an absolute
+   * axes, which keeps the overhang even all the way round, an absolute
    * overshoot clipped the sides long before the top and bottom, and what was
    * left read as two drifting horizontal lines rather than a ring.
    */
@@ -664,14 +664,14 @@ function AttractRings({
             /*
              * Linear, with the shape carried by the keyframe stops instead.
              * A timing function is applied to every segment between stops, so
-             * easing each one made the travel pulse — slowing at each stop and
-             * setting off again — where a ripple should drift inward at a
+             * easing each one made the travel pulse (slowing at each stop and
+             * setting off again) where a ripple should drift inward at a
              * steady rate and only its brightness should change.
              */
             /*
              * `backwards` is not optional here. Three of these four rings are
              * staggered by a delay, and an element waiting on its delay renders
-             * with its *ordinary* styles, not the animation's first frame — so
+             * with its *ordinary* styles, not the animation's first frame, so
              * they sat at full size and full opacity, three hard-edged rings
              * stacked on the canvas, for up to 3.75s after mount. The fill mode
              * makes the 0% keyframe apply during the wait, which is where they

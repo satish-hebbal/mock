@@ -7,7 +7,7 @@ import { SECTIONS } from '../lib/sections'
  * The spine of the editor. Every choice you make *about the scene* enters from
  * here, and each section button opens the panel beside it. The transform tools
  * used to sit below in their own group and have moved to a floating bar over
- * the canvas — they act on the thing you are looking at rather than on a
+ * the canvas: they act on the thing you are looking at rather than on a
  * panel, so they belong next to it. The logo is the only thing that leaves the
  * workspace, so it drops the app menu down over the canvas instead of spending
  * a column on links you press twice a session.
@@ -67,10 +67,10 @@ export function ToolRail() {
 
   return (
     <aside className="z-30 flex w-13 shrink-0 flex-col items-center gap-1 bg-(--panel) py-2.5">
-      {/* brand — the app menu lives behind it */}
+      {/* brand: the app menu lives behind it */}
       <button
         onClick={() => st().setSheetOpen(!sheetOpen)}
-        title="Ribbit — tools, theme & shortcuts"
+        title="Ribbit: tools, theme & shortcuts"
         aria-label="Open the app menu"
         aria-expanded={sheetOpen}
         className={`flex h-9 w-9 items-center justify-center rounded-md transition-colors ${

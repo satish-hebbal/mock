@@ -9,7 +9,7 @@ import type { ToolSection } from '../store'
  * Ordered the way a shot gets built, not the way it gets rendered: pick the
  * device, decide the shape of the picture, dress and light the set, and only
  * then stand somewhere and frame it. Camera sits fourth for that reason rather
- * than because it has little to offer — it carries the stage, which is the
+ * than because it has little to offer: it carries the stage, which is the
  * longest-lived surface in the panel. Add stays last because inserting an
  * overlay is the step after the shot is composed, not part of composing it.
  */

@@ -45,14 +45,14 @@ const BG_LABEL: Record<BackgroundType, string> = {
 /** What a key-to-fill ratio reads as, in the language of the setup. */
 function ratioNote(key: number, fill: number): string {
   const r = fill <= 0.02 ? Infinity : key / fill
-  if (!Number.isFinite(r)) return 'unfilled — single-source drama'
-  if (r >= 6) return `${r.toFixed(1)}:1 — hard, dramatic`
-  if (r >= 2.6) return `${r.toFixed(1)}:1 — natural contrast`
-  if (r >= 1.8) return `${r.toFixed(1)}:1 — soft, flattering`
-  return `${r.toFixed(1)}:1 — near shadowless`
+  if (!Number.isFinite(r)) return 'unfilled (single-source drama)'
+  if (r >= 6) return `${r.toFixed(1)}:1 (hard, dramatic)`
+  if (r >= 2.6) return `${r.toFixed(1)}:1 (natural contrast)`
+  if (r >= 1.8) return `${r.toFixed(1)}:1 (soft, flattering)`
+  return `${r.toFixed(1)}:1 (near shadowless)`
 }
 
-// ————— Source —————
+// ----- Source -----
 
 function SourceSection() {
   const selectedDeviceId = useStudio((s) => s.selectedDeviceId)
@@ -152,7 +152,7 @@ function SourceSection() {
   )
 }
 
-// ————— Camera —————
+// ----- Camera -----
 
 function CameraSection() {
   const cam = useStudio((s) => s.project.scene.camera)
@@ -204,7 +204,7 @@ function CameraSection() {
 }
 
 
-// ————— Scene (background / environment / ground) —————
+// ----- Scene (background / environment / ground) -----
 
 function SceneSection() {
   const bg = useStudio((s) => s.project.scene.background)
@@ -223,7 +223,7 @@ function SceneSection() {
     <Section title="Scene" icon={<Image {...secIcon} />}>
       {/* the backdrop is *chosen* in the toolbar; this section tunes the choice */}
       <p className="mb-2 t-caption text-(--tx3)">
-        Backdrop: <span className="text-(--tx2)">{BG_LABEL[bg.type]}</span> — swap it from the
+        Backdrop: <span className="text-(--tx2)">{BG_LABEL[bg.type]}</span>. Swap it from the
         toolbar above.
       </p>
 
@@ -257,7 +257,7 @@ function SceneSection() {
       )}
 
       {/* the backdrop finish, which the preview and the exporter both run over
-          whatever they just painted — so it is offered for every backdrop
+          whatever they just painted, so it is offered for every backdrop
           rather than only the two that happen to be photographic */}
       {bg.type !== 'transparent' && bg.type !== 'studio' && (
         <>
@@ -282,7 +282,7 @@ function SceneSection() {
             min={0.1}
             max={0.8}
             onChange={(hotY) => setSweep({ hotY })}
-            hint="Where the key hits the paper — keep it just behind the product"
+            hint="Where the key hits the paper. Keep it just behind the product"
           />
           <SliderRow label="Spread" value={bg.sweep.spread} min={0.2} max={1.2} onChange={(spread) => setSweep({ spread })} />
           <SliderRow label="Floor" value={bg.sweep.floor} min={0} max={0.9} onChange={(floor) => setSweep({ floor })} hint="Falloff toward the bottom of the sweep" />
@@ -317,9 +317,9 @@ function SceneSection() {
         />
 
         <SubHeading icon={<Sun {...subIcon} />}>Lighting</SubHeading>
-        <SliderRow label="Key" value={env.keyIntensity} min={0} max={4} onChange={(keyIntensity) => setEnvironment({ keyIntensity })} hint="Main lamp — defines the form" />
+        <SliderRow label="Key" value={env.keyIntensity} min={0} max={4} onChange={(keyIntensity) => setEnvironment({ keyIntensity })} hint="Main lamp, defines the form" />
         <SliderRow label="Fill" value={env.fillIntensity} min={0} max={3} onChange={(fillIntensity) => setEnvironment({ fillIntensity })} hint="Opens the shadows the key casts" />
-        <SliderRow label="Rim" value={env.rimIntensity} min={0} max={3} onChange={(rimIntensity) => setEnvironment({ rimIntensity })} hint="Behind the subject — peels it off the backdrop" />
+        <SliderRow label="Rim" value={env.rimIntensity} min={0} max={3} onChange={(rimIntensity) => setEnvironment({ rimIntensity })} hint="Behind the subject, peels it off the backdrop" />
         <SliderRow label="Ambient" value={env.ambient} min={0} max={2} onChange={(ambient) => setEnvironment({ ambient })} />
         <p className="mt-1 mb-2 pl-5 t-caption text-(--tx3)">
           Key-to-fill {ratioNote(env.keyIntensity, env.fillIntensity)}
@@ -378,7 +378,7 @@ function SceneSection() {
             step={1}
             format={(v) => `${v.toFixed(0)}°`}
             onChange={(keyAzimuth) => setEnvironment({ keyAzimuth })}
-            hint="Degrees off the lens axis — 45° is the workhorse, 15–70° the useful range"
+            hint="Degrees off the lens axis. 45° is the workhorse, 15–70° the useful range"
           />
           <SliderRow
             label="Height"
@@ -443,7 +443,7 @@ function SceneSection() {
   )
 }
 
-// ————— Effects —————
+// ----- Effects -----
 
 function EffectsSection() {
   const fx = useStudio((s) => s.project.scene.effects)
@@ -477,7 +477,7 @@ function EffectsSection() {
   )
 }
 
-// ————— Devices —————
+// ----- Devices -----
 
 function DevicesSection() {
   const devices = useStudio((s) => s.project.scene.devices)
@@ -489,7 +489,7 @@ function DevicesSection() {
 
   return (
     <Section title="3D Devices" icon={<Box {...secIcon} />}>
-      {/* which device these controls edit — adding, arranging and removing live
+      {/* which device these controls edit: adding, arranging and removing live
           in the toolbar, so this is a selector rather than a manager */}
       {devices.length > 1 && selected && (
         <div className="mb-2">
@@ -614,7 +614,7 @@ function DeviceTransformRows({ deviceId }: { deviceId: string }) {
   )
 }
 
-// ————— Overlays —————
+// ----- Overlays -----
 
 function OverlaysSection() {
   const overlays = useStudio((s) => s.project.overlays)
@@ -626,7 +626,7 @@ function OverlaysSection() {
     <Section title="Text · Logo · Shapes" icon={<Type {...secIcon} />} defaultOpen={false}>
       {overlays.length === 0 && (
         <p className="t-caption text-(--tx3)">
-          Add text, a shape or a logo from the toolbar above — they'll show up here to edit.
+          Add text, a shape or a logo from the toolbar above. They'll show up here to edit.
         </p>
       )}
       {overlays.length > 0 && (
@@ -742,13 +742,13 @@ function OverlaysSection() {
   )
 }
 
-// ————— assembled inspector —————
+// ----- assembled inspector -----
 
 /*
  * Ordered by what the panel is *about*, working outward from the subject.
  *
  * Source is the screenshot, 3D Devices is the thing holding it, and Camera is
- * where you stand to look at the pair — those three are one continuous train
+ * where you stand to look at the pair: those three are one continuous train
  * of thought and now sit together. Scene dresses what is behind them, and
  * Effects grades the finished picture, so both are later passes over a shot
  * that already exists. Overlays stay last: they are added on top of a frame

@@ -1,3 +1,4 @@
+import { Mascot } from './Mascot'
 import { useStudio } from '../store'
 import { TOOLS, toolWash } from '../lib/tools'
 
@@ -9,7 +10,7 @@ export function Home() {
       <div className="mx-auto flex min-h-full max-w-3xl flex-col justify-center px-8 py-16">
         {/* brand */}
         <div className="mb-10 flex flex-col items-center text-center">
-          <img src="/frog-logo.svg" alt="Ribbit" width={64} height={64} className="mb-4" />
+          <Mascot size={128} className="mb-4" />
           <h1 className="t-headline text-(--tx)">Ribbit</h1>
           <p className="mt-1.5 t-body text-(--tx2)">
             A personal toolkit for visual work — mock it up, dress it up, ship it.

@@ -51,7 +51,7 @@ function Modal({
   )
 }
 
-// ————— Export dialog (PRD §6.10) —————
+// ----- Export dialog (PRD §6.10) -----
 
 export function ExportDialog() {
   const project = useStudio((s) => s.project)
@@ -255,7 +255,7 @@ export function ExportDialog() {
           </label>
           <p className="mb-2 t-caption text-(--tx3)">
             {(project.durationMs / 1000).toFixed(1)}s · {project.fps} fps ·{' '}
-            {Math.round((project.durationMs / 1000) * project.fps)} frames — rendered offline in your
+            {Math.round((project.durationMs / 1000) * project.fps)} frames, rendered offline in your
             browser.
           </p>
         </>
@@ -284,7 +284,7 @@ export function ExportDialog() {
   )
 }
 
-// ————— Templates dialog (PRD §6.8) —————
+// ----- Templates dialog (PRD §6.8) -----
 
 export function TemplatesDialog() {
   const st = useStudio.getState
@@ -309,7 +309,7 @@ export function TemplatesDialog() {
   )
 }
 
-// ————— Shortcuts dialog —————
+// ----- Shortcuts dialog -----
 
 /**
  * Render "Ctrl+Shift+Z" as individual keycaps. A slash only separates when it
@@ -401,7 +401,7 @@ export function ShortcutsDialog() {
   )
 }
 
-// ————— Export progress overlay —————
+// ----- Export progress overlay -----
 
 export function ExportProgressOverlay() {
   const progress = useStudio((s) => s.exportProgress)

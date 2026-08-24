@@ -119,7 +119,7 @@ function useInspectorActions() {
     /*
      * No confirm dialog: the button is held rather than clicked, so the intent
      * is already proven by the time this runs. Both stores commit to history
-     * first, so undo is still the way back if the hold was a mistake — which
+     * first, so undo is still the way back if the hold was a mistake, which
      * the toast says, since there is no dialog left to say it in.
      */
     startOver: () => {
@@ -291,8 +291,8 @@ export function InspectorHeader() {
 }
 
 /**
- * Collapsed state. The panel used to disappear outright, which took Export —
- * the one irreversible action in the app — off screen with it, and left nothing
+ * Collapsed state. The panel used to disappear outright, which took Export,
+ * the one irreversible action in the app, off screen with it, and left nothing
  * on the edge to say a panel was ever there. Like the timeline's transport bar,
  * the rail keeps the verbs and drops only the detail.
  */

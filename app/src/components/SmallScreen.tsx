@@ -1,4 +1,5 @@
 import { Monitor } from 'lucide-react'
+import { Mascot } from './Mascot'
 
 /*
  * The phone door.
@@ -11,12 +12,16 @@ import { Monitor } from 'lucide-react'
  * Mounting matters: gating with `hidden lg:flex` would still boot the store,
  * hydrate IndexedDB and spin up the WebGL viewport behind the note, which is a
  * lot of phone battery spent rendering something nobody can see.
+ *
+ * Same reasoning governs the frog: it is the still SVG until someone presses
+ * it, and only then does the Rive runtime get fetched. Nobody pays for an
+ * animation on the way out the door.
  */
 
 export function SmallScreen() {
   return (
     <div className="flex h-full flex-col items-center justify-center gap-5 bg-(--panel2) px-8 text-center text-(--tx)">
-      <img src="/frog-logo.svg" alt="Ribbit" width={72} height={72} />
+      <Mascot size={72} awaken="contact" />
 
       <div>
         <h1 className="t-headline text-(--tx)">Ribbit</h1>

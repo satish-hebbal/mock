@@ -7,7 +7,7 @@ import type { ShotsBackground } from './types'
 
 /**
  * CSS for a background, shared by the live preview (ShotsCanvas) and any
- * other spot that wants a faithful swatch of it — e.g. the aspect-ratio
+ * other spot that wants a faithful swatch of it, e.g. the aspect-ratio
  * picker, whose previews are painted in whatever background is active rather
  * than a flat placeholder.
  */

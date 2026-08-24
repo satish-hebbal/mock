@@ -7,7 +7,7 @@ import { gradeFilter } from './grade'
 import { rgba } from './color'
 import type { AssetRuntime, BackgroundState, Overlay, ProjectDoc, SweepSpec } from '../types'
 
-// ————— Background compositing (preview CSS ⇄ export canvas parity) —————
+// ----- Background compositing (preview CSS ⇄ export canvas parity) -----
 
 function paintLinearGradient(
   ctx: CanvasRenderingContext2D,
@@ -156,7 +156,7 @@ async function paintBackground(
   ctx.restore()
 }
 
-// ————— Overlay compositing (PRD §6.7 — rendered at export resolution) —————
+// ----- Overlay compositing (PRD §6.7, rendered at export resolution) -----
 
 function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
   const rad = Math.min(r, w / 2, h / 2)
@@ -243,13 +243,13 @@ async function preloadOverlayFonts(overlays: Overlay[]) {
     try {
       jobs.push(document.fonts.load(`${o.weight} 32px "${o.font}"`))
     } catch {
-      // ignore unknown families — canvas falls back to system-ui
+      // ignore unknown families, canvas falls back to system-ui
     }
   }
   await Promise.all(jobs).catch(() => {})
 }
 
-// ————— Renderer size management —————
+// ----- Renderer size management -----
 
 interface RendererBackup {
   width: number
@@ -316,7 +316,7 @@ function resumeVideos() {
   for (const v of rt.videos.values()) void v.play().catch(() => {})
 }
 
-// ————— Image export (PRD §11.4) —————
+// ----- Image export (PRD §11.4) -----
 
 export interface ImageExportOptions {
   width: number
@@ -378,7 +378,7 @@ export async function exportImage(
   }
 }
 
-// ————— Video export (PRD §11.3 — offline, frame-accurate, client-side) —————
+// ----- Video export (PRD §11.3, offline, frame-accurate, client-side) -----
 
 export interface VideoExportOptions {
   width: number
@@ -400,7 +400,7 @@ export async function exportVideo(
 ) {
   if (!rt.gl || !rt.camera) throw new Error('Renderer not ready')
   if (typeof VideoEncoder === 'undefined')
-    throw new Error('WebCodecs is not supported in this browser — try Chrome or Edge.')
+    throw new Error('WebCodecs is not supported in this browser. Try Chrome or Edge.')
 
   await preloadOverlayFonts(project.overlays)
 
@@ -510,7 +510,7 @@ export function cancelExport() {
   rt.exportCancelled = true
 }
 
-// ————— Batch image export —————
+// ----- Batch image export -----
 
 export interface BatchSize {
   name: string
@@ -547,7 +547,7 @@ export async function exportImageBatch(
   }
 }
 
-// ————— Quick capture at viewport state —————
+// ----- Quick capture at viewport state -----
 
 export async function quickCapture(project: ProjectDoc, assets: Record<string, AssetRuntime>, timeMs: number) {
   await exportImage(

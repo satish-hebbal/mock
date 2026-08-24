@@ -10,7 +10,7 @@ export function barFracFor(frame: ShotsFrame): number {
 }
 
 export interface CardLayout {
-  /** outer card size on the canvas, in export pixels — the whole device frame */
+  /** outer card size on the canvas, in export pixels, the whole device frame */
   cardW: number
   cardH: number
   /** card center on the canvas */
@@ -25,7 +25,7 @@ export interface CardLayout {
   barH: number
   /** screen corner radius in px */
   screenRadiusPx: number
-  /** outer card corner radius in px — 0 with a frame, whose PNG shapes itself */
+  /** outer card corner radius in px, 0 with a frame, whose PNG shapes itself */
   outerRadiusPx: number
   borderPx: number
   /** the frame asset to paint over the screen, or null for a bare screenshot */
@@ -38,7 +38,7 @@ export interface CardLayout {
  * simply multiplies the result by its display scale.
  *
  * With a device frame the *PNG* is what gets fitted into the padded content
- * area, and the screen rect is its cutout scaled by the same factor — so the
+ * area, and the screen rect is its cutout scaled by the same factor, so the
  * screenshot always lands exactly in the hole, at any size.
  */
 export function computeLayout(
@@ -48,7 +48,7 @@ export function computeLayout(
   W: number,
   H: number,
   /**
-   * Camera zoom. Applied to the card size *and* to its offset from centre —
+   * Camera zoom. Applied to the card size *and* to its offset from centre,
    * scaling size alone grows each screen about its own middle, which closes the
    * gaps instead of magnifying the arrangement.
    */
@@ -59,7 +59,7 @@ export function computeLayout(
    * A device frame is a flat photograph of a real phone, lit from one angle. Tilt
    * it in pseudo-3D and the lighting no longer agrees with the pose, so it reads
    * as a picture of a phone rather than a phone. 3D therefore drops the frame and
-   * shows the bare screen — both here and, because the exporter reads the same
+   * shows the bare screen, both here and, because the exporter reads the same
    * layout, in the file you get out.
    */
   const bezel = img.style3d ? null : bezelFor(img.device)

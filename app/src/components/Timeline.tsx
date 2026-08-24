@@ -91,7 +91,7 @@ export function Timeline() {
     localStorage.setItem(HEIGHT_KEY, String(height))
   }, [height])
 
-  // ————— panel resize —————
+  // ----- panel resize -----
 
   const onResizeStart = (e: React.PointerEvent) => {
     e.preventDefault()
@@ -113,7 +113,7 @@ export function Timeline() {
     el.addEventListener('pointerup', onUp)
   }
 
-  // ————— time <-> pixels —————
+  // ----- time <-> pixels -----
 
   const msFromClientX = useCallback(
     (clientX: number) => {
@@ -145,7 +145,7 @@ export function Timeline() {
     el.addEventListener('pointerup', onUp)
   }
 
-  // ————— keyframe drag (moves the whole selection, with snapping) —————
+  // ----- keyframe drag (moves the whole selection, with snapping) -----
 
   const startKeyframeDrag = (e: React.PointerEvent, kfId: string) => {
     e.stopPropagation()
@@ -194,7 +194,7 @@ export function Timeline() {
     el.addEventListener('pointerup', onUp)
   }
 
-  // ————— marquee selection over the lanes —————
+  // ----- marquee selection over the lanes -----
 
   const startMarquee = (e: React.PointerEvent) => {
     if (e.button !== 0) return
@@ -211,7 +211,7 @@ export function Timeline() {
       if (Math.abs(box.x1 - box.x0) + Math.abs(box.y1 - box.y0) > 4) moved = true
       if (!moved) return
       setMarquee({ ...box })
-      // hit-test the rendered diamonds — cheap and always in sync with layout
+      // hit-test the rendered diamonds, cheap and always in sync with layout
       const rect = {
         left: Math.min(box.x0, box.x1),
         right: Math.max(box.x0, box.x1),
@@ -239,7 +239,7 @@ export function Timeline() {
     el.addEventListener('pointerup', onUp)
   }
 
-  // ————— keyboard nudging —————
+  // ----- keyboard nudging -----
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -269,7 +269,7 @@ export function Timeline() {
       className="relative flex shrink-0 flex-col rounded-lg border border-(--line) bg-(--raised)"
       style={{ height: collapsed ? TRANSPORT_H : height }}
     >
-      {/* resize grip — sits on the top edge, canvas above gives up the space */}
+      {/* resize grip: sits on the top edge, canvas above gives up the space */}
       <div
         onPointerDown={onResizeStart}
         onDoubleClick={() => setHeight(210)}
@@ -458,7 +458,7 @@ export function Timeline() {
             <div ref={tracksRef} className="relative flex min-h-0 flex-1 flex-col overflow-y-auto">
               {tracks.length === 0 && (
                 <p className="py-3 text-center t-caption text-(--tx3)">
-                  No keyframes yet — toggle a ◆ next to any property, or apply an animation preset.
+                  No keyframes yet. Toggle a ◆ next to any property, or apply an animation preset.
                 </p>
               )}
               {tracks.map((track, ti) => (

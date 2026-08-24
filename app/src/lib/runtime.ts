@@ -11,7 +11,7 @@ export interface ScreenHandle {
 /**
  * Live handles into the R3F scene, registered by viewport components.
  * The same deterministic `applyAtTime` drives both the edit-mode RAF loop and
- * the offline export loop (PRD §5.4, §11.3) — guaranteeing WYSIWYG.
+ * the offline export loop (PRD §5.4, §11.3), guaranteeing WYSIWYG.
  */
 export const rt = {
   gl: undefined as THREE.WebGLRenderer | undefined,
@@ -29,7 +29,7 @@ export const rt = {
   /** true while a transform-gizmo handle is held, so camera gestures stand down */
   gizmoDragging: false,
   /**
-   * Objects that live in the scene purely for editing — the transform gizmo and
+   * Objects that live in the scene purely for editing, the transform gizmo and
    * anything like it. They share the scene the exporter renders, so unless they
    * are hidden for the duration they get baked into the picture.
    */
@@ -39,7 +39,7 @@ export const rt = {
 /**
  * Hide (or restore) every editor-only object. The exporter wraps its whole run
  * in this: `renderFrame()` draws whatever is in the scene, and React can't be
- * relied on to have unmounted the gizmo by then — the export renders
+ * relied on to have unmounted the gizmo by then: the export renders
  * synchronously, well before any re-render would land.
  */
 export function setEditorObjectsVisible(visible: boolean) {
@@ -48,7 +48,7 @@ export function setEditorObjectsVisible(visible: boolean) {
 
 /**
  * How far the camera sits from its target at zoom 1. Every reader of the
- * orbital camera — the render loop here, and the camera stage's schematic —
+ * orbital camera, the render loop here, and the camera stage's schematic,
  * measures dolly as `BASE_DIST / zoom`, so the two cannot disagree about where
  * the lens is.
  */
@@ -75,7 +75,7 @@ export function framingForDevices(fovDeg: number): { panX: number; panY: number;
   const radius = box.getBoundingSphere(new THREE.Sphere()).radius
   if (!(radius > 0)) return null
 
-  // fit on whichever axis is tighter — a portrait frame runs out of width first
+  // fit on whichever axis is tighter: a portrait frame runs out of width first
   const vFov = degToRad(fovDeg)
   const hFov = 2 * Math.atan(Math.tan(vFov / 2) * (rt.camera.aspect || 1))
   const dist = (radius / Math.sin(Math.min(vFov, hFov) / 2)) * 1.12 // a little air
@@ -122,8 +122,8 @@ export function applyAtTime(project: ProjectDoc, timeMs: number) {
    * Swing the lighting rig with the lens. A photographer walking around a
    * product takes the lights with them, so a 45° key stays 45° off the camera
    * instead of sliding behind the subject when the shot orbits. Driven here
-   * rather than in a useFrame so the export loop — which renders without R3F's
-   * frame loop — lights every frame exactly like the preview.
+   * rather than in a useFrame so the export loop, which renders without R3F's
+   * frame loop, lights every frame exactly like the preview.
    */
   const yaw = degToRad(v('camera.tiltY', c.tiltY))
   if (rt.lightRig) rt.lightRig.rotation.y = yaw

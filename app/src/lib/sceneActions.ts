@@ -14,7 +14,7 @@ const uid = () => crypto.randomUUID()
  *
  * Backgrounds and logos are not screen media, so they never claim a screen.
  * This used to import normally and unbind afterwards, which quietly threw
- * away the screenshot the selected device was already showing — picking a
+ * away the screenshot the selected device was already showing, picking a
  * backdrop blanked the phone.
  */
 async function importUnboundAsset(file: Blob) {
@@ -100,5 +100,5 @@ export async function requestDevice() {
   } catch {
     // ignore storage failures
   }
-  ui.toast('Thanks — your request was logged.', 'success')
+  ui.toast('Thanks, your request was logged.', 'success')
 }

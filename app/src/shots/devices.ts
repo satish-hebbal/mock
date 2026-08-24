@@ -3,7 +3,7 @@ import type { ShotsFrame } from './types'
 
 /*
  * The Shots device catalog. "Screenshot" (a bare capture with its own corner
- * radius) plus one entry per real frame in `bezels.ts` — there are no drawn
+ * radius) plus one entry per real frame in `bezels.ts`: there are no drawn
  * bezels any more, so the picker, the preview and the exporter all read the
  * same measured geometry and can't drift apart.
  *
@@ -25,7 +25,7 @@ export interface DeviceSpec {
   category: DeviceCategory
   /** the frame asset, or null for a bare screenshot */
   bezel: Bezel | null
-  /** screen size in logical points — the frame's cutout, or null when bare */
+  /** screen size in logical points, the frame's cutout, or null when bare */
   screen: { w: number; h: number } | null
   /**
    * Window chrome this entry wears in place of a bezel. A screen has one

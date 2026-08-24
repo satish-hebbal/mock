@@ -53,14 +53,14 @@ function usePlayback() {
 }
 
 /*
- * Input types with no free-text state of their own — a colour swatch, a
- * checkbox — so there's nothing for a native undo to apply to and no reason
+ * Input types with no free-text state of their own (a colour swatch, a
+ * checkbox) so there's nothing for a native undo to apply to and no reason
  * for them to keep swallowing keyboard shortcuts once the user is done with
  * them. `<input type="color">` is the one that bites in practice: picking a
  * colour leaves it focused, and it stays focused (nothing else claims focus
  * on the next click), so every shortcut goes quiet until something else
  * happens to steal focus back. Text-like inputs are deliberately left out of
- * this set — while one of those is focused, Ctrl+Z should still mean "undo
+ * this set, while one of those is focused, Ctrl+Z should still mean "undo
  * my typing" and not "undo my last app action".
  */
 const NON_TEXT_INPUT_TYPES = new Set([
@@ -103,7 +103,7 @@ const PUNCTUATION_BY_CODE: Record<string, string> = {
  * A shortcut's identity, independent of the active keyboard layout.
  *
  * `e.key` is the character the *current layout prints*, so on a Russian
- * layout the physical Z key arrives as 'я' and on a German one as 'y' —
+ * layout the physical Z key arrives as 'я' and on a German one as 'y',
  * and every letter shortcut silently stops matching. That failure is
  * especially confusing because it tracks the layout toggle (Alt+Shift,
  * Win+Space) rather than anything in the app, so shortcuts appear to break
@@ -264,7 +264,7 @@ function useGlobalShortcuts() {
       } else if (key === 'l') {
         s.setLoop(!s.loop)
       } else if (key === 'g' || key === 'r' || key === 's') {
-        // Blender-style: G move, R rotate, S scale — pressing the active one exits
+        // Blender-style: G move, R rotate, S scale. Pressing the active one exits
         const want = key === 'g' ? 'translate' : key === 'r' ? 'rotate' : 'scale'
         s.setGizmo(s.gizmo === want ? 'off' : want)
       } else if (key === 'f') {
@@ -454,7 +454,7 @@ function Editor() {
      * Keep the keyboard pointed at the app.
      *
      * Shortcuts listen on `window`, which only sees a key if the document owns
-     * focus — and focus drifts constantly: a fresh load leaves it on the browser
+     * focus, and focus drifts constantly: a fresh load leaves it on the browser
      * chrome, and every click parks it on whatever button was pressed. That
      * second case is worse than it sounds: with focus sitting on Loopify, Space
      * re-fires Loopify instead of toggling playback, because the browser

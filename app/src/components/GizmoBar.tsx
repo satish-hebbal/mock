@@ -6,7 +6,7 @@ import { useStudio, type GizmoMode } from '../store'
  * The transform tools, living in the notch cut out of the canvas.
  *
  * These are the one group that acts on the *thing you are looking at* rather
- * than on a panel — you pick Move, then immediately drag a handle on the
+ * than on a panel: you pick Move, then immediately drag a handle on the
  * device. In a vertical column at the far left that was a round trip across
  * the whole window every time the tool changed. Top-centre is the shortest
  * distance to the subject and out of the way of the panels on both sides.
@@ -15,14 +15,14 @@ import { useStudio, type GizmoMode } from '../store'
  * the canvas is genuinely that shape, so the tools cost the picture no pixels
  * at all instead of covering some of it.
  *
- * Every measurement comes from lib/notch — the pocket is sized around this row
+ * Every measurement comes from lib/notch: the pocket is sized around this row
  * rather than the row being nudged to fit a pocket, so the padding is the same
  * 6 on all four sides and the button's rounded corner sits exactly concentric
  * with the notch corner behind it.
  */
 
 const GIZMOS: [GizmoMode, string, LucideIcon][] = [
-  ['off', 'No gizmo — orbit the camera instead', Ban],
+  ['off', 'No gizmo, orbit the camera instead', Ban],
   ['translate', 'Move (G)', Move3d],
   ['rotate', 'Rotate (R)', Rotate3d],
   ['scale', 'Scale (S)', Scale3d],

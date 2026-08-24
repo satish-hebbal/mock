@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react'
 
 /*
- * The alpha checkerboard, drawn only in previews — exports keep true alpha.
+ * The alpha checkerboard, drawn only in previews: exports keep true alpha.
  *
  * Its whole job is to say "there is nothing here", so it has to lose to the
  * artwork sitting on top of it. It's built from theme tokens rather than fixed
@@ -9,7 +9,7 @@ import type { CSSProperties } from 'react'
  * warm palette, which on the near-black canvas read as a bright slab rather
  * than absence.
  *
- * The squares are a whisper of `--tx3` over the canvas — enough to see the grid
+ * The squares are a whisper of `--tx3` over the canvas, enough to see the grid
  * if you look for it, not enough to compete with a screenshot.
  */
 const SQUARE = 'color-mix(in srgb, var(--tx3) 8%, transparent)'

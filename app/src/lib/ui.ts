@@ -3,7 +3,7 @@ import { create } from 'zustand'
 /*
  * In-app replacements for window.prompt / confirm / alert. Native dialogs block
  * the render loop, can't be themed, and leak the origin ("localhost:3000 says"),
- * so nothing in the app should call them — use `ui.prompt/confirm/toast` and let
+ * so nothing in the app should call them: use `ui.prompt/confirm/toast` and let
  * <UILayer /> render the result.
  */
 

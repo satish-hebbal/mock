@@ -1,4 +1,4 @@
-// Mockup Studio service worker — offline app shell (PRD §12).
+// Mockup Studio service worker, offline app shell (PRD §12).
 // Runtime cache-first for same-origin GET assets, network-first for navigations.
 const CACHE = 'mockup-studio-v1'
 const SHELL = ['/', '/index.html', '/manifest.webmanifest', '/favicon.svg', '/icons.svg']

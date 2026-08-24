@@ -8,7 +8,7 @@ import { useStudio } from '../store'
 import { GltfDevice } from './GltfDevice'
 import type { DeviceInstance } from '../types'
 
-// ————— shared geometry helpers —————
+// ----- shared geometry helpers -----
 
 function roundedRect(w: number, h: number, r: number): THREE.Shape {
   const s = new THREE.Shape()
@@ -54,14 +54,14 @@ function slabGeo(w: number, h: number, r: number, depth: number, bevel = 0.012) 
   return geo
 }
 
-// ————— screen texture hook —————
+// ----- screen texture hook -----
 
 function useScreenTexture(dev: DeviceInstance, screenAspect: number) {
   const asset = useStudio((s) => (dev.screen.assetId ? s.assets[dev.screen.assetId] : undefined))
   const assetId = dev.screen.assetId
   const [texture, setTexture] = useState<THREE.Texture | null>(null)
 
-  // Only the runtime asset (blob URL) is required — media dimensions are read
+  // Only the runtime asset (blob URL) is required. Media dimensions are read
   // from the decoded image/video itself. Depending on the project.assets meta
   // entry made a missing/mismatched entry silently blank the whole screen.
   useEffect(() => {
@@ -141,7 +141,7 @@ function useScreenTexture(dev: DeviceInstance, screenAspect: number) {
   return texture
 }
 
-// ————— browser chrome texture —————
+// ----- browser chrome texture -----
 
 function browserChromeTexture(dark: boolean): THREE.CanvasTexture {
   const c = document.createElement('canvas')
@@ -173,7 +173,7 @@ function browserChromeTexture(dark: boolean): THREE.CanvasTexture {
   return tex
 }
 
-// ————— main component —————
+// ----- main component -----
 
 const EMPTY_SCREEN_COLOR = '#0b0b10'
 
@@ -216,7 +216,7 @@ export function DeviceMesh({ device }: { device: DeviceInstance }) {
 
   // Seat the screen flush on the body's front face, just proud of it so the
   // frame's beveled edge wraps around it like a real device. The body's front
-  // cap is NOT at bodyD/2 — ExtrudeGeometry's bevel extrudes the outer contour
+  // cap is NOT at bodyD/2: ExtrudeGeometry's bevel extrudes the outer contour
   // beyond the flat depth by roughly `bevel`, so the true outermost surface
   // sits at bodyD/2 + bevel. A screen offset that didn't clear the bevel sat
   // embedded inside that beveled geometry and was permanently occluded by it.
@@ -234,7 +234,7 @@ export function DeviceMesh({ device }: { device: DeviceInstance }) {
 
   // Key by the texture identity so the material fully remounts when the image
   // arrives. Merely setting `material.map` after first compile doesn't add the
-  // map sampler to an already-compiled shader, so the texture never showed —
+  // map sampler to an already-compiled shader, so the texture never showed,
   // a fresh material is compiled *with* the map and renders it.
   //
   // FrontSide only: the body encloses the screen from every other angle now

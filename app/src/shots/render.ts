@@ -12,7 +12,7 @@ import type {
   ShotsPortrait,
 } from './types'
 
-// ————— small helpers —————
+// ----- small helpers -----
 
 function hexToRgba(hex: string, a: number): string {
   const m = /^#?([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(hex)
@@ -57,7 +57,7 @@ function getNoiseTile(): HTMLCanvasElement {
   return c
 }
 
-// ————— background —————
+// ----- background -----
 
 export function paintShotBackground(
   ctx: CanvasRenderingContext2D,
@@ -153,9 +153,9 @@ export function paintShotBackground(
   }
 }
 
-// ————— the screenshot "card" (chrome + image + radius + border) —————
+// ----- the screenshot "card" (chrome + image + radius + border) -----
 
-/** Draw `media` filling the rect, cropping the overflow — CSS `object-fit: cover`. */
+/** Draw `media` filling the rect, cropping the overflow, CSS `object-fit: cover`. */
 function drawCover(
   g: CanvasRenderingContext2D,
   media: CanvasImageSource,
@@ -273,7 +273,7 @@ export function renderCard(
   return c
 }
 
-// ————— perspective warp of the card onto a full-canvas layer —————
+// ----- perspective warp of the card onto a full-canvas layer -----
 
 function affineTriangle(
   ctx: CanvasRenderingContext2D,
@@ -416,7 +416,7 @@ export function buildCardLayer(
   return layer
 }
 
-// ————— shadow / glow / reflection compositing —————
+// ----- shadow / glow / reflection compositing -----
 
 function silhouette(layer: HTMLCanvasElement, color: string): HTMLCanvasElement {
   const s = document.createElement('canvas')
@@ -539,7 +539,7 @@ export function compositeCard(
   ctx.drawImage(layer, 0, 0)
 }
 
-// ————— shadow scene —————
+// ----- shadow scene -----
 
 /**
  * Paint a gobo across the frame.
@@ -575,7 +575,7 @@ export function paintShadowScene(
   ctx.restore()
 }
 
-// ————— portrait (depth of field over the finished frame) —————
+// ----- portrait (depth of field over the finished frame) -----
 
 /**
  * Blur a canvas with its edges held, rather than fading into nothing.

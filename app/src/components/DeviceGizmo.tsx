@@ -17,7 +17,7 @@ export function DeviceGizmo() {
   const controls = useRef<THREE.Object3D>(null)
 
   // The gizmo shares the scene the exporter renders, so it has to be findable
-  // and hideable from outside React — see `setEditorObjectsVisible`.
+  // and hideable from outside React (see `setEditorObjectsVisible`).
   useEffect(() => {
     const node = controls.current
     if (!node) return

@@ -2,18 +2,18 @@ import { bezelFor } from './devices'
 import type { ShotsDoc, ShotsImage } from './types'
 
 /*
- * Layout presets — the arrangements you reach for rather than dial in.
+ * Layout presets, the arrangements you reach for rather than dial in.
  *
  * Two rules hold across all of them: every device is the **same size**, and the
  * gaps between them are **equal and tight**. That needs real measurement rather
  * than hand-picked offsets, because `offsetX` is a fraction of the frame while a
- * device's on-screen width depends on the frame's aspect and the device's own —
+ * device's on-screen width depends on the frame's aspect and the device's own,
  * so the same offset that looks snug on a 4:3 canvas leaves a chasm on 16:9.
  * `measure()` works out how wide one device actually is in offset units, and the
  * arrangements step by that width plus a fixed gap.
  *
  * They are also all **flat**. Pseudo-3D tilt is a deliberate choice a person
- * makes on one shot, not something an arrangement should impose — so applying a
+ * makes on one shot, not something an arrangement should impose, so applying a
  * preset clears it, and the Tilt controls in the inspector stay the way to get
  * it back.
  *
@@ -68,7 +68,7 @@ interface Fit {
   gap?: number
   /**
    * Peak-to-peak vertical travel, as a fraction of box height. Only correct if
-   * the arrangement's `offsetY` values are centred on zero — a preset that only
+   * the arrangement's `offsetY` values are centred on zero, a preset that only
    * ever pushes downward reaches twice as far and will overflow.
    */
   vSpread?: number
@@ -107,8 +107,8 @@ interface Fit {
  * horizontal step between them.
  *
  * Width alone isn't enough. At one screen the card already fills the box on its
- * tight axis, so any arrangement that also moves screens *vertically* — Stagger,
- * Overlap, Fan — pushed them straight out through the bottom. Rotation costs
+ * tight axis, so any arrangement that also moves screens *vertically* (Stagger,
+ * Overlap, Fan) pushed them straight out through the bottom. Rotation costs
  * room on both axes too: a tall card leaning 9° is wider and taller than it
  * looks. Both are accounted for here, so no preset can overflow.
  */
@@ -166,7 +166,7 @@ const place = (p: Partial<Placement>): Placement => ({
 })
 
 export const LAYOUT_PRESETS: LayoutPreset[] = [
-  // ————— single screen —————
+  // ----- single screen -----
   { id: 'center', name: 'Centred', counts: [1], build: () => [place({})] },
   {
     id: 'tilted',
@@ -187,7 +187,7 @@ export const LAYOUT_PRESETS: LayoutPreset[] = [
     build: () => [place({ scale: 1.32, offsetY: 0.18 })],
   },
 
-  // ————— two or more —————
+  // ----- two or more -----
   {
     id: 'row',
     name: 'Row',
@@ -279,7 +279,7 @@ export const LAYOUT_PRESETS: LayoutPreset[] = [
         const t = n === 1 ? 0 : (i / (n - 1)) * 2 - 1 // -1…1
         return place({
           offsetX: centred(i, n, step),
-          // outer screens drop away, so the set arcs — centred on zero so the
+          // outer screens drop away, so the set arcs, centred on zero so the
           // arc costs half its travel above and half below
           offsetY: (Math.abs(t) - 0.5) * arc,
           rotate: t * angle,
@@ -321,7 +321,7 @@ export function getLayoutPreset(id: string): LayoutPreset | null {
 
 /**
  * Measure the frame the arrangement has to fill. Padding and device come from
- * the first screen — presets keep every screen the same size, so one is
+ * the first screen: presets keep every screen the same size, so one is
  * representative, and reading the live doc means the spacing stays right when
  * the canvas is resized or the device swapped.
  */

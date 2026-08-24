@@ -34,8 +34,8 @@ import {
  * Numbers alone never told you where the lens was standing. Tilt Y 36° reads
  * as nothing until you have watched the canvas swing, and even then a scene
  * with three devices in it gives no clue which one you are about to orbit
- * behind. This is the split view a 3D app gives you for exactly that reason —
- * one window on the shot, one window on the set — shrunk to the size of a
+ * behind. This is the split view a 3D app gives you for exactly that reason,
+ * one window on the shot, one window on the set, shrunk to the size of a
  * panel and reduced to what it has to say: how big the subject is, where the
  * lens is, and what it has in frame.
  *
@@ -101,7 +101,7 @@ export function CameraStage() {
   /*
    * One scale for the whole widget, fixed on a sphere rather than on what the
    * current vantage happens to project to. Turning the stage around therefore
-   * never resizes it, and orbiting the lens — which keeps its distance — does
+   * never resizes it, and orbiting the lens, which keeps its distance, does
    * not either. Only a dolly changes the fit, and there the subject shrinking
    * away from the lens is exactly the thing being shown.
    */
@@ -124,7 +124,7 @@ export function CameraStage() {
   const stage = useMemo(() => makeStage(view, center, fit, W, H, PAD), [view, center, fit])
   const px = stage.project
 
-  // ————— gestures —————
+  // ----- gestures -----
 
   /** Pointer position in the SVG's own coordinates, whatever it is scaled to. */
   const localPoint = (e: React.PointerEvent) => {
@@ -185,7 +185,7 @@ export function CameraStage() {
    *
    * Bound natively rather than through React's `onWheel`: React registers
    * wheel handlers passively, so it cannot stop the event, and the panel this
-   * sits in scrolls — a scroll over the stage would dolly the camera *and*
+   * sits in scrolls: a scroll over the stage would dolly the camera *and*
    * scroll the catalog out from under the pointer.
    */
   useEffect(() => {
@@ -201,7 +201,7 @@ export function CameraStage() {
     return () => el.removeEventListener('wheel', onWheel)
   }, [])
 
-  // ————— geometry —————
+  // ----- geometry -----
 
   const gridHalf = Math.max(2, Math.min(6, Math.ceil(radius)))
   const grid: string[] = []
@@ -215,7 +215,7 @@ export function CameraStage() {
   const apex = px(basis.pos)
 
   /* A stubby body behind the lens, built on the camera's own basis so a roll
-     visibly tips it — the frustum rectangle alone reads the same either way. */
+     visibly tips it. The frustum rectangle alone reads the same either way. */
   const bodyEdges: string[] = []
   {
     const hw = Math.max(0.12, radius * 0.1)

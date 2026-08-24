@@ -9,7 +9,7 @@ import type { CameraState, DeviceInstance } from '../types'
  * outside it, showing where the lens is standing relative to the product.
  *
  * Deliberately not a second WebGL canvas. Everything the stage has to draw is
- * a dozen boxes and a frustum — a few hundred line segments — and a second GL
+ * a dozen boxes and a frustum (a few hundred line segments) and a second GL
  * context next to the live viewport would cost a whole extra renderer, render
  * targets and frame loop to draw them. Projecting the points here and handing
  * an SVG the results costs one render pass of React per pointer move, stays
@@ -58,7 +58,7 @@ function rotateAbout(p: Vec, n: Vec, deg: number): Vec {
   return add(add(scale(p, c), scale(cross(n, p), s)), scale(n, dot(n, p) * (1 - c)))
 }
 
-// ————— the stage's own projection —————
+// ----- the stage's own projection -----
 
 /** World → view space. The observer looks down -Z from +Z, so bigger z is nearer. */
 export function toView(p: Vec, view: StageView): Vec {
@@ -120,8 +120,8 @@ export function rayAt(stage: Stage, view: StageView, sx: number, sy: number, wid
 /**
  * Where a ray meets the sphere the camera orbits on.
  *
- * A miss is common and completely normal — you drag past the silhouette all
- * the time — so instead of failing it falls back to the point on the sphere
+ * A miss is common and completely normal (you drag past the silhouette all
+ * the time) so instead of failing it falls back to the point on the sphere
  * nearest the ray. The camera then slides around the limb rather than sticking,
  * which is what makes a grazing drag still feel connected to the pointer.
  *
@@ -150,7 +150,7 @@ export function rayPlaneZ0(origin: Vec, dir: Vec): Vec | null {
   return add(origin, scale(dir, -origin.z / dir.z))
 }
 
-// ————— the scene camera, as geometry —————
+// ----- the scene camera, as geometry -----
 
 const clampTo = (prop: keyof typeof CAMERA_LIMITS, n: number) => {
   const [min, max] = CAMERA_LIMITS[prop]
@@ -232,14 +232,14 @@ export function frustumCorners(cam: CameraState, aspect: number): Vec[] {
   ]
 }
 
-// ————— the subject, as boxes —————
+// ----- the subject, as boxes -----
 
 /** One slab of a device: a box in the device's own space. */
 export interface ProxyPart {
   /** full extents, not half */
   size: [number, number, number]
   center: [number, number, number]
-  /** lean about local X, radians — the laptop lid */
+  /** lean about local X, in radians: the laptop lid */
   tilt?: number
   /** the face carrying the screen, so the schematic shows which way it looks */
   screen?: boolean
@@ -298,7 +298,7 @@ export function partToWorld(p: Vec, part: ProxyPart, device: DeviceInstance): Ve
   const t = device.transform
   q = scale(q, Math.max(0.05, t.scale))
   const [rx, ry, rz] = t.rotation.map((deg) => deg * D2R)
-  // three's default Euler order is XYZ, which composes as Rx·Ry·Rz — so the
+  // three's default Euler order is XYZ, which composes as Rx·Ry·Rz, so the
   // roll goes on first and the pitch last, not the order they're written in
   q = v(q.x * Math.cos(rz) - q.y * Math.sin(rz), q.x * Math.sin(rz) + q.y * Math.cos(rz), q.z)
   q = v(q.x * Math.cos(ry) + q.z * Math.sin(ry), q.y, -q.x * Math.sin(ry) + q.z * Math.cos(ry))
@@ -327,7 +327,7 @@ export const BOX_EDGES: [number, number][] = [
   [0, 4], [1, 5], [2, 6], [3, 7],
 ]
 
-/** Corner indices of the +Z face, in winding order — the face the screen is on. */
+/** Corner indices of the +Z face, in winding order, the face the screen is on. */
 export const SCREEN_FACE = [1, 3, 7, 5]
 
 export { add, sub, scale, len, norm, v as vec }

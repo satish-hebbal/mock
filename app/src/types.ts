@@ -69,7 +69,7 @@ export interface GradientSpec {
 }
 
 /**
- * A seamless studio sweep — the curved roll of paper behind a product shot.
+ * A seamless studio sweep, the curved roll of paper behind a product shot.
  * It reads as one continuous surface: the key throws a hotspot on the paper
  * behind the subject, the sweep falls off toward the floor, and the corners
  * are held down so the eye stays on the product.

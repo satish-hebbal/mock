@@ -8,8 +8,8 @@ import { applyTint, buildTintPlan, disposeTintPlan, type TintPlan } from '../lib
 /**
  * Re-map a screen mesh's UVs to a clean 0..1 planar projection.
  *
- * Source models ship UVs authored for their own baked wallpaper — often an atlas
- * region or an arbitrary layout — so sampling our screenshot through them lands
+ * Source models ship UVs authored for their own baked wallpaper, often an atlas
+ * region or an arbitrary layout, so sampling our screenshot through them lands
  * on the wrong part of the image (typically a solid black sliver).
  *
  * The projection is done in *display space*: every vertex is transformed by the
@@ -79,7 +79,7 @@ export function GltfDevice({
   /**
    * three.js sanitizes glTF node names on import (THREE.PropertyBinding:
    * whitespace → "_", and ".[]:/" stripped entirely), so a manifest name copied
-   * straight out of the file — "Cylinder.003_screen_0" — never matches the
+   * straight out of the file, "Cylinder.003_screen_0", never matches the
    * runtime object. Compare both sides in sanitized form.
    */
   const key = (s: string | undefined) =>
@@ -131,7 +131,7 @@ export function GltfDevice({
     if (screenNormal.v && !screenBox.isEmpty()) {
       // Derive the screen normal from the mesh's *own* local bounding box, then
       // transform it into root space. Taking the thin axis of the root-space AABB
-      // instead breaks on anything not axis-aligned — a laptop's tilted lid has
+      // instead breaks on anything not axis-aligned: a laptop's tilted lid has
       // no thin principal axis, so the device came out facing its underside.
       // (Averaging vertex normals is also unreliable: on closed/double-sided
       // screen meshes the opposing faces cancel to zero.)

@@ -96,7 +96,7 @@ export type AppMode = 'home' | 'studio' | 'shots'
 /** Sections of the left tool rail in Studio; each one opens the panel beside it. */
 export type ToolSection = 'devices' | 'camera' | 'frame' | 'background' | 'add'
 
-/** Sections of the left tool rail in Shots — the subject, and the canvas it sits on. */
+/** Sections of the left tool rail in Shots, the subject, and the canvas it sits on. */
 export type ShotsSection = 'mockup' | 'frame'
 
 /** Transform-gizmo mode, mirroring Blender's move/rotate/scale tools. */
@@ -394,7 +394,7 @@ export const useStudio = create<StudioState>()(
               easing: 'smooth',
             })
         }
-        // Always write the live scene value too — a keyframe just landed exactly
+        // Always write the live scene value too, a keyframe just landed exactly
         // at the current time, so this matches what re-sampling would produce,
         // and it keeps the slider/viewport from freezing on tracked properties.
         setTargetValue(s.project.scene, target, value)
@@ -442,7 +442,7 @@ export const useStudio = create<StudioState>()(
         s.project.scene.environment = { ...look.env }
         s.project.scene.ground = { ...look.ground }
         /*
-         * The look owns the sweep, always — so switching setups and then going
+         * The look owns the sweep, always, so switching setups and then going
          * back to the paper gets the paper that setup was designed around.
          *
          * It no longer switches the backdrop *to* the sweep, though. Once the

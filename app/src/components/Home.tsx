@@ -18,7 +18,10 @@ export function Home() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="mx-auto flex min-h-full max-w-5xl flex-col px-8 py-16">
+      {/* the bottom padding matches the sides, so the hint is inset from the edge
+          by the same amount the content is rather than floating above a band of
+          nothing */}
+      <div className="mx-auto flex min-h-full max-w-5xl flex-col px-8 pt-16 pb-8">
         {/* brand */}
         <div className="mt-auto mb-10 flex flex-col items-center text-center">
           <Mascot size={128} className="mb-4" />

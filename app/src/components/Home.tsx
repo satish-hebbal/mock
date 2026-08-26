@@ -1,7 +1,7 @@
 import { Mascot } from './Mascot'
 import { useStudio } from '../store'
 import { TOOLS, toolWash } from '../lib/tools'
-import { SEAM_ROW, stepped } from '../lib/interlock'
+import { HOME_SEAM } from '../lib/interlock'
 
 /*
  * The first two cards interlock, and the third stands clear.
@@ -13,8 +13,6 @@ import { SEAM_ROW, stepped } from '../lib/interlock'
  * choose within, while Draw stays a rectangle because it is genuinely somewhere
  * else. The shapes are in interlock.ts.
  */
-const SEAM = [stepped('in'), stepped('out')]
-
 export function Home() {
   const setMode = useStudio((s) => s.setMode)
 
@@ -32,16 +30,16 @@ export function Home() {
 
         {/* tools */}
         {/* one row: three tools sit across, with room to read the taglines */}
-        <div className="tool-row grid grid-cols-1 gap-3 sm:grid-cols-3" style={SEAM_ROW}>
+        <div className="tool-row grid grid-cols-1 gap-3 sm:grid-cols-3" style={HOME_SEAM.row}>
           {TOOLS.map((t, i) => {
-            const seam = SEAM[i]
+            const seam = HOME_SEAM.parts[i]
             return (
               <button
                 key={t.name}
                 disabled={t.soon}
                 onClick={() => !t.soon && setMode(t.id)}
                 style={seam?.style}
-                className={`tool-card group flex flex-col items-start gap-3 rounded-xl bg-(--line) p-5 text-left transition-colors ${
+                className={`tool-card group flex flex-col items-start gap-3 bg-(--line) p-5 text-left transition-colors ${
                   seam?.className ?? ''
                 } ${t.soon ? 'cursor-default opacity-60' : 'hover:bg-(--line2)'}`}
               >

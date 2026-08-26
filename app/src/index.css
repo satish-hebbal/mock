@@ -595,7 +595,7 @@ body {
 }
 
 /*
- * ----- the home screen's tool cards -----
+ * ----- the tool cards, on the home screen and in the app menu -----
  *
  * The hairline round a tool card is the card's own background, showing in the
  * 1px the fill layer leaves uncovered, rather than a `border`.
@@ -611,6 +611,7 @@ body {
  */
 .tool-card {
   position: relative;
+  border-radius: var(--tool-radius);
   /*
    * The fill sits behind the card's text on z-index -1, and that only lands
    * above the card's own background if the card is a stacking context. Clipped
@@ -623,7 +624,7 @@ body {
   position: absolute;
   inset: 1px;
   z-index: -1;
-  border-radius: calc(var(--radius-xl) - 1px);
+  border-radius: calc(var(--tool-radius) - 1px);
 }
 
 .tool-card:focus-visible {
@@ -633,12 +634,13 @@ body {
 
 .tool-card:focus-visible .tool-card-fill {
   inset: 2px;
-  border-radius: calc(var(--radius-xl) - 2px);
+  border-radius: calc(var(--tool-radius) - 2px);
 }
 
 /*
  * The seam only makes sense across a row, and only once the cards are wide
  * enough to lose `--tool-step` of text column without the taglines unravelling.
+ * Both rows reach that at about the same viewport, so one gate covers them.
  * Below that the three cards stay plain rectangles, which is also the fallback
  * anywhere `shape()` is missing: `interlock.ts` still hands over its outlines,
  * nothing reads them, and the cards sit in their tracks untouched.
@@ -682,7 +684,7 @@ body {
     /* the left card loses its lower right corner, so its text stops short of
        where the cut lands rather than running under it */
     .tool-step-in {
-      padding-right: calc(1.25rem + var(--tool-step));
+      padding-right: calc(var(--tool-pad) + var(--tool-step));
     }
 
     /*
@@ -693,7 +695,7 @@ body {
      */
     .tool-step-out {
       margin-left: calc(-1 * var(--tool-step));
-      padding-left: calc(1.25rem + var(--tool-step));
+      padding-left: calc(var(--tool-pad) + var(--tool-step));
     }
   }
 }

@@ -75,24 +75,42 @@ export function toolWash(tool: Tool, strength = 1): string {
  * from the tool's own near tint: a hot spot behind the icon, a tinted edge, and
  * a bloom underneath. Each tool warms in its own colour rather than every
  * selection glowing the same borrowed blue.
+ *
+ * It arrives in three pieces because a tool card does: the hairline is the
+ * card's own background, the surface is a fill layer inset inside it, and the
+ * chip sits on top of both.
+ *
+ * The bloom is a `filter` rather than a `box-shadow` because these cards are cut
+ * to shape. A box-shadow is drawn from the border box, so on an interlocked card
+ * it would bloom around the rectangle the card is no longer shaped like, and
+ * every part of it outside the clip would be cut away in any case. `drop-shadow`
+ * reads the silhouette that actually got painted, so the bloom follows the step.
  */
-export function toolLit(tool: Tool): { card: CSSProperties; chip: CSSProperties } {
+export function toolLit(tool: Tool): {
+  card: CSSProperties
+  fill: CSSProperties
+  chip: CSSProperties
+} {
   const [near] = tool.tint
   return {
+    // lighting the card starts with lighting its hairline, which is this
     card: {
+      background: `rgba(${near}, 0.5)`,
+      filter: [
+        // the tight halo the old `0 0 0 1px` ring was doing
+        `drop-shadow(0 0 2px rgba(${near}, 0.35))`,
+        `drop-shadow(0 8px 10px rgba(${near}, 0.4))`,
+        'drop-shadow(0 4px 6px rgba(0, 0, 0, 0.5))',
+      ].join(' '),
+    },
+    fill: {
       // the hot spot rides above the standard wash, turned up a quarter
       background: [
         `radial-gradient(75% 62% at 16% 0%, rgba(${near}, 0.22), transparent 66%)`,
         toolWash(tool, 1.25),
       ].join(', '),
-      borderColor: `rgba(${near}, 0.5)`,
-      boxShadow: [
-        // a top highlight is what actually sells "lit from above"
-        'inset 0 1px 0 rgba(255, 255, 255, 0.09)',
-        `0 0 0 1px rgba(${near}, 0.2)`,
-        `0 12px 32px -14px rgba(${near}, 0.6)`,
-        '0 6px 16px -6px rgba(0, 0, 0, 0.55)',
-      ].join(', '),
+      // a top highlight is what actually sells "lit from above"
+      boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.09)',
     },
     // the chip stops being a grey inset and becomes the brightest thing on the card
     chip: {

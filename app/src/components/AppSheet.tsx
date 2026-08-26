@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Home as HomeIcon, Keyboard, Moon, Sun, X, type LucideIcon } from 'lucide-react'
 import { useStudio, type AppMode } from '../store'
 import { TOOLS, toolLit, toolWash } from '../lib/tools'
+import { SHEET_SEAM } from '../lib/interlock'
 import { rt } from '../lib/runtime'
 
 /*
@@ -90,23 +91,32 @@ export function AppSheet() {
           <p className="mb-2 t-eyebrow text-(--tx3) uppercase">
             Tools
           </p>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-            {TOOLS.map((t) => {
+          <div className="tool-row grid grid-cols-1 gap-2 sm:grid-cols-3" style={SHEET_SEAM.row}>
+            {TOOLS.map((t, i) => {
               const active = !t.soon && mode === t.id
               // The wash carries the card on its own; the tool you're actually
               // in gets light on top of it, so "this is where you are" reads
-              // before you've finished scanning the four names.
+              // before you've finished scanning the three names.
               const lit = active ? toolLit(t) : null
+              const seam = SHEET_SEAM.parts[i]
               return (
                 <button
                   key={t.name}
                   disabled={t.soon}
                   onClick={() => go(t.id)}
-                  style={lit ? lit.card : { background: toolWash(t, t.soon ? 0.35 : 0.7) }}
-                  className={`flex flex-col items-start gap-2.5 rounded-lg border p-3 text-left transition-colors ${
-                    t.soon ? 'cursor-default border-(--line) opacity-60' : ''
-                  } ${!t.soon && !active ? 'border-(--line) hover:border-(--line2)' : ''}`}
+                  style={{ ...seam?.style, ...lit?.card }}
+                  className={`tool-card flex flex-col items-start gap-2.5 bg-(--line) p-3 text-left transition-colors ${
+                    seam?.className ?? ''
+                  } ${t.soon ? 'cursor-default opacity-60' : ''} ${
+                    !t.soon && !active ? 'hover:bg-(--line2)' : ''
+                  }`}
                 >
+                  {/* the card's surface, and the 1px of card background left
+                      showing around it is the hairline */}
+                  <span
+                    className="tool-card-fill"
+                    style={lit?.fill ?? { background: toolWash(t, t.soon ? 0.35 : 0.7) }}
+                  />
                   <span
                     style={lit?.chip}
                     className={`flex h-8 w-8 items-center justify-center rounded-md ${

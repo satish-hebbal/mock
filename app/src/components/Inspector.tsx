@@ -177,15 +177,12 @@ function MediaSection() {
               empty ? 'col-span-3 py-6' : 'aspect-[4/3]'
             }`}
           >
-            {/* six, a sixth of a cycle apart, which is what turns one ring
-                travelling inward into a wave doing it */}
+            {/* eight, an eighth of a cycle apart, which is what turns one
+                ring travelling inward into a wave doing it */}
             <span className="media-ripple" aria-hidden>
-              <span className="media-ring" />
-              <span className="media-ring" />
-              <span className="media-ring" />
-              <span className="media-ring" />
-              <span className="media-ring" />
-              <span className="media-ring" />
+              {Array.from({ length: 8 }, (_, i) => (
+                <span key={i} className="media-ring" />
+              ))}
             </span>
             <Plus className="media-plus" size={empty ? 16 : 14} strokeWidth={1.9} />
             {empty && <span className="t-caption">Add an image or video, or drop one here</span>}

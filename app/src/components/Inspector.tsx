@@ -171,31 +171,18 @@ function MediaSection() {
           <button
             onClick={() => pickMediaFile((f) => void importMedia(f))}
             title="Add an image or video. Dropping or pasting one anywhere works too."
-            className={`media-drop relative flex flex-col items-center justify-center gap-1 rounded-md text-(--tx3) transition-colors hover:text-(--tx2) ${
+            className={`media-drop relative flex flex-col items-center justify-center gap-1 overflow-hidden rounded-md border border-dashed border-(--line) text-(--tx3) transition-colors hover:border-(--tx3) hover:text-(--tx2) ${
               empty ? 'col-span-3 py-6' : 'aspect-[4/3]'
             }`}
           >
-            {/*
-             * The dashes are drawn rather than bordered, because a CSS border
-             * has no dash offset to animate and this one has to march. It
-             * inherits the button's own colour, so the outline warms with the
-             * label instead of being lit separately.
-             */}
-            <svg className="pointer-events-none absolute inset-0 h-full w-full overflow-visible">
-              <rect
-                className="media-ants"
-                x="0"
-                y="0"
-                width="100%"
-                height="100%"
-                rx="8"
-                ry="8"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.25"
-                strokeDasharray="7 5"
-              />
-            </svg>
+            {/* three of them, running a third of a cycle apart, so the slot is
+                always somewhere in the middle of a ripple rather than starting
+                one when you arrive */}
+            <span className="media-ripple" aria-hidden>
+              <span className="media-ring" />
+              <span className="media-ring" />
+              <span className="media-ring" />
+            </span>
             <Plus size={empty ? 16 : 14} strokeWidth={1.9} />
             {empty && <span className="t-caption">Add an image or video, or drop one here</span>}
           </button>

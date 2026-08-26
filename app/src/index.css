@@ -733,29 +733,75 @@ body {
  * ----- the empty media slot -----
  *
  * A dashed rectangle is the universal "put something here", but sitting still
- * it is also indistinguishable from a disabled box. Under the pointer the
- * dashes travel, which is the oldest signal in the business for a live drop
- * target and reads instantly as "yes, this one takes a file".
+ * it is also indistinguishable from a box that has been switched off. Under the
+ * pointer, outlines start on the slot's own edge and travel inward, one after
+ * another, so the slot reads as something drawing a file in rather than as
+ * something merely marked out.
  *
- * Drawn as an SVG stroke rather than a border: dash offset is the only thing
- * that can be animated to make dashes move, and `border-style: dashed` does not
- * have one. The dash and the gap add up to 12, so one cycle of -12 lands the
- * pattern exactly where it started and the loop has no seam.
+ * The edges are animated rather than a transform, for the reason the attract
+ * rings give above: a uniform scale shrinks a shape toward a smaller copy of
+ * itself, so the border would thin and the corners would tighten as the ring
+ * travelled, and what should read as one outline moving would read as a
+ * different, smaller outline at every step.
  */
-@keyframes media-ants {
-  to {
-    stroke-dashoffset: -12;
+@keyframes media-ripple {
+  0% {
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    border-radius: var(--radius-md);
+    opacity: 0;
+  }
+  /* up quickly, so a ring appears on the edge rather than a little inside it */
+  14% {
+    opacity: 0.4;
+  }
+  100% {
+    top: 18px;
+    right: 18px;
+    bottom: 18px;
+    left: 18px;
+    border-radius: 3px;
+    opacity: 0;
   }
 }
 
-.media-drop:hover .media-ants,
-.media-drop:focus-visible .media-ants {
-  animation: media-ants 520ms linear infinite;
+.media-ripple {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.media-ring {
+  position: absolute;
+  inset: 0;
+  border: 1px solid var(--tx);
+  border-radius: var(--radius-md);
+  opacity: 0;
+}
+
+.media-drop:hover .media-ring,
+.media-drop:focus-visible .media-ring {
+  animation: media-ripple 1800ms linear infinite;
+}
+
+/*
+ * Negative, so the second and third rings are already part way in the moment
+ * the pointer lands. A positive delay would spend the first second of every
+ * hover showing one lonely ring.
+ */
+.media-ring:nth-child(2) {
+  animation-delay: -600ms;
+}
+
+.media-ring:nth-child(3) {
+  animation-delay: -1200ms;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .media-drop:hover .media-ants,
-  .media-drop:focus-visible .media-ants {
+  .media-drop:hover .media-ring,
+  .media-drop:focus-visible .media-ring {
     animation: none;
   }
 }

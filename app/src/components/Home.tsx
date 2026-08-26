@@ -18,9 +18,9 @@ export function Home() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="mx-auto flex min-h-full max-w-5xl flex-col justify-center px-8 py-16">
+      <div className="mx-auto flex min-h-full max-w-5xl flex-col px-8 py-16">
         {/* brand */}
-        <div className="mb-10 flex flex-col items-center text-center">
+        <div className="mt-auto mb-10 flex flex-col items-center text-center">
           <Mascot size={128} className="mb-4" />
           <h1 className="t-headline text-(--tx)">Ribbit</h1>
           <p className="mt-1.5 t-body text-(--tx2)">
@@ -30,7 +30,7 @@ export function Home() {
 
         {/* tools */}
         {/* one row: three tools sit across, with room to read the taglines */}
-        <div className="tool-row grid grid-cols-1 gap-3 sm:grid-cols-3" style={HOME_SEAM.row}>
+        <div className="tool-row mb-auto grid grid-cols-1 gap-3 sm:grid-cols-3" style={HOME_SEAM.row}>
           {TOOLS.map((t, i) => {
             const seam = HOME_SEAM.parts[i]
             return (
@@ -72,6 +72,11 @@ export function Home() {
           })}
         </div>
 
+        {/* The hint belongs to the page, not to the cards, so it sits on the
+            bottom edge rather than trailing the row. An auto margin above the
+            brand and another below the tools splits whatever height is left
+            between them, which keeps the two centred in the space over the hint
+            instead of the hint riding up with them. */}
         <p className="mt-10 text-center t-body-sm text-(--tx3)">
           Press <kbd className="rounded-xs border border-(--line2) bg-(--panel3) px-1 text-(--tx2)">?</kbd> anytime for
           keyboard shortcuts.

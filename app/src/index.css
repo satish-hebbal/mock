@@ -753,15 +753,15 @@ body {
  */
 @keyframes media-ripple {
   0% {
-    transform: scale(1.08);
+    transform: scale(1);
     opacity: 0;
   }
   /* up fast, so a ring appears on the edge and not a little inside it */
   8% {
-    opacity: 0.55;
+    opacity: 0.45;
   }
   70% {
-    opacity: 0.3;
+    opacity: 0.22;
   }
   100% {
     transform: scale(0.2);
@@ -778,12 +778,66 @@ body {
   contain: layout style paint;
 }
 
+/*
+ * The subtle ink rather than the bright one. At full `--tx` these were white
+ * hairlines, and eight white hairlines is a diagram of an effect rather than an
+ * effect: they drew the eye harder than the label they are behind.
+ */
 .media-ring {
   position: absolute;
   inset: 0;
-  border: 1px solid var(--tx);
+  border: 1px solid var(--tx2);
   border-radius: var(--radius-md);
   opacity: 0;
+}
+
+/*
+ * The edge, breathing.
+ *
+ * A hover that only recolours the border states that the slot is live; one that
+ * keeps moving shows it, and it is the same argument the ripple makes. Opacity
+ * is the only thing animating, because the shadows themselves are a paint job
+ * and re-rasterising a three-layer blur sixty times a second is exactly the
+ * cost the ripple was rewritten to avoid. Set once, faded in and out.
+ *
+ * Kept to the ink at low strength rather than the accent: the only saturated
+ * thing in this panel is the Export button a few rows up, and a second glowing
+ * violet object under it would read as a second call to action.
+ */
+@keyframes media-breathe {
+  0%,
+  100% {
+    opacity: 0.28;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.media-glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: var(--radius-md);
+  opacity: 0;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--tx) 14%, transparent),
+    0 0 18px -2px color-mix(in srgb, var(--tx) 20%, transparent),
+    inset 0 0 18px -6px color-mix(in srgb, var(--tx) 24%, transparent);
+  transition: opacity 300ms cubic-bezier(0.4, 0, 0.6, 1);
+}
+
+/*
+ * No fill mode, so leaving the slot drops the animation and hands opacity back
+ * to the resting 0, which the transition then carries down instead of cutting.
+ */
+.media-drop:hover .media-glow,
+.media-drop:focus-visible .media-glow {
+  animation-name: media-breathe;
+  animation-duration: 2600ms;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  animation-iteration-count: infinite;
+  will-change: opacity;
 }
 
 /*
@@ -859,6 +913,14 @@ body {
   .media-drop:hover .media-ring,
   .media-drop:focus-visible .media-ring {
     animation: none;
+  }
+
+  /* the glow stays, it just stops breathing: it is the hover state, not
+     decoration on top of one */
+  .media-drop:hover .media-glow,
+  .media-drop:focus-visible .media-glow {
+    animation: none;
+    opacity: 0.7;
   }
 
   .media-plus {

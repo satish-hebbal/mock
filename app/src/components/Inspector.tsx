@@ -173,10 +173,12 @@ function MediaSection() {
             /* the empty slot says this in its own label, and a tooltip that
                covers the thing it is describing is worse than no tooltip */
             title={empty ? undefined : 'Add an image or video, or drop one anywhere'}
-            className={`media-drop relative flex flex-col items-center justify-center gap-1 overflow-hidden rounded-md border border-dashed border-(--line) text-(--tx3) transition-colors hover:border-(--tx3) hover:text-(--tx2) ${
+            className={`media-drop relative flex flex-col items-center justify-center gap-1 rounded-md border border-dashed border-(--line) text-(--tx3) transition-colors hover:border-(--tx3) hover:text-(--tx2) ${
               empty ? 'col-span-3 py-6' : 'aspect-[4/3]'
             }`}
           >
+            {/* the slot's own edge, breathing */}
+            <span className="media-glow" aria-hidden />
             {/* eight, an eighth of a cycle apart, which is what turns one
                 ring travelling inward into a wave doing it */}
             <span className="media-ripple" aria-hidden>

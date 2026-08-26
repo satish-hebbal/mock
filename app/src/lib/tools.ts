@@ -50,6 +50,17 @@ export const TOOLS: Tool[] = [
 ]
 
 /**
+ * The card's own colour, handed to CSS as a custom property.
+ *
+ * The hairline round a tool card is the card's background, so its hover state
+ * lives in a stylesheet rather than here, and a stylesheet cannot reach into
+ * `TOOLS` for a tint. This passes one down to meet it.
+ */
+export function toolTint(tool: Tool): CSSProperties {
+  return { '--tool-tint': tool.tint[0] } as CSSProperties
+}
+
+/**
  * The soft blob wash behind a tool card. Two off-centre radials over the panel
  * surface: `strength` is scaled right down for tools that aren't built yet, so
  * they recede without needing a separate style.

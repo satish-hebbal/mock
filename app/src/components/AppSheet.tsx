@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { Home as HomeIcon, Keyboard, Moon, Sun, X, type LucideIcon } from 'lucide-react'
 import { useStudio, type AppMode } from '../store'
-import { TOOLS, toolLit, toolWash } from '../lib/tools'
+import { TOOLS, toolLit, toolTint, toolWash } from '../lib/tools'
 import { SHEET_SEAM } from '../lib/interlock'
 import { rt } from '../lib/runtime'
 
@@ -104,12 +104,10 @@ export function AppSheet() {
                   key={t.name}
                   disabled={t.soon}
                   onClick={() => go(t.id)}
-                  style={{ ...seam?.style, ...lit?.card }}
-                  className={`tool-card flex flex-col items-start gap-2.5 bg-(--line) p-3 text-left transition-colors ${
+                  style={{ ...seam?.style, ...toolTint(t), ...lit?.card }}
+                  className={`tool-card flex flex-col items-start gap-2.5 p-3 text-left transition-colors ${
                     seam?.className ?? ''
-                  } ${t.soon ? 'cursor-default opacity-60' : ''} ${
-                    !t.soon && !active ? 'hover:bg-(--line2)' : ''
-                  }`}
+                  } ${t.soon ? 'cursor-default opacity-60' : ''}`}
                 >
                   {/* the card's surface, and the 1px of card background left
                       showing around it is the hairline */}

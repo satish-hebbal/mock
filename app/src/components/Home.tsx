@@ -1,6 +1,6 @@
 import { Mascot } from './Mascot'
 import { useStudio } from '../store'
-import { TOOLS, toolWash } from '../lib/tools'
+import { TOOLS, toolTint, toolWash } from '../lib/tools'
 import { HOME_SEAM } from '../lib/interlock'
 
 /*
@@ -41,10 +41,10 @@ export function Home() {
                 key={t.name}
                 disabled={t.soon}
                 onClick={() => !t.soon && setMode(t.id)}
-                style={seam?.style}
-                className={`tool-card group flex flex-col items-start gap-3 bg-(--line) p-5 text-left transition-colors ${
+                style={{ ...seam?.style, ...toolTint(t) }}
+                className={`tool-card group flex flex-col items-start gap-3 p-5 text-left transition-colors ${
                   seam?.className ?? ''
-                } ${t.soon ? 'cursor-default opacity-60' : 'hover:bg-(--line2)'}`}
+                } ${t.soon ? 'cursor-default opacity-60' : ''}`}
               >
                 {/* the card's surface, and everything the 1px of card
                     background around it is left reading as a hairline */}

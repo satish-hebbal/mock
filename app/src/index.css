@@ -769,6 +769,45 @@ body {
   }
 }
 
+/*
+ * The slot as a well rather than a panel.
+ *
+ * Pitch dark in the middle, lifting to a surface at the rim, so the box reads
+ * as something with a floor a long way down and the ripples read as travelling
+ * into it rather than across it. The inset shadow under the top edge is what
+ * seats it: light falls from above in this app, so the near wall catches the
+ * shadow and the far one catches the faint highlight underneath it.
+ *
+ * The centre is `--overlay` and the rim is one step up the surface ladder,
+ * rather than two hard-coded greys, so the well keeps its depth if the ladder
+ * ever moves.
+ */
+.media-drop {
+  background:
+    radial-gradient(
+      115% 92% at 50% 50%,
+      var(--overlay) 0%,
+      color-mix(in srgb, var(--overlay) 55%, transparent) 46%,
+      transparent 80%
+    ),
+    var(--panel3);
+  box-shadow:
+    inset 0 1px 4px -1px color-mix(in srgb, var(--overlay) 65%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--tx) 5%, transparent);
+}
+
+/*
+ * Light theme runs the ladder the other way: the deepest thing available is the
+ * darkest of the inverse surfaces, not black. Pouring `--overlay` into the
+ * middle of a white panel would not read as depth, it would read as a hole cut
+ * in the page.
+ */
+:root.light .media-drop {
+  background:
+    radial-gradient(115% 92% at 50% 50%, var(--panel3) 0%, transparent 78%),
+    var(--field);
+}
+
 .media-ripple {
   position: absolute;
   inset: 0;

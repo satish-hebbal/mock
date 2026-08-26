@@ -734,35 +734,37 @@ body {
  *
  * A dashed rectangle is the universal "put something here", but sitting still
  * it is also indistinguishable from a box that has been switched off. Under the
- * pointer, outlines start on the slot's own edge and travel inward, one after
- * another, so the slot reads as something drawing a file in rather than as
- * something merely marked out.
+ * pointer, hairlines start on the slot's own edge and travel in toward the
+ * middle, six of them a sixth of a cycle apart, so what arrives is a wave
+ * rather than one ring going round and round. The slot reads as something that
+ * draws a file in.
  *
- * The edges are animated rather than a transform, for the reason the attract
- * rings give above: a uniform scale shrinks a shape toward a smaller copy of
- * itself, so the border would thin and the corners would tighten as the ring
- * travelled, and what should read as one outline moving would read as a
- * different, smaller outline at every step.
+ * Every frame of it is transform and opacity, which is the difference between
+ * this and the version before it. That one animated the four edge offsets, and
+ * an offset is a layout input: the browser re-laid-out and repainted six boxes
+ * sixty times a second inside a panel that is also driving a 3D viewport, and
+ * you could feel it. Transform and opacity are the two properties the
+ * compositor can animate on its own, without waking layout or paint at all.
+ *
+ * What that costs is the one thing offsets did better: a scale shrinks the
+ * border and the corner radius along with the box, so a ring softens as it
+ * travels rather than staying a constant hairline. Here that reads as depth,
+ * and the fade is going the same way, so the honest trade is worth it.
  */
 @keyframes media-ripple {
   0% {
-    top: 0;
-    right: 0;
-    bottom: 0;
-    left: 0;
-    border-radius: var(--radius-md);
+    transform: scale(1.06);
     opacity: 0;
   }
-  /* up quickly, so a ring appears on the edge rather than a little inside it */
-  14% {
-    opacity: 0.4;
+  /* up fast, so a ring appears on the edge and not a little inside it */
+  10% {
+    opacity: 0.5;
+  }
+  55% {
+    opacity: 0.26;
   }
   100% {
-    top: 18px;
-    right: 18px;
-    bottom: 18px;
-    left: 18px;
-    border-radius: 3px;
+    transform: scale(0.3);
     opacity: 0;
   }
 }
@@ -771,6 +773,9 @@ body {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  /* the rings are all that is in here, so a moving one has nothing outside
+     itself to invalidate */
+  contain: layout style paint;
 }
 
 .media-ring {
@@ -781,28 +786,62 @@ body {
   opacity: 0;
 }
 
+/*
+ * Eased rather than linear, so the wave slows as it converges and the rings
+ * gather toward the middle instead of marching in at a constant rate. The
+ * gathering is the part that reads as water.
+ */
 .media-drop:hover .media-ring,
 .media-drop:focus-visible .media-ring {
-  animation: media-ripple 1800ms linear infinite;
+  animation: media-ripple 2400ms cubic-bezier(0.3, 0.55, 0.35, 1) infinite;
+  /* asked for here rather than on the resting rule, so six compositor layers
+     exist while the pointer is on the slot and not for the whole session */
+  will-change: transform, opacity;
 }
 
 /*
- * Negative, so the second and third rings are already part way in the moment
- * the pointer lands. A positive delay would spend the first second of every
- * hover showing one lonely ring.
+ * Negative, so every ring is already part way in the moment the pointer lands.
+ * Positive delays would spend the first two seconds of every hover showing the
+ * wave assemble itself one ring at a time.
  */
 .media-ring:nth-child(2) {
-  animation-delay: -600ms;
+  animation-delay: -400ms;
 }
 
 .media-ring:nth-child(3) {
+  animation-delay: -800ms;
+}
+
+.media-ring:nth-child(4) {
   animation-delay: -1200ms;
+}
+
+.media-ring:nth-child(5) {
+  animation-delay: -1600ms;
+}
+
+.media-ring:nth-child(6) {
+  animation-delay: -2000ms;
+}
+
+/* the plus leans in to meet the wave */
+.media-plus {
+  transition: transform 260ms cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+.media-drop:hover .media-plus,
+.media-drop:focus-visible .media-plus {
+  transform: scale(1.15);
 }
 
 @media (prefers-reduced-motion: reduce) {
   .media-drop:hover .media-ring,
   .media-drop:focus-visible .media-ring {
     animation: none;
+  }
+
+  .media-plus {
+    transition: none;
   }
 }
 

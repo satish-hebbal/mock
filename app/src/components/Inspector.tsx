@@ -170,20 +170,24 @@ function MediaSection() {
         {media.length < MAX_SCREEN_MEDIA && (
           <button
             onClick={() => pickMediaFile((f) => void importMedia(f))}
-            title="Add an image or video. Dropping or pasting one anywhere works too."
+            /* the empty slot says this in its own label, and a tooltip that
+               covers the thing it is describing is worse than no tooltip */
+            title={empty ? undefined : 'Add an image or video, or drop one anywhere'}
             className={`media-drop relative flex flex-col items-center justify-center gap-1 overflow-hidden rounded-md border border-dashed border-(--line) text-(--tx3) transition-colors hover:border-(--tx3) hover:text-(--tx2) ${
               empty ? 'col-span-3 py-6' : 'aspect-[4/3]'
             }`}
           >
-            {/* three of them, running a third of a cycle apart, so the slot is
-                always somewhere in the middle of a ripple rather than starting
-                one when you arrive */}
+            {/* six, a sixth of a cycle apart, which is what turns one ring
+                travelling inward into a wave doing it */}
             <span className="media-ripple" aria-hidden>
               <span className="media-ring" />
               <span className="media-ring" />
               <span className="media-ring" />
+              <span className="media-ring" />
+              <span className="media-ring" />
+              <span className="media-ring" />
             </span>
-            <Plus size={empty ? 16 : 14} strokeWidth={1.9} />
+            <Plus className="media-plus" size={empty ? 16 : 14} strokeWidth={1.9} />
             {empty && <span className="t-caption">Add an image or video, or drop one here</span>}
           </button>
         )}

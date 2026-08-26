@@ -614,6 +614,21 @@ body {
   border-radius: var(--tool-radius);
   background: var(--line);
   /*
+   * The highlight comes up over a beat rather than snapping on. At the app's
+   * default 110ms the tint arrives as a state flag: it is either on or off and
+   * you never see it move. Long enough to watch, and on a curve that spends its
+   * time in the middle rather than racing to the colour and easing out, the
+   * same tint reads as the card warming under the pointer.
+   *
+   * Leaving is quicker, and the direction is chosen by which rule is in play
+   * when the transition starts: hover raises `--tool-fade` on the way in, and
+   * reverting drops back to the base value on the way out.
+   */
+  --tool-fade: 170ms;
+  transition:
+    background-color var(--tool-fade) cubic-bezier(0.4, 0, 0.6, 1),
+    color 110ms linear;
+  /*
    * The fill sits behind the card's text on z-index -1, and that only lands
    * above the card's own background if the card is a stacking context. Clipped
    * cards are one already; this is for the ones that are not.
@@ -635,6 +650,7 @@ body {
  * these three apart everywhere else on the card.
  */
 .tool-card:not(:disabled):hover {
+  --tool-fade: 320ms;
   background: rgba(var(--tool-tint), 0.55);
 }
 

@@ -105,7 +105,7 @@ export function AppSheet() {
                   disabled={t.soon}
                   onClick={() => go(t.id)}
                   style={{ ...seam?.style, ...toolTint(t), ...lit?.card }}
-                  className={`tool-card flex flex-col items-start gap-2.5 p-3 text-left transition-colors ${
+                  className={`tool-card flex flex-col items-start gap-2.5 p-3 text-left ${
                     seam?.className ?? ''
                   } ${t.soon ? 'cursor-default opacity-60' : ''}`}
                 >

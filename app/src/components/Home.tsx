@@ -42,7 +42,7 @@ export function Home() {
                 disabled={t.soon}
                 onClick={() => !t.soon && setMode(t.id)}
                 style={{ ...seam?.style, ...toolTint(t) }}
-                className={`tool-card group flex flex-col items-start gap-3 p-5 text-left transition-colors ${
+                className={`tool-card group flex flex-col items-start gap-3 p-5 text-left ${
                   seam?.className ?? ''
                 } ${t.soon ? 'cursor-default opacity-60' : ''}`}
               >

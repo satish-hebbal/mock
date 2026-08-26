@@ -1,6 +1,7 @@
 import type { AssetMeta } from '../types'
 import type { ShotsDeviceId } from './devices'
 import { defaultMesh, type MeshSpec } from '../lib/meshGradient'
+import { defaultPortrait, type Portrait } from '../lib/portrait'
 
 // ----- Flat 2D "Shots" editor document (shots.so-class) -----
 
@@ -21,26 +22,14 @@ export type ShotsFrame =
  * the surroundings into shadow instead. 'both' runs them together, defocusing
  * first and then shading what is left.
  */
-export type PortraitMode = 'none' | 'lens' | 'stage' | 'both'
-
-export interface ShotsPortrait {
-  mode: PortraitMode
-  /** focal centre in normalized canvas coordinates (0..1) */
-  x: number
-  y: number
-  /** radius of the fully sharp core, as a fraction of min(canvas) */
-  radius: number
-  /** width of the falloff ring outside the core, same units */
-  feather: number
-  /**
-   * 0..1 peak defocus. Separate from `shade` so that switching between modes,
-   * or running both at once, never makes one of them overwrite the other's
-   * setting.
-   */
-  strength: number
-  /** 0..1 darkness outside the focus */
-  shade: number
-}
+/*
+ * Portrait is shared with the 3D studio now, so it is declared in
+ * src/lib/portrait.ts next to the geometry that reads it. The local name stays
+ * so nothing in this folder has to be renamed to follow it.
+ */
+export type { PortraitMode } from '../lib/portrait'
+export { defaultPortrait }
+export type ShotsPortrait = Portrait
 
 /**
  * A shadow scene: light shaped by something off-camera, falling across the shot.
@@ -205,10 +194,6 @@ export function selectedShotsImage(doc: ShotsDoc): ShotsImage | null {
  */
 export function paintOrder(images: ShotsImage[]): ShotsImage[] {
   return [...images].sort((a, b) => (a.z ?? 0) - (b.z ?? 0))
-}
-
-export function defaultPortrait(): ShotsPortrait {
-  return { mode: 'none', x: 0.5, y: 0.5, radius: 0.22, feather: 0.18, strength: 0.5, shade: 0.6 }
 }
 
 export function defaultGobo(): ShotsGobo {

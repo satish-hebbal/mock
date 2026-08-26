@@ -1,7 +1,6 @@
 import { paintMeshGradient } from '../lib/meshGradient'
 import { getWallpaper } from '../lib/wallpapers'
 import { computeLayout, perspectiveFor, type CardLayout } from './layout'
-import { portraitGeometry, portraitMaskGradient, portraitPasses } from './portrait'
 import { getCardStyle, stackShade } from './cardStyles'
 import { goboCover, goboTransform } from './shadows'
 import type {
@@ -9,7 +8,6 @@ import type {
   ShotsGobo,
   ShotsGradient,
   ShotsImage,
-  ShotsPortrait,
 } from './types'
 
 // ----- small helpers -----
@@ -573,107 +571,6 @@ export function paintShadowScene(
   ctx.scale(scale, scale)
   ctx.drawImage(art, -w / 2, -h / 2, w, h)
   ctx.restore()
-}
-
-// ----- portrait (depth of field over the finished frame) -----
-
-/**
- * Blur a canvas with its edges held, rather than fading into nothing.
- *
- * `ctx.filter` samples transparent black past the bitmap, so a straight blur
- * eats a soft transparent band all the way round the frame, exactly where the
- * out-of-focus region is. Padding the source and stretching its edge pixels
- * outward first gives the kernel something real to reach into, so the border
- * comes back the colour it started.
- */
-function blurCanvas(src: HTMLCanvasElement, px: number): HTMLCanvasElement {
-  const W = src.width
-  const H = src.height
-  const P = Math.max(1, Math.ceil(px * 1.5))
-
-  const pad = document.createElement('canvas')
-  pad.width = W + P * 2
-  pad.height = H + P * 2
-  const pg = pad.getContext('2d')!
-  pg.drawImage(src, P, P)
-  pg.drawImage(src, 0, 0, 1, H, 0, P, P, H)
-  pg.drawImage(src, W - 1, 0, 1, H, W + P, P, P, H)
-  pg.drawImage(src, 0, 0, W, 1, P, 0, W, P)
-  pg.drawImage(src, 0, H - 1, W, 1, P, H + P, W, P)
-  pg.drawImage(src, 0, 0, 1, 1, 0, 0, P, P)
-  pg.drawImage(src, W - 1, 0, 1, 1, W + P, 0, P, P)
-  pg.drawImage(src, 0, H - 1, 1, 1, 0, H + P, P, P)
-  pg.drawImage(src, W - 1, H - 1, 1, 1, W + P, H + P, P, P)
-
-  const out = document.createElement('canvas')
-  out.width = W
-  out.height = H
-  const og = out.getContext('2d')!
-  og.filter = `blur(${px}px)`
-  og.drawImage(pad, -P, -P)
-  /*
-   * Hand the canvas back with a clean context.
-   *
-   * `getContext` returns the same object every time, so a filter left set here
-   * is still set when the caller masks this canvas, and `ctx.filter` applies to
-   * fills as much as to images. The mask gradient would come out blurred, and
-   * blurring a fill that covers the whole canvas drags transparency in from
-   * beyond its edges, so the mask thinned out around the border and let the
-   * sharp original show through exactly there.
-   */
-  og.filter = 'none'
-  return out
-}
-
-/**
- * Defocus the composed frame around the focal point, in place.
- *
- * Runs last, on everything: background, devices, shadows. That is the whole
- * point of it, since a lens does not know which parts of a scene you consider
- * the subject, and a blur that skipped the phone would give away that the
- * picture was assembled rather than taken.
- *
- * The passes are applied in order, each over the result of the last, matching
- * how the preview's stacked `backdrop-filter` layers compose.
- */
-export function applyPortrait(canvas: HTMLCanvasElement, p: ShotsPortrait | undefined) {
-  if (!p || p.mode === 'none') return
-  const W = canvas.width
-  const H = canvas.height
-  const ctx = canvas.getContext('2d')!
-  const g = portraitGeometry(p, W, H)
-
-  // defocus first, then shade what is left: the shadow is cast onto the
-  // finished picture, not blurred along with it
-  for (const pass of portraitPasses(g)) {
-    const soft = blurCanvas(canvas, pass.blur)
-    const sg = soft.getContext('2d')!
-    // keep only the out-of-focus ring of the blurred copy, then lay it back on
-    sg.globalCompositeOperation = 'destination-in'
-    sg.fillStyle = portraitMaskGradient(sg, g, pass.inner, pass.outer)
-    sg.fillRect(0, 0, W, H)
-    ctx.drawImage(soft, 0, 0)
-  }
-
-  if (g.darkness > 0) {
-    const mask = document.createElement('canvas')
-    mask.width = W
-    mask.height = H
-    const mg = mask.getContext('2d')!
-    mg.fillStyle = `rgba(0,0,0,${g.darkness})`
-    mg.fillRect(0, 0, W, H)
-    mg.globalCompositeOperation = 'destination-in'
-    mg.fillStyle = portraitMaskGradient(mg, g, g.inner, g.outer)
-    mg.fillRect(0, 0, W, H)
-
-    ctx.save()
-    // 'source-atop', so the shade only lands on pixels that are already there.
-    // A transparent background has to survive this pass with its alpha intact,
-    // the same way the vignette leaves it alone.
-    ctx.globalCompositeOperation = 'source-atop'
-    ctx.drawImage(mask, 0, 0)
-    ctx.restore()
-  }
 }
 
 /** A vertically-faded copy of the layer, used for the reflection. */

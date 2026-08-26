@@ -1,4 +1,5 @@
 import { Vector2 } from 'three'
+import { applyPortrait } from './portrait'
 import { applyAtTime, renderFrame, rt, setEditorObjectsVisible } from './runtime'
 import { paintMeshGradient } from './meshGradient'
 import { getWallpaper } from './wallpapers'
@@ -364,6 +365,18 @@ export async function exportImage(
     ctx.drawImage(stage, 0, 0)
     ctx.filter = 'none'
 
+    /*
+     * After the graded stage and before the overlays, which is exactly where
+     * the preview stacks its own layers.
+     *
+     * The lens does not know which parts of a scene were drawn separately, so
+     * it takes the background, the devices and their shadows together. It stops
+     * short of the overlays because those are not in the picture: a caption or
+     * a logo is stuck to the front of the frame, and defocusing it would read as
+     * a mistake rather than as depth.
+     */
+    applyPortrait(out, project.scene.effects.portrait)
+
     await drawOverlays(ctx, project.overlays, assets, opts.width, opts.height)
 
     const mime = opts.format === 'png' ? 'image/png' : opts.format === 'jpg' ? 'image/jpeg' : 'image/webp'
@@ -481,6 +494,9 @@ export async function exportVideo(
       if (gf) ctx.filter = gf
       ctx.drawImage(stage, 0, 0)
       ctx.filter = 'none'
+      // same place in the chain as the still export, so a frame of the video
+      // and a snapshot of the same moment come out identical
+      applyPortrait(canvas, project.scene.effects.portrait)
       await drawOverlays(ctx, project.overlays, assets, opts.width, opts.height)
 
       await source.add(i / opts.fps, 1 / opts.fps)

@@ -1,12 +1,15 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { MAX_SCREEN_MEDIA, pickMediaFile, screenMedia, useStudio } from '../store'
 import { ColorRow, Disclosure, Dropdown, MiniButton, Section, Segments, SliderRow, SubHeading } from './controls'
 import {
+  Aperture,
   Box,
   Camera,
   CircleMinus,
   CloudSun,
+  Crosshair,
   Disc,
+  Focus,
   Globe,
   Image,
   Images,
@@ -15,6 +18,7 @@ import {
   Palette,
   Plus,
   Sparkles,
+  Spotlight,
   Sun,
   Type,
   X,
@@ -25,7 +29,8 @@ import { OVERLAY_FONTS } from '../lib/presets'
 import { getDevice } from '../lib/registry'
 import { CAMERA_LIMITS } from '../lib/camera'
 import { ui } from '../lib/ui'
-import type { AssetRuntime, BackgroundType } from '../types'
+import { portraitOf } from '../lib/portrait'
+import type { AssetRuntime, BackgroundType, PortraitMode } from '../types'
 
 /** Glyphs for section headers and sub-headings. */
 const secIcon = { size: 13, strokeWidth: 1.75 } as const
@@ -528,6 +533,161 @@ function SceneSection() {
 
 // ----- Effects -----
 
+/**
+ * Portrait, the same four modes the Shots panel offers.
+ *
+ * Two by two rather than a row: "Lens + Stage" has no room in a quarter of a
+ * panel this wide, and four tiles in a row of three leaves a stray.
+ */
+const PORTRAIT_MODES: { id: PortraitMode; label: string; icon: ReactNode; title: string }[] = [
+  { id: 'none', label: 'None', icon: <X size={14} strokeWidth={1.8} />, title: 'Everything in focus' },
+  {
+    id: 'lens',
+    label: 'Lens Blur',
+    icon: <Aperture size={15} strokeWidth={1.6} />,
+    title: 'Defocus everything outside the focal point',
+  },
+  {
+    id: 'stage',
+    label: 'Stage',
+    icon: <Spotlight size={15} strokeWidth={1.6} />,
+    title: 'Drop everything outside the focal point into shadow',
+  },
+  {
+    id: 'both',
+    label: 'Lens + Stage',
+    icon: <Focus size={15} strokeWidth={1.6} />,
+    title: 'Defocus and shade everything outside the focal point',
+  },
+]
+
+function ModeTile({
+  icon,
+  label,
+  active,
+  onClick,
+  title,
+}: {
+  icon: ReactNode
+  label: string
+  active?: boolean
+  onClick: () => void
+  title?: string
+}) {
+  return (
+    <button
+      onClick={onClick}
+      title={title ?? label}
+      aria-pressed={active}
+      className="group flex flex-col items-center gap-1"
+    >
+      <span
+        className={`flex h-11 w-full items-center justify-center rounded-lg transition-colors ${
+          active
+            ? 'bg-(--sel) text-(--tx)'
+            : 'bg-(--field) text-(--tx2) group-hover:bg-(--field-h) group-hover:text-(--tx)'
+        }`}
+      >
+        {icon}
+      </span>
+      <span className={`w-full truncate text-center t-caption ${active ? 'text-(--tx)' : 'text-(--tx3)'}`}>
+        {label}
+      </span>
+    </button>
+  )
+}
+
+function PortraitSection() {
+  /*
+   * The fallback is applied outside the selector on purpose. `portraitOf`
+   * builds a fresh object when the field is missing, and zustand compares
+   * selector results by identity, so calling it inside would hand back a new
+   * object every render and never settle.
+   */
+  const saved = useStudio((s) => s.project.scene.effects.portrait)
+  const portrait = portraitOf(saved)
+  const guide = useStudio((s) => s.focusGuide)
+  const setFocusGuide = useStudio((s) => s.setFocusGuide)
+  const setPortrait = useStudio((s) => s.setPortrait)
+  const on = portrait.mode !== 'none'
+
+  return (
+    <Section title="Portrait" icon={<Aperture {...secIcon} />}>
+      <div className="grid grid-cols-2 gap-1.5">
+        {PORTRAIT_MODES.map((m) => (
+          <ModeTile
+            key={m.id}
+            label={m.label}
+            title={m.title}
+            active={portrait.mode === m.id}
+            onClick={() => setPortrait({ mode: m.id })}
+            icon={m.icon}
+          />
+        ))}
+      </div>
+
+      {on && (
+        <div className="mt-3">
+          {/*
+            The rings are a toggle here rather than something the canvas
+            dismisses, which is the one place this parts company with Shots. A
+            click on a flat shot means nothing else; a click in this viewport
+            picks a device or starts an orbit, so tying the guide to it would
+            make the rings almost impossible to keep on screen.
+          */}
+          <button
+            onClick={() => setFocusGuide(!guide)}
+            className="mb-2 flex h-7 w-full items-center justify-center gap-1.5 rounded-sm bg-(--field) t-body-sm text-(--tx2) hover:bg-(--field-h) hover:text-(--tx)"
+          >
+            <Crosshair {...subIcon} /> {guide ? 'Hide focal point' : 'Show focal point'}
+          </button>
+          {guide && (
+            <p className="mb-2 t-caption leading-snug text-(--tx3)">
+              Drag the ring on the canvas to choose what stays sharp.
+            </p>
+          )}
+          <SliderRow
+            label="Focus"
+            value={portrait.radius}
+            min={0.05}
+            max={0.6}
+            onChange={(radius) => setPortrait({ radius })}
+            hint="How much of the frame stays sharp"
+          />
+          <SliderRow
+            label="Falloff"
+            value={portrait.feather}
+            min={0.02}
+            max={0.5}
+            onChange={(feather) => setPortrait({ feather })}
+            hint="How gradually focus is given up"
+          />
+          {/* each amount shows only where it does something, and keeps its
+              value when the mode moves away from it */}
+          {(portrait.mode === 'lens' || portrait.mode === 'both') && (
+            <SliderRow
+              label="Blur"
+              value={portrait.strength}
+              min={0}
+              max={1}
+              onChange={(strength) => setPortrait({ strength })}
+            />
+          )}
+          {(portrait.mode === 'stage' || portrait.mode === 'both') && (
+            <SliderRow
+              label="Shade"
+              value={portrait.shade}
+              min={0}
+              max={1}
+              onChange={(shade) => setPortrait({ shade })}
+            />
+          )}
+        </div>
+      )}
+    </Section>
+  )
+}
+
 function EffectsSection() {
   const fx = useStudio((s) => s.project.scene.effects)
   const setEffects = useStudio((s) => s.setEffects)
@@ -847,6 +1007,7 @@ export function Inspector() {
       <CameraSection />
       <DevicesSection />
       <SceneSection />
+      <PortraitSection />
       <EffectsSection />
       <OverlaysSection />
     </>

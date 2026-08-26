@@ -187,6 +187,12 @@ export interface EffectsState {
   vignette: number
   chromatic: number
   grade: GradeState
+  /**
+   * Depth of field and stage light, the same record Shots keeps. Optional
+   * because projects saved before the studio had it carry no such field, and
+   * `portraitOf` fills one in rather than the loader needing a migration.
+   */
+  portrait?: Portrait
 }
 
 interface OverlayBase {
@@ -231,6 +237,9 @@ export interface ShapeOverlay extends OverlayBase {
 }
 
 export type Overlay = TextOverlay | ImageOverlay | ShapeOverlay
+
+import type { Portrait } from './lib/portrait'
+export type { Portrait, PortraitMode } from './lib/portrait'
 
 export interface AssetMeta {
   id: string

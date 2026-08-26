@@ -7,9 +7,10 @@ import { DEFAULT_DEVICE_ID, getDevice } from './lib/registry'
 import { ANIMATION_PRESETS, TEMPLATES } from './lib/presets'
 import { DEFAULT_LOOK, getLook } from './lib/studio'
 import { NEUTRAL_GRADE } from './lib/grade'
-import { coalesces, endEditRun } from './lib/history'
+import { coalesces, endEditRun, patchLabel } from './lib/history'
 import { framingForDevices } from './lib/runtime'
 import { WALLPAPERS } from './lib/wallpapers'
+import { defaultPortrait, type Portrait } from './lib/portrait'
 import { PRESET_PHOTOS } from './lib/presetPhotos'
 import type {
   AssetMeta,
@@ -134,6 +135,8 @@ interface StudioState {
   project: ProjectDoc
   assets: Record<string, AssetRuntime>
   selectedDeviceId: string | null
+  /** the focal rings are up, so the focus can be dragged on the picture */
+  focusGuide: boolean
   selectedOverlayId: string | null
   selectedKeyframeIds: string[]
   timeMs: number
@@ -168,6 +171,9 @@ interface StudioState {
   setGround: (patch: Partial<GroundState>) => void
   setEffects: (patch: Partial<EffectsState>) => void
   setGrade: (patch: Partial<GradeState>) => void
+  setPortrait: (patch: Partial<Portrait>) => void
+  /** show the focal rings over the viewport; editor state, never saved */
+  setFocusGuide: (visible: boolean) => void
 
   // devices
   addDevice: (modelId: string) => void
@@ -297,6 +303,7 @@ export const useStudio = create<StudioState>()(
     project: defaultProject(),
     assets: {},
     selectedDeviceId: null,
+    focusGuide: true,
     selectedOverlayId: null,
     selectedKeyframeIds: [],
     timeMs: 0,
@@ -496,6 +503,24 @@ export const useStudio = create<StudioState>()(
         Object.assign(s.project.scene.effects, patch)
       })
     },
+    /*
+     * Adjusting the focus brings its rings back rather than leaving the user to
+     * find the button: every field here is about where the focus sits, and none
+     * of them can be judged without seeing it.
+     */
+    setPortrait: (patch) => {
+      // labelled per property, so dragging Focus and then Falloff is two
+      // undo entries rather than one merged blur of both
+      get().commit(patchLabel('portrait', patch))
+      set((s) => {
+        const fx = s.project.scene.effects
+        fx.portrait = { ...defaultPortrait(), ...fx.portrait, ...patch }
+        s.focusGuide = true
+      })
+    },
+
+    setFocusGuide: (visible) => set((s) => void (s.focusGuide = visible)),
+
     setGrade: (patch) => {
       get().commit('grade')
       set((s) => {

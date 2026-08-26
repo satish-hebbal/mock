@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { pickMediaFile, useStudio } from '../store'
+import { MAX_SCREEN_MEDIA, pickMediaFile, screenMedia, useStudio } from '../store'
 import { ColorRow, Disclosure, Dropdown, MiniButton, Section, Segments, SliderRow, SubHeading } from './controls'
 import {
   Box,
@@ -7,16 +7,17 @@ import {
   CircleMinus,
   CloudSun,
   Disc,
-  FileImage,
   Globe,
   Image,
+  Images,
   Link,
   Move3d,
   Palette,
+  Plus,
   Sparkles,
   Sun,
   Type,
-  Upload,
+  X,
 } from 'lucide-react'
 import { focalFromFov, keyColor } from '../lib/studio'
 import { getMood } from '../lib/moods'
@@ -24,7 +25,7 @@ import { OVERLAY_FONTS } from '../lib/presets'
 import { getDevice } from '../lib/registry'
 import { CAMERA_LIMITS } from '../lib/camera'
 import { ui } from '../lib/ui'
-import type { BackgroundType } from '../types'
+import type { AssetRuntime, BackgroundType } from '../types'
 
 /** Glyphs for section headers and sub-headings. */
 const secIcon = { size: 13, strokeWidth: 1.75 } as const
@@ -52,20 +53,84 @@ function ratioNote(key: number, fill: number): string {
   return `${r.toFixed(1)}:1 (near shadowless)`
 }
 
-// ----- Source -----
+// ----- Media -----
 
-function SourceSection() {
+/**
+ * One file in the tray, and the readout of whether it is the one on screen.
+ *
+ * The thumbnail is the button: picking it puts the file on the selected
+ * device, and the file already up there wears the accent, so the tray says
+ * what is on the screen without a second control to read it off. Remove waits
+ * for a hover or a focus, because five tiles each carrying a permanent cross
+ * is a row of delete buttons rather than a row of media.
+ */
+function MediaTile({
+  media,
+  active,
+  onPick,
+  onRemove,
+}: {
+  media: AssetRuntime
+  active: boolean
+  onPick: () => void
+  onRemove: () => void
+}) {
+  return (
+    <div className="group relative">
+      <button
+        onClick={onPick}
+        aria-pressed={active}
+        title={active ? 'On the screen now' : 'Put this on the screen'}
+        className={`block aspect-[4/3] w-full overflow-hidden rounded-md border bg-(--panel2) transition-colors ${
+          active
+            ? 'border-(--accent) ring-1 ring-(--accent)'
+            : 'border-(--line) hover:border-(--line2)'
+        }`}
+      >
+        {media.kind === 'video' ? (
+          <video
+            src={media.url}
+            muted
+            loop
+            autoPlay
+            playsInline
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <img src={media.url} alt="" className="h-full w-full object-cover" />
+        )}
+      </button>
+      <button
+        onClick={onRemove}
+        title="Remove from the tray"
+        aria-label="Remove from the tray"
+        className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-(--line2) bg-(--raised) text-(--tx2) opacity-0 transition-opacity group-hover:opacity-100 hover:text-(--tx) focus-visible:opacity-100"
+      >
+        <X size={11} strokeWidth={2.2} />
+      </button>
+    </div>
+  )
+}
+
+function MediaSection() {
   const selectedDeviceId = useStudio((s) => s.selectedDeviceId)
   const device = useStudio(
     (s) =>
       s.project.scene.devices.find((d) => d.id === s.selectedDeviceId) ?? s.project.scene.devices[0],
   )
-  const asset = useStudio((s) =>
-    device?.screen.assetId ? s.assets[device.screen.assetId] : undefined,
-  )
+  const devices = useStudio((s) => s.project.scene.devices)
+  // the whole list, not a filtered one: a selector that builds a new array
+  // every call re-renders this panel on every frame the timeline plays
+  const assets = useStudio((s) => s.project.assets)
+  const runtime = useStudio((s) => s.assets)
   const importMedia = useStudio((s) => s.importMedia)
   const importMediaFromURL = useStudio((s) => s.importMediaFromURL)
+  const removeAsset = useStudio((s) => s.removeAsset)
   const updateDeviceScreen = useStudio((s) => s.updateDeviceScreen)
+
+  const media = screenMedia(assets)
+  const bound = device?.screen.assetId ?? null
+  const empty = media.length === 0
 
   const fromURL = async () => {
     const url = await ui.prompt({
@@ -82,70 +147,98 @@ function SourceSection() {
   }
 
   return (
-    <Section title="Source" icon={<FileImage {...secIcon} />}>
-      <button
-        onClick={() => pickMediaFile((f) => void importMedia(f))}
-        className="flex w-full flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-(--line) bg-(--panel2) px-3 py-5 transition-colors hover:border-(--tx3)"
-      >
-        {asset ? (
-          asset.kind === 'video' ? (
-            <video src={asset.url} muted loop autoPlay playsInline className="max-h-24 rounded-md" />
-          ) : (
-            <img src={asset.url} alt="Screen media" className="max-h-24 rounded-md object-contain" />
-          )
-        ) : (
-          <>
-            <span className="t-eyebrow text-(--tx2) uppercase">
-              Click to upload
-            </span>
-            <span className="t-eyebrow text-(--tx3) uppercase">
-              image or video · drag & drop or paste
-            </span>
-          </>
+    <Section title="Media" icon={<Images {...secIcon} />}>
+      {/*
+       * Five slots and the one that adds another, which lands as two tidy rows
+       * of three. Empty, that add slot takes the whole row and says what it
+       * takes, since a lone dashed square in the corner of an empty panel
+       * explains nothing.
+       */}
+      <div className="grid grid-cols-3 gap-1.5">
+        {media.map((m) => {
+          const live = runtime[m.id]
+          return live ? (
+            <MediaTile
+              key={m.id}
+              media={live}
+              active={m.id === bound}
+              onPick={() => device && updateDeviceScreen(device.id, { assetId: m.id, scroll: 0 })}
+              onRemove={() => removeAsset(m.id)}
+            />
+          ) : null
+        })}
+        {media.length < MAX_SCREEN_MEDIA && (
+          <button
+            onClick={() => pickMediaFile((f) => void importMedia(f))}
+            title="Add an image or video. Dropping or pasting one anywhere works too."
+            className={`media-drop relative flex flex-col items-center justify-center gap-1 rounded-md text-(--tx3) transition-colors hover:text-(--tx2) ${
+              empty ? 'col-span-3 py-6' : 'aspect-[4/3]'
+            }`}
+          >
+            {/*
+             * The dashes are drawn rather than bordered, because a CSS border
+             * has no dash offset to animate and this one has to march. It
+             * inherits the button's own colour, so the outline warms with the
+             * label instead of being lit separately.
+             */}
+            <svg className="pointer-events-none absolute inset-0 h-full w-full overflow-visible">
+              <rect
+                className="media-ants"
+                x="0"
+                y="0"
+                width="100%"
+                height="100%"
+                rx="8"
+                ry="8"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.25"
+                strokeDasharray="7 5"
+              />
+            </svg>
+            <Plus size={empty ? 16 : 14} strokeWidth={1.9} />
+            {empty && <span className="t-caption">Add an image or video, or drop one here</span>}
+          </button>
         )}
-      </button>
-      {/* the glyph carries "what kind of source", so the label doesn't need a
-          trailing ellipsis to hint that more is coming */}
-      <div className="mt-1.5 flex gap-1">
-        <MiniButton onClick={() => pickMediaFile((f) => void importMedia(f))}>
-          <Upload size={13} strokeWidth={1.9} />
-          Upload
-        </MiniButton>
+      </div>
+
+      <div className="mt-1.5">
         <MiniButton onClick={fromURL}>
           <Link size={13} strokeWidth={1.9} />
           From URL
         </MiniButton>
       </div>
-      {device && asset && (
-        <>
-          <div className="mt-2 flex gap-1">
-            <MiniButton
-              active={device.screen.fit === 'cover'}
-              onClick={() => updateDeviceScreen(device.id, { fit: 'cover' })}
-            >
-              Cover
-            </MiniButton>
-            <MiniButton
-              active={device.screen.fit === 'contain'}
-              onClick={() => updateDeviceScreen(device.id, { fit: 'contain' })}
-            >
-              Contain
-            </MiniButton>
-          </div>
-          <div className="mt-1">
-            <SliderRow
-              label="Scroll"
-              value={device.screen.scroll}
-              min={0}
-              max={1}
-              target={`dev.${device.id}.scroll`}
-              onChange={(v) => useStudio.getState().setAnimatable(`dev.${device.id}.scroll`, v)}
-              hint="Scroll tall screenshots inside the screen (animatable)"
-            />
-          </div>
-        </>
+
+      {device && bound && (
+        <div className="mt-2">
+          <Segments
+            options={[
+              { id: 'cover', label: 'Cover' },
+              { id: 'contain', label: 'Contain' },
+            ]}
+            value={device.screen.fit}
+            onChange={(fit) => updateDeviceScreen(device.id, { fit })}
+          />
+          <SliderRow
+            label="Scroll"
+            value={device.screen.scroll}
+            min={0}
+            max={1}
+            target={`dev.${device.id}.scroll`}
+            onChange={(v) => useStudio.getState().setAnimatable(`dev.${device.id}.scroll`, v)}
+            hint="Scroll tall screenshots inside the screen (animatable)"
+          />
+        </div>
       )}
-      {selectedDeviceId === null && (
+
+      {/* with one device there is nothing to say; with several, which one a
+          pick lands on is the whole question */}
+      {devices.length > 1 && device && (
+        <p className="mt-2 t-caption text-(--tx3)">
+          Picking one puts it on {getDevice(device.modelId).name}.
+        </p>
+      )}
+      {selectedDeviceId === null && devices.length <= 1 && (
         <p className="mt-2 t-caption text-(--tx3)">Media binds to the selected device.</p>
       )}
     </Section>
@@ -747,7 +840,7 @@ function OverlaysSection() {
 /*
  * Ordered by what the panel is *about*, working outward from the subject.
  *
- * Source is the screenshot, 3D Devices is the thing holding it, and Camera is
+ * Media is the screenshots, 3D Devices is the thing holding one, and Camera is
  * where you stand to look at the pair: those three are one continuous train
  * of thought and now sit together. Scene dresses what is behind them, and
  * Effects grades the finished picture, so both are later passes over a shot
@@ -760,7 +853,7 @@ function OverlaysSection() {
 export function Inspector() {
   return (
     <>
-      <SourceSection />
+      <MediaSection />
       <CameraSection />
       <DevicesSection />
       <SceneSection />

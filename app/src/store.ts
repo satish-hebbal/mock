@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { loadAsset, loadProjectJSON, saveAsset, saveProjectJSON } from './lib/db'
+import { ui } from './lib/ui'
 import { getTargetValue, sampleKeyframes, setTargetValue } from './lib/evaluator'
 import { DEFAULT_DEVICE_ID, getDevice } from './lib/registry'
 import { ANIMATION_PRESETS, TEMPLATES } from './lib/presets'
@@ -29,6 +30,16 @@ import type {
 } from './types'
 
 const uid = () => crypto.randomUUID()
+
+/** How many files the media tray holds. */
+export const MAX_SCREEN_MEDIA = 5
+
+/**
+ * The files the tray offers, which is every asset that was imported to go on a
+ * screen. Assets saved before the tray existed carry no role and are read as
+ * screen media, which is what hydrate backfills them as.
+ */
+export const screenMedia = (assets: AssetMeta[]) => assets.filter((a) => a.role !== 'scene')
 
 export type DialogKind = 'export' | 'templates' | 'shortcuts' | null
 
@@ -179,6 +190,8 @@ interface StudioState {
    * screenshot the device was already showing.
    */
   importMedia: (file: Blob, mime?: string, opts?: { bind?: boolean }) => Promise<void>
+  /** drop a file from the tray, unbinding whatever was pointing at it */
+  removeAsset: (id: string) => void
   importMediaFromURL: (url: string, opts?: { bind?: boolean }) => Promise<void>
 
   // overlays
@@ -586,6 +599,17 @@ export const useStudio = create<StudioState>()(
     },
 
     importMedia: async (file, mime, opts) => {
+      /*
+       * The tray is deliberately small: five screens is more than any one
+       * mockup needs, and an unbounded pile of blobs in IndexedDB is a slow
+       * leak nobody goes looking for. Backdrops and logos are scene dressing
+       * rather than screen media, so they neither count nor are counted.
+       */
+      const role: AssetMeta['role'] = opts?.bind === false ? 'scene' : 'screen'
+      if (role === 'screen' && screenMedia(get().project.assets).length >= MAX_SCREEN_MEDIA) {
+        ui.error(`The media tray holds ${MAX_SCREEN_MEDIA} files. Remove one to add another.`)
+        return
+      }
       const type = mime ?? (file instanceof File ? file.type : 'image/png')
       const meta = await metaForBlob(file, type)
       const id = `asset_${uid()}`
@@ -593,7 +617,7 @@ export const useStudio = create<StudioState>()(
       const url = URL.createObjectURL(file)
       get().commit('import-media')
       set((s) => {
-        s.project.assets.push({ id, kind: meta.kind, mime: type, w: meta.w, h: meta.h })
+        s.project.assets.push({ id, kind: meta.kind, mime: type, w: meta.w, h: meta.h, role })
         s.assets[id] = { url, kind: meta.kind }
         if (opts?.bind === false) return
         const dev =
@@ -603,6 +627,33 @@ export const useStudio = create<StudioState>()(
           dev.screen.assetId = id
           dev.screen.scroll = 0
         }
+      })
+    },
+
+    /*
+     * Take a file out of the tray.
+     *
+     * The blob stays in IndexedDB and its object URL stays in `assets`, which
+     * is deliberate: undo restores the project document, and the document only
+     * carries the file's metadata, so an undo that found the bytes gone would
+     * hand back a reference to nothing and the screen would come back blank.
+     * Keeping them costs a row nothing points at any more, and the saved
+     * project stops mentioning the file immediately, so a removal that is never
+     * undone is gone for good the next time the app loads.
+     */
+    removeAsset: (id) => {
+      if (!get().project.assets.some((a) => a.id === id)) return
+      get().commit('remove-media')
+      set((s) => {
+        s.project.assets = s.project.assets.filter((a) => a.id !== id)
+        // anything still pointing at it would render as a blank screen
+        for (const d of s.project.scene.devices) if (d.screen.assetId === id) d.screen.assetId = null
+        if (s.project.scene.background.imageAssetId === id) {
+          s.project.scene.background.imageAssetId = null
+        }
+        s.project.overlays = s.project.overlays.filter(
+          (o) => o.type !== 'image' || o.assetId !== id,
+        )
       })
     },
 
@@ -869,6 +920,18 @@ export const useStudio = create<StudioState>()(
             }
           }
           saved.assets = alive
+          /*
+           * Saves from before the tray have no roles. What the scene points at
+           * is the only evidence of what a file was for, so a backdrop or a
+           * logo is scene dressing and everything else is screen media.
+           */
+          const dressing = new Set(
+            [
+              saved.scene.background.imageAssetId,
+              ...saved.overlays.map((o) => (o.type === 'image' ? o.assetId : null)),
+            ].filter((x): x is string => !!x),
+          )
+          for (const meta of saved.assets) meta.role ??= dressing.has(meta.id) ? 'scene' : 'screen'
           // migration: backfill color grade on projects saved before §6.6 landed
           if (!saved.scene.effects.grade)
             saved.scene.effects.grade = { exposure: 1, contrast: 1, saturation: 1, temperature: 0 }

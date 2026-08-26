@@ -729,6 +729,37 @@ body {
   }
 }
 
+/*
+ * ----- the empty media slot -----
+ *
+ * A dashed rectangle is the universal "put something here", but sitting still
+ * it is also indistinguishable from a disabled box. Under the pointer the
+ * dashes travel, which is the oldest signal in the business for a live drop
+ * target and reads instantly as "yes, this one takes a file".
+ *
+ * Drawn as an SVG stroke rather than a border: dash offset is the only thing
+ * that can be animated to make dashes move, and `border-style: dashed` does not
+ * have one. The dash and the gap add up to 12, so one cycle of -12 lands the
+ * pattern exactly where it started and the loop has no seam.
+ */
+@keyframes media-ants {
+  to {
+    stroke-dashoffset: -12;
+  }
+}
+
+.media-drop:hover .media-ants,
+.media-drop:focus-visible .media-ants {
+  animation: media-ants 520ms linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .media-drop:hover .media-ants,
+  .media-drop:focus-visible .media-ants {
+    animation: none;
+  }
+}
+
 /* hide number input spinners for compact numeric fields */
 input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button {

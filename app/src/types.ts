@@ -238,6 +238,18 @@ export interface AssetMeta {
   mime: string
   w: number
   h: number
+  /**
+   * What the file was brought in to be.
+   *
+   * Screen media is what the media tray lists and what its five-file cap
+   * counts. Backdrops and logos land in the same pool but are scene dressing,
+   * so they are neither offered as something to put on a phone nor counted
+   * against the tray, which would otherwise let a wallpaper use up a slot.
+   *
+   * Optional because projects saved before the tray existed have no such field;
+   * hydrate infers one for them from what the scene is pointing at.
+   */
+  role?: 'screen' | 'scene'
 }
 
 export interface SceneState {

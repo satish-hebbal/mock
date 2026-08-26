@@ -178,6 +178,48 @@ const G = ({ children }: { children: ReactNode }) => (
   </svg>
 )
 
+/**
+ * The shape face's opener, which is also its readout.
+ *
+ * What was here before was a rectangle with a line through it, which named
+ * nothing: it read as the placeholder an image failed to load into, and it sat
+ * there unchanged whatever the shape settings said. Both its neighbours are
+ * readouts, the wheel is the ink and the dot is the size, so this is one too.
+ * A small shape wearing the current fill, fill style and corner treatment, so
+ * what the button opens is what the button is already showing.
+ */
+function ShapeGlyph({ style }: { style: DrawStyle }) {
+  /*
+   * Named after the shape it cuts rather than by useId, whose output carries
+   * punctuation that a url(#…) reference has to escape. Two glyphs with the
+   * same corners want the same hole anyway, and two with different corners get
+   * different names, so there is nothing here for a collision to break.
+   */
+  const hole = `dw-shape-fill-${style.edges}`
+  const r = style.edges === 'round' ? 3.2 : 0.5
+  const box = { x: 2.5, y: 3.5, width: 11, height: 9, rx: r }
+  const filled = style.fill !== 'transparent'
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" strokeLinecap="round">
+      {filled && style.fillStyle === 'solid' && <rect {...box} fill={style.fill} />}
+      {filled && style.fillStyle !== 'solid' && (
+        <>
+          {/* the hatching is drawn long and clipped, so it meets the edges the
+              way the real fill does instead of stopping short of them */}
+          <clipPath id={hole}>
+            <rect {...box} />
+          </clipPath>
+          <g clipPath={`url(#${hole})`} stroke={style.fill} strokeWidth={1.1}>
+            <path d="M-1 13 L11 1 M2 16 L14 4 M5 19 L17 7" />
+            {style.fillStyle === 'cross-hatch' && <path d="M-1 3 L11 15 M2 0 L14 12 M5 -3 L17 9" />}
+          </g>
+        </>
+      )}
+      <rect {...box} stroke="currentColor" strokeWidth={1.4} />
+    </svg>
+  )
+}
+
 /** A row of picture-options, for the shape face. */
 function Picks<T extends string | number>({
   value,
@@ -546,10 +588,7 @@ export function PenTray() {
           </Round>
           {shapey && (
             <Round label="Shape style" onClick={() => goto('shape')}>
-              <G>
-                <rect x="2.5" y="4.5" width="11" height="8" strokeWidth={1.4} />
-                <path d="M4 11l7-5" strokeWidth={1.1} />
-              </G>
+              <ShapeGlyph style={style} />
             </Round>
           )}
 

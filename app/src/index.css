@@ -594,6 +594,110 @@ body {
   }
 }
 
+/*
+ * ----- the home screen's tool cards -----
+ *
+ * The hairline round a tool card is the card's own background, showing in the
+ * 1px the fill layer leaves uncovered, rather than a `border`.
+ *
+ * That looks like the long way round until the first two cards interlock: a
+ * border traces the border box, so the moment `clip-path` cuts a card into a
+ * stepped shape the border keeps drawing the rectangle that is no longer there
+ * and the outline simply stops along the diagonal. A fill inset inside the same
+ * clip has no such opinion. It also gives focus somewhere to go: an `outline`
+ * would be clipped away with everything else outside the shape, so focus opens
+ * the gap to 2px and colours it instead, which stays inside the card and so
+ * survives the cut.
+ */
+.tool-card {
+  position: relative;
+  /*
+   * The fill sits behind the card's text on z-index -1, and that only lands
+   * above the card's own background if the card is a stacking context. Clipped
+   * cards are one already; this is for the ones that are not.
+   */
+  isolation: isolate;
+}
+
+.tool-card-fill {
+  position: absolute;
+  inset: 1px;
+  z-index: -1;
+  border-radius: calc(var(--radius-xl) - 1px);
+}
+
+.tool-card:focus-visible {
+  outline: none;
+  background: var(--accent);
+}
+
+.tool-card:focus-visible .tool-card-fill {
+  inset: 2px;
+  border-radius: calc(var(--radius-xl) - 2px);
+}
+
+/*
+ * The seam only makes sense across a row, and only once the cards are wide
+ * enough to lose `--tool-step` of text column without the taglines unravelling.
+ * Below that the three cards stay plain rectangles, which is also the fallback
+ * anywhere `shape()` is missing: `interlock.ts` still hands over its outlines,
+ * nothing reads them, and the cards sit in their tracks untouched.
+ */
+@media (min-width: 64rem) {
+  @supports (clip-path: shape(from 0 0, line to 1px 1px, close)) {
+    /*
+     * Equal tracks do not give equal cards here. The step moves half its width
+     * out of the left card's lower half and the same amount into the right
+     * card's, so the pair reads lopsided: one card narrow at the bottom, the
+     * other wide. Sliding the shared track edge half a step right hands each
+     * of them a wide half and a narrow half instead, which is the same average
+     * width Draw has and the same width the row had before any of this.
+     */
+    .tool-row {
+      grid-template-columns:
+        calc((100% - 2 * var(--tool-gutter)) / 3 + var(--tool-step) / 2)
+        calc((100% - 2 * var(--tool-gutter)) / 3 - var(--tool-step) / 2)
+        calc((100% - 2 * var(--tool-gutter)) / 3);
+    }
+
+    .tool-step-in,
+    .tool-step-out {
+      border-radius: 0;
+      clip-path: var(--tool-clip);
+    }
+
+    .tool-step-in .tool-card-fill,
+    .tool-step-out .tool-card-fill {
+      inset: 0;
+      border-radius: 0;
+      clip-path: var(--tool-clip-fill);
+    }
+
+    .tool-step-in:focus-visible .tool-card-fill,
+    .tool-step-out:focus-visible .tool-card-fill {
+      inset: 0;
+      clip-path: var(--tool-clip-focus);
+    }
+
+    /* the left card loses its lower right corner, so its text stops short of
+       where the cut lands rather than running under it */
+    .tool-step-in {
+      padding-right: calc(1.25rem + var(--tool-step));
+    }
+
+    /*
+     * The right card reaches back across the gutter for that corner. The
+     * negative margin buys the width off the grid track, the padding hands the
+     * same amount straight back, so the card grows to the left while its text
+     * stays exactly where it was.
+     */
+    .tool-step-out {
+      margin-left: calc(-1 * var(--tool-step));
+      padding-left: calc(1.25rem + var(--tool-step));
+    }
+  }
+}
+
 /* hide number input spinners for compact numeric fields */
 input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button {

@@ -1,22 +1,27 @@
-import { useState } from 'react'
-import { pickMediaFile, useStudio } from '../store'
+import { useState, type ReactNode } from 'react'
+import { MAX_SCREEN_MEDIA, pickMediaFile, screenMedia, useStudio } from '../store'
 import { ColorRow, Disclosure, Dropdown, MiniButton, Section, Segments, SliderRow, SubHeading } from './controls'
 import {
+  Aperture,
   Box,
   Camera,
   CircleMinus,
   CloudSun,
+  Crosshair,
   Disc,
-  FileImage,
+  Focus,
   Globe,
   Image,
+  Images,
   Link,
   Move3d,
   Palette,
+  Plus,
   Sparkles,
+  Spotlight,
   Sun,
   Type,
-  Upload,
+  X,
 } from 'lucide-react'
 import { focalFromFov, keyColor } from '../lib/studio'
 import { getMood } from '../lib/moods'
@@ -24,7 +29,8 @@ import { OVERLAY_FONTS } from '../lib/presets'
 import { getDevice } from '../lib/registry'
 import { CAMERA_LIMITS } from '../lib/camera'
 import { ui } from '../lib/ui'
-import type { BackgroundType } from '../types'
+import { portraitOf } from '../lib/portrait'
+import type { AssetRuntime, BackgroundType, PortraitMode } from '../types'
 
 /** Glyphs for section headers and sub-headings. */
 const secIcon = { size: 13, strokeWidth: 1.75 } as const
@@ -52,20 +58,84 @@ function ratioNote(key: number, fill: number): string {
   return `${r.toFixed(1)}:1 (near shadowless)`
 }
 
-// ----- Source -----
+// ----- Media -----
 
-function SourceSection() {
+/**
+ * One file in the tray, and the readout of whether it is the one on screen.
+ *
+ * The thumbnail is the button: picking it puts the file on the selected
+ * device, and the file already up there wears the accent, so the tray says
+ * what is on the screen without a second control to read it off. Remove waits
+ * for a hover or a focus, because five tiles each carrying a permanent cross
+ * is a row of delete buttons rather than a row of media.
+ */
+function MediaTile({
+  media,
+  active,
+  onPick,
+  onRemove,
+}: {
+  media: AssetRuntime
+  active: boolean
+  onPick: () => void
+  onRemove: () => void
+}) {
+  return (
+    <div className="group relative">
+      <button
+        onClick={onPick}
+        aria-pressed={active}
+        title={active ? 'On the screen now' : 'Put this on the screen'}
+        className={`block aspect-[4/3] w-full overflow-hidden rounded-md border bg-(--panel2) transition-colors ${
+          active
+            ? 'border-(--accent) ring-1 ring-(--accent)'
+            : 'border-(--line) hover:border-(--line2)'
+        }`}
+      >
+        {media.kind === 'video' ? (
+          <video
+            src={media.url}
+            muted
+            loop
+            autoPlay
+            playsInline
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <img src={media.url} alt="" className="h-full w-full object-cover" />
+        )}
+      </button>
+      <button
+        onClick={onRemove}
+        title="Remove from the tray"
+        aria-label="Remove from the tray"
+        className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-(--line2) bg-(--raised) text-(--tx2) opacity-0 transition-opacity group-hover:opacity-100 hover:text-(--tx) focus-visible:opacity-100"
+      >
+        <X size={11} strokeWidth={2.2} />
+      </button>
+    </div>
+  )
+}
+
+function MediaSection() {
   const selectedDeviceId = useStudio((s) => s.selectedDeviceId)
   const device = useStudio(
     (s) =>
       s.project.scene.devices.find((d) => d.id === s.selectedDeviceId) ?? s.project.scene.devices[0],
   )
-  const asset = useStudio((s) =>
-    device?.screen.assetId ? s.assets[device.screen.assetId] : undefined,
-  )
+  const devices = useStudio((s) => s.project.scene.devices)
+  // the whole list, not a filtered one: a selector that builds a new array
+  // every call re-renders this panel on every frame the timeline plays
+  const assets = useStudio((s) => s.project.assets)
+  const runtime = useStudio((s) => s.assets)
   const importMedia = useStudio((s) => s.importMedia)
   const importMediaFromURL = useStudio((s) => s.importMediaFromURL)
+  const removeAsset = useStudio((s) => s.removeAsset)
   const updateDeviceScreen = useStudio((s) => s.updateDeviceScreen)
+
+  const media = screenMedia(assets)
+  const bound = device?.screen.assetId ?? null
+  const empty = media.length === 0
 
   const fromURL = async () => {
     const url = await ui.prompt({
@@ -82,70 +152,88 @@ function SourceSection() {
   }
 
   return (
-    <Section title="Source" icon={<FileImage {...secIcon} />}>
-      <button
-        onClick={() => pickMediaFile((f) => void importMedia(f))}
-        className="flex w-full flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-(--line) bg-(--panel2) px-3 py-5 transition-colors hover:border-(--tx3)"
-      >
-        {asset ? (
-          asset.kind === 'video' ? (
-            <video src={asset.url} muted loop autoPlay playsInline className="max-h-24 rounded-md" />
-          ) : (
-            <img src={asset.url} alt="Screen media" className="max-h-24 rounded-md object-contain" />
-          )
-        ) : (
-          <>
-            <span className="t-eyebrow text-(--tx2) uppercase">
-              Click to upload
+    <Section title="Media" icon={<Images {...secIcon} />}>
+      {/*
+       * Five slots and the one that adds another, which lands as two tidy rows
+       * of three. Empty, that add slot takes the whole row and says what it
+       * takes, since a lone dashed square in the corner of an empty panel
+       * explains nothing.
+       */}
+      <div className="grid grid-cols-3 gap-1.5">
+        {media.map((m) => {
+          const live = runtime[m.id]
+          return live ? (
+            <MediaTile
+              key={m.id}
+              media={live}
+              active={m.id === bound}
+              onPick={() => device && updateDeviceScreen(device.id, { assetId: m.id, scroll: 0 })}
+              onRemove={() => removeAsset(m.id)}
+            />
+          ) : null
+        })}
+        {media.length < MAX_SCREEN_MEDIA && (
+          <button
+            onClick={() => pickMediaFile((f) => void importMedia(f))}
+            /* the empty slot says this in its own label, and a tooltip that
+               covers the thing it is describing is worse than no tooltip */
+            title={empty ? undefined : 'Add an image or video, or drop one anywhere'}
+            className={`media-drop relative flex flex-col items-center justify-center gap-1 rounded-md border border-dashed border-(--line) text-(--tx3) transition-colors hover:border-(--tx3) hover:text-(--tx2) ${
+              empty ? 'col-span-3 py-6' : 'aspect-[4/3]'
+            }`}
+          >
+            {/* the slot's own edge, breathing */}
+            <span className="media-glow" aria-hidden />
+            {/* eight, an eighth of a cycle apart, which is what turns one
+                ring travelling inward into a wave doing it */}
+            <span className="media-ripple" aria-hidden>
+              {Array.from({ length: 8 }, (_, i) => (
+                <span key={i} className="media-ring" />
+              ))}
             </span>
-            <span className="t-eyebrow text-(--tx3) uppercase">
-              image or video · drag & drop or paste
-            </span>
-          </>
+            <Plus className="media-plus" size={empty ? 16 : 14} strokeWidth={1.9} />
+            {empty && <span className="t-caption">Add an image or video, or drop one here</span>}
+          </button>
         )}
-      </button>
-      {/* the glyph carries "what kind of source", so the label doesn't need a
-          trailing ellipsis to hint that more is coming */}
-      <div className="mt-1.5 flex gap-1">
-        <MiniButton onClick={() => pickMediaFile((f) => void importMedia(f))}>
-          <Upload size={13} strokeWidth={1.9} />
-          Upload
-        </MiniButton>
+      </div>
+
+      <div className="mt-1.5">
         <MiniButton onClick={fromURL}>
           <Link size={13} strokeWidth={1.9} />
           From URL
         </MiniButton>
       </div>
-      {device && asset && (
-        <>
-          <div className="mt-2 flex gap-1">
-            <MiniButton
-              active={device.screen.fit === 'cover'}
-              onClick={() => updateDeviceScreen(device.id, { fit: 'cover' })}
-            >
-              Cover
-            </MiniButton>
-            <MiniButton
-              active={device.screen.fit === 'contain'}
-              onClick={() => updateDeviceScreen(device.id, { fit: 'contain' })}
-            >
-              Contain
-            </MiniButton>
-          </div>
-          <div className="mt-1">
-            <SliderRow
-              label="Scroll"
-              value={device.screen.scroll}
-              min={0}
-              max={1}
-              target={`dev.${device.id}.scroll`}
-              onChange={(v) => useStudio.getState().setAnimatable(`dev.${device.id}.scroll`, v)}
-              hint="Scroll tall screenshots inside the screen (animatable)"
-            />
-          </div>
-        </>
+
+      {device && bound && (
+        <div className="mt-2">
+          <Segments
+            options={[
+              { id: 'cover', label: 'Cover' },
+              { id: 'contain', label: 'Contain' },
+            ]}
+            value={device.screen.fit}
+            onChange={(fit) => updateDeviceScreen(device.id, { fit })}
+          />
+          <SliderRow
+            label="Scroll"
+            value={device.screen.scroll}
+            min={0}
+            max={1}
+            target={`dev.${device.id}.scroll`}
+            onChange={(v) => useStudio.getState().setAnimatable(`dev.${device.id}.scroll`, v)}
+            hint="Scroll tall screenshots inside the screen (animatable)"
+          />
+        </div>
       )}
-      {selectedDeviceId === null && (
+
+      {/* with one device there is nothing to say; with several, which one a
+          pick lands on is the whole question */}
+      {devices.length > 1 && device && (
+        <p className="mt-2 t-caption text-(--tx3)">
+          Picking one puts it on {getDevice(device.modelId).name}.
+        </p>
+      )}
+      {selectedDeviceId === null && devices.length <= 1 && (
         <p className="mt-2 t-caption text-(--tx3)">Media binds to the selected device.</p>
       )}
     </Section>
@@ -444,6 +532,161 @@ function SceneSection() {
 }
 
 // ----- Effects -----
+
+/**
+ * Portrait, the same four modes the Shots panel offers.
+ *
+ * Two by two rather than a row: "Lens + Stage" has no room in a quarter of a
+ * panel this wide, and four tiles in a row of three leaves a stray.
+ */
+const PORTRAIT_MODES: { id: PortraitMode; label: string; icon: ReactNode; title: string }[] = [
+  { id: 'none', label: 'None', icon: <X size={14} strokeWidth={1.8} />, title: 'Everything in focus' },
+  {
+    id: 'lens',
+    label: 'Lens Blur',
+    icon: <Aperture size={15} strokeWidth={1.6} />,
+    title: 'Defocus everything outside the focal point',
+  },
+  {
+    id: 'stage',
+    label: 'Stage',
+    icon: <Spotlight size={15} strokeWidth={1.6} />,
+    title: 'Drop everything outside the focal point into shadow',
+  },
+  {
+    id: 'both',
+    label: 'Lens + Stage',
+    icon: <Focus size={15} strokeWidth={1.6} />,
+    title: 'Defocus and shade everything outside the focal point',
+  },
+]
+
+function ModeTile({
+  icon,
+  label,
+  active,
+  onClick,
+  title,
+}: {
+  icon: ReactNode
+  label: string
+  active?: boolean
+  onClick: () => void
+  title?: string
+}) {
+  return (
+    <button
+      onClick={onClick}
+      title={title ?? label}
+      aria-pressed={active}
+      className="group flex flex-col items-center gap-1"
+    >
+      <span
+        className={`flex h-11 w-full items-center justify-center rounded-lg transition-colors ${
+          active
+            ? 'bg-(--sel) text-(--tx)'
+            : 'bg-(--field) text-(--tx2) group-hover:bg-(--field-h) group-hover:text-(--tx)'
+        }`}
+      >
+        {icon}
+      </span>
+      <span className={`w-full truncate text-center t-caption ${active ? 'text-(--tx)' : 'text-(--tx3)'}`}>
+        {label}
+      </span>
+    </button>
+  )
+}
+
+function PortraitSection() {
+  /*
+   * The fallback is applied outside the selector on purpose. `portraitOf`
+   * builds a fresh object when the field is missing, and zustand compares
+   * selector results by identity, so calling it inside would hand back a new
+   * object every render and never settle.
+   */
+  const saved = useStudio((s) => s.project.scene.effects.portrait)
+  const portrait = portraitOf(saved)
+  const guide = useStudio((s) => s.focusGuide)
+  const setFocusGuide = useStudio((s) => s.setFocusGuide)
+  const setPortrait = useStudio((s) => s.setPortrait)
+  const on = portrait.mode !== 'none'
+
+  return (
+    <Section title="Portrait" icon={<Aperture {...secIcon} />}>
+      <div className="grid grid-cols-2 gap-1.5">
+        {PORTRAIT_MODES.map((m) => (
+          <ModeTile
+            key={m.id}
+            label={m.label}
+            title={m.title}
+            active={portrait.mode === m.id}
+            onClick={() => setPortrait({ mode: m.id })}
+            icon={m.icon}
+          />
+        ))}
+      </div>
+
+      {on && (
+        <div className="mt-3">
+          {/*
+            The rings are a toggle here rather than something the canvas
+            dismisses, which is the one place this parts company with Shots. A
+            click on a flat shot means nothing else; a click in this viewport
+            picks a device or starts an orbit, so tying the guide to it would
+            make the rings almost impossible to keep on screen.
+          */}
+          <button
+            onClick={() => setFocusGuide(!guide)}
+            className="mb-2 flex h-7 w-full items-center justify-center gap-1.5 rounded-sm bg-(--field) t-body-sm text-(--tx2) hover:bg-(--field-h) hover:text-(--tx)"
+          >
+            <Crosshair {...subIcon} /> {guide ? 'Hide focal point' : 'Show focal point'}
+          </button>
+          {guide && (
+            <p className="mb-2 t-caption leading-snug text-(--tx3)">
+              Drag the ring on the canvas to choose what stays sharp.
+            </p>
+          )}
+          <SliderRow
+            label="Focus"
+            value={portrait.radius}
+            min={0.05}
+            max={0.6}
+            onChange={(radius) => setPortrait({ radius })}
+            hint="How much of the frame stays sharp"
+          />
+          <SliderRow
+            label="Falloff"
+            value={portrait.feather}
+            min={0.02}
+            max={0.5}
+            onChange={(feather) => setPortrait({ feather })}
+            hint="How gradually focus is given up"
+          />
+          {/* each amount shows only where it does something, and keeps its
+              value when the mode moves away from it */}
+          {(portrait.mode === 'lens' || portrait.mode === 'both') && (
+            <SliderRow
+              label="Blur"
+              value={portrait.strength}
+              min={0}
+              max={1}
+              onChange={(strength) => setPortrait({ strength })}
+            />
+          )}
+          {(portrait.mode === 'stage' || portrait.mode === 'both') && (
+            <SliderRow
+              label="Shade"
+              value={portrait.shade}
+              min={0}
+              max={1}
+              onChange={(shade) => setPortrait({ shade })}
+            />
+          )}
+        </div>
+      )}
+    </Section>
+  )
+}
 
 function EffectsSection() {
   const fx = useStudio((s) => s.project.scene.effects)
@@ -747,7 +990,7 @@ function OverlaysSection() {
 /*
  * Ordered by what the panel is *about*, working outward from the subject.
  *
- * Source is the screenshot, 3D Devices is the thing holding it, and Camera is
+ * Media is the screenshots, 3D Devices is the thing holding one, and Camera is
  * where you stand to look at the pair: those three are one continuous train
  * of thought and now sit together. Scene dresses what is behind them, and
  * Effects grades the finished picture, so both are later passes over a shot
@@ -760,10 +1003,11 @@ function OverlaysSection() {
 export function Inspector() {
   return (
     <>
-      <SourceSection />
+      <MediaSection />
       <CameraSection />
       <DevicesSection />
       <SceneSection />
+      <PortraitSection />
       <EffectsSection />
       <OverlaysSection />
     </>

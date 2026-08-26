@@ -1,5 +1,4 @@
 import {
-  applyPortrait,
   paintShadowScene,
   buildCardLayer,
   compositeCard,
@@ -10,6 +9,7 @@ import {
 import { loadBezelImage } from './bezels'
 import { getShadowScene } from './shadows'
 import { getPresetPhoto } from '../lib/presetPhotos'
+import { applyPortrait } from '../lib/portrait'
 import type { AssetRuntime } from '../types'
 import { paintOrder } from './types'
 import type { ShotsDoc } from './types'

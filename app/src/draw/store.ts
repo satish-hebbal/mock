@@ -48,6 +48,27 @@ const seed = () => Math.floor(Math.random() * 2 ** 31) || 1
 const clone = (d: DrawDoc): DrawDoc => JSON.parse(JSON.stringify(d)) as DrawDoc
 
 /**
+ * Independent copies of `els`, moved by (dx, dy).
+ *
+ * New ids because two elements cannot share one, and a new seed because
+ * roughness is generated from it rather than stored: leave the seed alone and
+ * the copy is the same hand-drawn wobble stroke for stroke, which reads as a
+ * rendering fault rather than as two objects.
+ *
+ * Used by Ctrl+D, by alt-dragging, and by paste, so all three agree on what a
+ * copy is.
+ */
+export function copiesOf(els: DrawElement[], dx = 0, dy = 0): DrawElement[] {
+  return els.map((e) => ({
+    ...(JSON.parse(JSON.stringify(e)) as DrawElement),
+    id: uid(),
+    seed: seed(),
+    x: e.x + dx,
+    y: e.y + dy,
+  }))
+}
+
+/**
  * Where the pen tray sits and how physical it looks. Drawesome's chrome props.
  *
  * Only bottom and left: the right edge belongs to the tool rail now, and
@@ -127,6 +148,8 @@ interface DrawState {
   /** save after a gesture that mutated the doc directly for speed */
   touch: () => void
   duplicateSelection: () => void
+  /** drop clipboard elements onto the board, centred on `at` when given */
+  pasteElements: (els: DrawElement[], at?: { x: number; y: number }) => void
   reorder: (dir: 'front' | 'forward' | 'backward' | 'back') => void
   clear: () => void
 
@@ -318,9 +341,44 @@ export const useDraw = create<DrawState>()(
       if (selectedIds.length === 0) return
       get().commit()
       const wanted = new Set(selectedIds)
-      const copies = doc.elements
-        .filter((e) => wanted.has(e.id))
-        .map((e) => ({ ...clone({ ...doc, elements: [e] }).elements[0], id: uid(), seed: seed(), x: e.x + 12, y: e.y + 12 }))
+      const copies = copiesOf(doc.elements.filter((e) => wanted.has(e.id)), 12, 12)
+      set((s) => {
+        s.doc.elements.push(...copies)
+        s.selectedIds = copies.map((c) => c.id)
+      })
+      persist(get().doc)
+    },
+
+    /*
+     * Elements arriving from the clipboard, which may be this board's own or
+     * another tab's.
+     *
+     * They land centred on `at` when the pointer is over the canvas, so a paste
+     * appears where you are looking rather than wherever the copy happened to
+     * be sitting when you scrolled away from it. Copies are remade here rather
+     * than trusted, since the payload is JSON someone could have edited.
+     */
+    pasteElements: (els, at) => {
+      /*
+       * The payload is JSON off the system clipboard, so it may be from an
+       * older build or edited by hand. Anything missing the numbers the
+       * renderer measures with is dropped rather than drawn, and so is an image
+       * whose bitmap did not come with it, which would otherwise paste as an
+       * invisible box you can select but never see.
+       */
+      const usable = els.filter(
+        (e) =>
+          !!e &&
+          typeof e.kind === 'string' &&
+          [e.x, e.y, e.w, e.h, e.angle, e.version].every((n) => Number.isFinite(n)) &&
+          (e.kind !== 'image' || !!get().images[e.assetId]),
+      )
+      if (usable.length === 0) return
+      get().commit()
+      const box = unionBounds(usable)
+      const dx = at && box ? at.x - (box.x + box.w / 2) : 12
+      const dy = at && box ? at.y - (box.y + box.h / 2) : 12
+      const copies = copiesOf(usable, dx, dy)
       set((s) => {
         s.doc.elements.push(...copies)
         s.selectedIds = copies.map((c) => c.id)

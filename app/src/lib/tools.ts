@@ -50,6 +50,17 @@ export const TOOLS: Tool[] = [
 ]
 
 /**
+ * The card's own colour, handed to CSS as a custom property.
+ *
+ * The hairline round a tool card is the card's background, so its hover state
+ * lives in a stylesheet rather than here, and a stylesheet cannot reach into
+ * `TOOLS` for a tint. This passes one down to meet it.
+ */
+export function toolTint(tool: Tool): CSSProperties {
+  return { '--tool-tint': tool.tint[0] } as CSSProperties
+}
+
+/**
  * The soft blob wash behind a tool card. Two off-centre radials over the panel
  * surface: `strength` is scaled right down for tools that aren't built yet, so
  * they recede without needing a separate style.
@@ -73,26 +84,39 @@ export function toolWash(tool: Tool, strength = 1): string {
  * you picked, it's the room you're standing in, and it should read as switched
  * on. So this spends exactly what that class withholds, and spends all of it
  * from the tool's own near tint: a hot spot behind the icon, a tinted edge, and
- * a bloom underneath. Each tool warms in its own colour rather than every
+ * a brighter chip. Each tool warms in its own colour rather than every
  * selection glowing the same borrowed blue.
+ *
+ * It arrives in three pieces because a tool card does: the hairline is the
+ * card's own background, the surface is a fill layer inset inside it, and the
+ * chip sits on top of both.
+ *
+ * There is no bloom under the card any more. A box-shadow is drawn from the
+ * border box, so on an interlocked card it blooms around a rectangle the card
+ * is no longer shaped like, and the parts of it outside the clip are cut away
+ * regardless. `drop-shadow` does follow the cut silhouette, but it has no
+ * spread to pull the falloff back in the way `-14px` was doing, so the lit card
+ * ended up sitting in a halo twice the size of the one it replaced and read as
+ * a different component from the two beside it. The tint carries the state on
+ * its own, at the same weight as an unlit card.
  */
-export function toolLit(tool: Tool): { card: CSSProperties; chip: CSSProperties } {
+export function toolLit(tool: Tool): {
+  card: CSSProperties
+  fill: CSSProperties
+  chip: CSSProperties
+} {
   const [near] = tool.tint
   return {
-    card: {
+    // lighting the card starts with lighting its hairline, which is this
+    card: { background: `rgba(${near}, 0.5)` },
+    fill: {
       // the hot spot rides above the standard wash, turned up a quarter
       background: [
         `radial-gradient(75% 62% at 16% 0%, rgba(${near}, 0.22), transparent 66%)`,
         toolWash(tool, 1.25),
       ].join(', '),
-      borderColor: `rgba(${near}, 0.5)`,
-      boxShadow: [
-        // a top highlight is what actually sells "lit from above"
-        'inset 0 1px 0 rgba(255, 255, 255, 0.09)',
-        `0 0 0 1px rgba(${near}, 0.2)`,
-        `0 12px 32px -14px rgba(${near}, 0.6)`,
-        '0 6px 16px -6px rgba(0, 0, 0, 0.55)',
-      ].join(', '),
+      // a top highlight is what actually sells "lit from above"
+      boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.09)',
     },
     // the chip stops being a grey inset and becomes the brightest thing on the card
     chip: {

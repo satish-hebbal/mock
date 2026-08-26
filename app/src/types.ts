@@ -187,6 +187,12 @@ export interface EffectsState {
   vignette: number
   chromatic: number
   grade: GradeState
+  /**
+   * Depth of field and stage light, the same record Shots keeps. Optional
+   * because projects saved before the studio had it carry no such field, and
+   * `portraitOf` fills one in rather than the loader needing a migration.
+   */
+  portrait?: Portrait
 }
 
 interface OverlayBase {
@@ -232,12 +238,27 @@ export interface ShapeOverlay extends OverlayBase {
 
 export type Overlay = TextOverlay | ImageOverlay | ShapeOverlay
 
+import type { Portrait } from './lib/portrait'
+export type { Portrait, PortraitMode } from './lib/portrait'
+
 export interface AssetMeta {
   id: string
   kind: 'image' | 'video'
   mime: string
   w: number
   h: number
+  /**
+   * What the file was brought in to be.
+   *
+   * Screen media is what the media tray lists and what its five-file cap
+   * counts. Backdrops and logos land in the same pool but are scene dressing,
+   * so they are neither offered as something to put on a phone nor counted
+   * against the tray, which would otherwise let a wallpaper use up a slot.
+   *
+   * Optional because projects saved before the tray existed have no such field;
+   * hydrate infers one for them from what the scene is pointing at.
+   */
+  role?: 'screen' | 'scene'
 }
 
 export interface SceneState {

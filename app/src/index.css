@@ -594,6 +594,379 @@ body {
   }
 }
 
+/*
+ * ----- the tool cards, on the home screen and in the app menu -----
+ *
+ * The hairline round a tool card is the card's own background, showing in the
+ * 1px the fill layer leaves uncovered, rather than a `border`.
+ *
+ * That looks like the long way round until the first two cards interlock: a
+ * border traces the border box, so the moment `clip-path` cuts a card into a
+ * stepped shape the border keeps drawing the rectangle that is no longer there
+ * and the outline simply stops along the diagonal. A fill inset inside the same
+ * clip has no such opinion. It also gives focus somewhere to go: an `outline`
+ * would be clipped away with everything else outside the shape, so focus opens
+ * the gap to 2px and colours it instead, which stays inside the card and so
+ * survives the cut.
+ */
+.tool-card {
+  position: relative;
+  border-radius: var(--tool-radius);
+  background: var(--line);
+  /*
+   * The highlight comes up over a beat rather than snapping on. At the app's
+   * default 110ms the tint arrives as a state flag: it is either on or off and
+   * you never see it move. Long enough to watch, and on a curve that spends its
+   * time in the middle rather than racing to the colour and easing out, the
+   * same tint reads as the card warming under the pointer.
+   *
+   * Leaving is quicker, and the direction is chosen by which rule is in play
+   * when the transition starts: hover raises `--tool-fade` on the way in, and
+   * reverting drops back to the base value on the way out.
+   */
+  --tool-fade: 170ms;
+  transition:
+    background-color var(--tool-fade) cubic-bezier(0.4, 0, 0.6, 1),
+    color 110ms linear;
+  /*
+   * The fill sits behind the card's text on z-index -1, and that only lands
+   * above the card's own background if the card is a stacking context. Clipped
+   * cards are one already; this is for the ones that are not.
+   */
+  isolation: isolate;
+}
+
+.tool-card-fill {
+  position: absolute;
+  inset: 1px;
+  z-index: -1;
+  border-radius: calc(var(--tool-radius) - 1px);
+}
+
+/*
+ * Hover reaches for the tool's own colour rather than the next grey up. Three
+ * cards lighting the same borrowed grey answered "something is under the
+ * pointer" without answering which, and the tint is already the thing telling
+ * these three apart everywhere else on the card.
+ */
+.tool-card:not(:disabled):hover {
+  --tool-fade: 320ms;
+  background: rgba(var(--tool-tint), 0.55);
+}
+
+/* after hover, and matching its specificity, so a card that is both reads as
+   focused rather than as hovered */
+.tool-card:not(:disabled):focus-visible {
+  outline: none;
+  background: var(--accent);
+}
+
+.tool-card:focus-visible .tool-card-fill {
+  inset: 2px;
+  border-radius: calc(var(--tool-radius) - 2px);
+}
+
+/*
+ * The seam only makes sense across a row, and only once the cards are wide
+ * enough to lose `--tool-step` of text column without the taglines unravelling.
+ * Both rows reach that at about the same viewport, so one gate covers them.
+ * Below that the three cards stay plain rectangles, which is also the fallback
+ * anywhere `shape()` is missing: `interlock.ts` still hands over its outlines,
+ * nothing reads them, and the cards sit in their tracks untouched.
+ */
+@media (min-width: 64rem) {
+  @supports (clip-path: shape(from 0 0, line to 1px 1px, close)) {
+    /*
+     * Equal tracks do not give equal cards here. The step moves half its width
+     * out of the left card's lower half and the same amount into the right
+     * card's, so the pair reads lopsided: one card narrow at the bottom, the
+     * other wide. Sliding the shared track edge half a step right hands each
+     * of them a wide half and a narrow half instead, which is the same average
+     * width Draw has and the same width the row had before any of this.
+     */
+    .tool-row {
+      grid-template-columns:
+        calc((100% - 2 * var(--tool-gutter)) / 3 + var(--tool-step) / 2)
+        calc((100% - 2 * var(--tool-gutter)) / 3 - var(--tool-step) / 2)
+        calc((100% - 2 * var(--tool-gutter)) / 3);
+    }
+
+    .tool-step-in,
+    .tool-step-out {
+      border-radius: 0;
+      clip-path: var(--tool-clip);
+    }
+
+    .tool-step-in .tool-card-fill,
+    .tool-step-out .tool-card-fill {
+      inset: 0;
+      border-radius: 0;
+      clip-path: var(--tool-clip-fill);
+    }
+
+    .tool-step-in:focus-visible .tool-card-fill,
+    .tool-step-out:focus-visible .tool-card-fill {
+      inset: 0;
+      clip-path: var(--tool-clip-focus);
+    }
+
+    /* the left card loses its lower right corner, so its text stops short of
+       where the cut lands rather than running under it */
+    .tool-step-in {
+      padding-right: calc(var(--tool-pad) + var(--tool-step));
+    }
+
+    /*
+     * The right card reaches back across the gutter for that corner. The
+     * negative margin buys the width off the grid track, the padding hands the
+     * same amount straight back, so the card grows to the left while its text
+     * stays exactly where it was.
+     */
+    .tool-step-out {
+      margin-left: calc(-1 * var(--tool-step));
+      padding-left: calc(var(--tool-pad) + var(--tool-step));
+    }
+  }
+}
+
+/*
+ * ----- the empty media slot -----
+ *
+ * A dashed rectangle is the universal "put something here", but sitting still
+ * it is also indistinguishable from a box that has been switched off. Under the
+ * pointer, hairlines start on the slot's own edge and travel in toward the
+ * middle, eight of them an eighth of a cycle apart, so what arrives is a wave
+ * rather than one ring going round and round. The slot reads as something that
+ * draws a file in.
+ *
+ * Every frame of it is transform and opacity, which is the difference between
+ * this and the version before it. That one animated the four edge offsets, and
+ * an offset is a layout input: the browser re-laid-out and repainted every box
+ * sixty times a second inside a panel that is also driving a 3D viewport, and
+ * you could feel it. Transform and opacity are the two properties the
+ * compositor can animate on its own, without waking layout or paint at all.
+ *
+ * What that costs is the one thing offsets did better: a scale shrinks the
+ * border and the corner radius along with the box, so a ring softens as it
+ * travels rather than staying a constant hairline. Here that reads as depth,
+ * and the fade is going the same way, so the honest trade is worth it.
+ */
+@keyframes media-ripple {
+  0% {
+    transform: scale(1);
+    opacity: 0;
+  }
+  /* up fast, so a ring appears on the edge and not a little inside it */
+  8% {
+    opacity: 0.45;
+  }
+  70% {
+    opacity: 0.22;
+  }
+  100% {
+    transform: scale(0.2);
+    opacity: 0;
+  }
+}
+
+/*
+ * The slot as a well rather than a panel.
+ *
+ * Pitch dark in the middle, lifting to a surface at the rim, so the box reads
+ * as something with a floor a long way down and the ripples read as travelling
+ * into it rather than across it. The inset shadow under the top edge is what
+ * seats it: light falls from above in this app, so the near wall catches the
+ * shadow and the far one catches the faint highlight underneath it.
+ *
+ * The centre is `--overlay` and the rim is one step up the surface ladder,
+ * rather than two hard-coded greys, so the well keeps its depth if the ladder
+ * ever moves.
+ */
+.media-drop {
+  background:
+    radial-gradient(
+      115% 92% at 50% 50%,
+      var(--overlay) 0%,
+      color-mix(in srgb, var(--overlay) 55%, transparent) 46%,
+      transparent 80%
+    ),
+    var(--panel3);
+  box-shadow:
+    inset 0 1px 4px -1px color-mix(in srgb, var(--overlay) 65%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--tx) 5%, transparent);
+}
+
+/*
+ * Light theme runs the ladder the other way: the deepest thing available is the
+ * darkest of the inverse surfaces, not black. Pouring `--overlay` into the
+ * middle of a white panel would not read as depth, it would read as a hole cut
+ * in the page.
+ */
+:root.light .media-drop {
+  background:
+    radial-gradient(115% 92% at 50% 50%, var(--panel3) 0%, transparent 78%),
+    var(--field);
+}
+
+.media-ripple {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  /* the rings are all that is in here, so a moving one has nothing outside
+     itself to invalidate */
+  contain: layout style paint;
+}
+
+/*
+ * The subtle ink rather than the bright one. At full `--tx` these were white
+ * hairlines, and eight white hairlines is a diagram of an effect rather than an
+ * effect: they drew the eye harder than the label they are behind.
+ */
+.media-ring {
+  position: absolute;
+  inset: 0;
+  border: 1px solid var(--tx2);
+  border-radius: var(--radius-md);
+  opacity: 0;
+}
+
+/*
+ * The edge, breathing.
+ *
+ * A hover that only recolours the border states that the slot is live; one that
+ * keeps moving shows it, and it is the same argument the ripple makes. Opacity
+ * is the only thing animating, because the shadows themselves are a paint job
+ * and re-rasterising a three-layer blur sixty times a second is exactly the
+ * cost the ripple was rewritten to avoid. Set once, faded in and out.
+ *
+ * Kept to the ink at low strength rather than the accent: the only saturated
+ * thing in this panel is the Export button a few rows up, and a second glowing
+ * violet object under it would read as a second call to action.
+ */
+@keyframes media-breathe {
+  0%,
+  100% {
+    opacity: 0.28;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.media-glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: var(--radius-md);
+  opacity: 0;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--tx) 14%, transparent),
+    0 0 18px -2px color-mix(in srgb, var(--tx) 20%, transparent),
+    inset 0 0 18px -6px color-mix(in srgb, var(--tx) 24%, transparent);
+  transition: opacity 300ms cubic-bezier(0.4, 0, 0.6, 1);
+}
+
+/*
+ * No fill mode, so leaving the slot drops the animation and hands opacity back
+ * to the resting 0, which the transition then carries down instead of cutting.
+ */
+.media-drop:hover .media-glow,
+.media-drop:focus-visible .media-glow {
+  animation-name: media-breathe;
+  animation-duration: 2600ms;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  animation-iteration-count: infinite;
+  will-change: opacity;
+}
+
+/*
+ * Eased rather than linear, so the wave slows as it converges and the rings
+ * gather toward the middle instead of marching in at a constant rate. The
+ * gathering is the part that reads as water.
+ */
+/*
+ * Longhands, not the `animation` shorthand, and that is load-bearing.
+ *
+ * The shorthand resets every animation longhand it does not mention, delay
+ * included, and this rule outranks the per-ring delays below it on specificity.
+ * Written as `animation: …` it set all eight rings back to a delay of zero, so
+ * they ran in lockstep, sat exactly on top of one another, and the wave showed
+ * up as a single line going in. Naming only the four parts that are shared
+ * leaves the delays alone.
+ */
+.media-drop:hover .media-ring,
+.media-drop:focus-visible .media-ring {
+  animation-name: media-ripple;
+  animation-duration: 3000ms;
+  animation-timing-function: cubic-bezier(0.3, 0.55, 0.35, 1);
+  animation-iteration-count: infinite;
+  /* asked for here rather than on the resting rule, so the compositor layers
+     exist while the pointer is on the slot and not for the whole session */
+  will-change: transform, opacity;
+}
+
+/*
+ * Negative, so every ring is already part way in the moment the pointer lands.
+ * Positive delays would spend the first three seconds of every hover showing
+ * the wave assemble itself one ring at a time.
+ */
+.media-ring:nth-child(2) {
+  animation-delay: -375ms;
+}
+
+.media-ring:nth-child(3) {
+  animation-delay: -750ms;
+}
+
+.media-ring:nth-child(4) {
+  animation-delay: -1125ms;
+}
+
+.media-ring:nth-child(5) {
+  animation-delay: -1500ms;
+}
+
+.media-ring:nth-child(6) {
+  animation-delay: -1875ms;
+}
+
+.media-ring:nth-child(7) {
+  animation-delay: -2250ms;
+}
+
+.media-ring:nth-child(8) {
+  animation-delay: -2625ms;
+}
+
+/* the plus leans in to meet the wave */
+.media-plus {
+  transition: transform 260ms cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+.media-drop:hover .media-plus,
+.media-drop:focus-visible .media-plus {
+  transform: scale(1.15);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .media-drop:hover .media-ring,
+  .media-drop:focus-visible .media-ring {
+    animation: none;
+  }
+
+  /* the glow stays, it just stops breathing: it is the hover state, not
+     decoration on top of one */
+  .media-drop:hover .media-glow,
+  .media-drop:focus-visible .media-glow {
+    animation: none;
+    opacity: 0.7;
+  }
+
+  .media-plus {
+    transition: none;
+  }
+}
+
 /* hide number input spinners for compact numeric fields */
 input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button {

@@ -19,11 +19,145 @@ import { CaptureFlash } from './CaptureFlash'
 import { getMood, type EnvMood } from '../lib/moods'
 import { keyColor } from '../lib/studio'
 import { clampCamera } from '../lib/camera'
+import { endEditRun } from '../lib/history'
+import {
+  portraitGeometry,
+  portraitOf,
+  portraitMaskCss,
+  portraitPasses,
+  type PortraitGeometry,
+} from '../lib/portrait'
 import { Focus } from 'lucide-react'
 import { DeviceMesh } from './DeviceMesh'
 import { DeviceGizmo } from './DeviceGizmo'
 import { OverlayLayer } from './OverlayLayer'
 import { FRAME_BUTTON, FRAME_INSET, NOTCH } from '../lib/notch'
+
+/*
+ * Portrait, previewed.
+ *
+ * `backdrop-filter` blurs what is already behind the element, so the scene is
+ * rendered once and never duplicated: no second WebGL pass, no readback, and
+ * the 3D canvas underneath keeps drawing exactly as it did. A radial mask that
+ * is transparent over the focal core keeps the subject sharp, and stacking the
+ * passes reproduces the exporter's chain of blurs because each layer's backdrop
+ * includes the one below it.
+ *
+ * The same components Shots uses, written again here rather than imported,
+ * because the two editors share the geometry and not the tree.
+ */
+function PortraitOverlay({ g }: { g: PortraitGeometry }) {
+  const passes = portraitPasses(g)
+  return (
+    <>
+      {passes.map((p, i) => {
+        const mask = portraitMaskCss(g, p.inner, p.outer)
+        return (
+          /*
+             `rounded-lg` on the layer itself, not just on the frame around it.
+             A backdrop-filtered element paints its result into its own border
+             box, and that paint is not clipped by an ancestor's rounded
+             `overflow: hidden`, so the corners of the viewport come back square
+             the moment the lens is switched on.
+          */
+          <div
+            key={i}
+            className="pointer-events-none absolute inset-0 rounded-lg"
+            style={{
+              backdropFilter: `blur(${p.blur}px)`,
+              WebkitBackdropFilter: `blur(${p.blur}px)`,
+              maskImage: mask,
+              WebkitMaskImage: mask,
+            }}
+          />
+        )
+      })}
+    </>
+  )
+}
+
+function StageOverlay({ g }: { g: PortraitGeometry }) {
+  const mask = portraitMaskCss(g, g.inner, g.outer)
+  return (
+    <div
+      className="pointer-events-none absolute inset-0 rounded-lg"
+      style={{
+        background: `rgba(0,0,0,${g.darkness})`,
+        maskImage: mask,
+        WebkitMaskImage: mask,
+      }}
+    />
+  )
+}
+
+/**
+ * The focal point, as something you drag rather than two more sliders.
+ *
+ * Where the focus sits is a decision about the picture, so it is made on the
+ * picture. The dashed ring is the sharp core and the outer ring is where the
+ * falloff finishes, which makes "focus" and "falloff" legible without reading
+ * their numbers.
+ *
+ * Only the small handle takes pointer events. Everything else here is inert, so
+ * an orbit that starts anywhere but the handle still reaches the canvas and the
+ * camera controls never notice the rings are there.
+ */
+function PortraitHandle({
+  g,
+  width,
+  height,
+}: {
+  g: PortraitGeometry
+  width: number
+  height: number
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+
+  const move = (e: React.PointerEvent) => {
+    const box = ref.current?.getBoundingClientRect()
+    if (!box) return
+    useStudio.getState().setPortrait({
+      x: Math.min(1, Math.max(0, (e.clientX - box.left) / Math.max(1, width))),
+      y: Math.min(1, Math.max(0, (e.clientY - box.top) / Math.max(1, height))),
+    })
+  }
+
+  return (
+    <div ref={ref} className="pointer-events-none absolute inset-0">
+      <div
+        className="absolute rounded-full border border-dashed border-white/45"
+        style={{ left: g.cx - g.outer, top: g.cy - g.outer, width: g.outer * 2, height: g.outer * 2 }}
+      />
+      <div
+        className="absolute rounded-full border border-white/70"
+        style={{ left: g.cx - g.inner, top: g.cy - g.inner, width: g.inner * 2, height: g.inner * 2 }}
+      />
+      <div
+        data-focus-handle=""
+        onPointerDown={(e) => {
+          /*
+           * Keeps the press off React's own handlers on the frame, which clear
+           * the keyframe selection. The camera gestures are native and cannot be
+           * stopped from here at all; `data-focus-handle` is what they look for.
+           */
+          e.stopPropagation()
+          e.currentTarget.setPointerCapture(e.pointerId)
+          move(e)
+        }}
+        onPointerMove={(e) => {
+          if (e.currentTarget.hasPointerCapture(e.pointerId)) move(e)
+        }}
+        onPointerUp={(e) => {
+          e.currentTarget.releasePointerCapture(e.pointerId)
+          endEditRun()
+        }}
+        title="Drag to move the focal point"
+        className="pointer-events-auto absolute h-6 w-6 cursor-grab rounded-full border-2 border-white bg-white/25 shadow-[0_1px_6px_rgba(0,0,0,0.6)] backdrop-blur-sm active:cursor-grabbing"
+        style={{ left: g.cx - 12, top: g.cy - 12 }}
+      />
+    </div>
+  )
+}
 
 // ----- bridges into the runtime -----
 
@@ -329,6 +463,18 @@ function useCameraGestures(container: React.RefObject<HTMLDivElement | null>) {
       if (e.button !== 0 && e.button !== 1 && e.button !== 2) return
       // a transform-gizmo handle owns the drag; don't orbit underneath it
       if (rt.gizmoDragging) return
+      /*
+       * Nor under the focal point.
+       *
+       * These listeners are native and live on an ancestor of the handle, so
+       * they run during the native bubble, which is over before React dispatches
+       * its synthetic events from the root. The handle calling stopPropagation
+       * cannot reach back and undo that: by then this has already set `mode` and
+       * claimed the pointer, and every move of the drag orbited the camera while
+       * it moved the focus. Asking what was actually pressed is the only check
+       * that happens early enough.
+       */
+      if ((e.target as Element | null)?.closest?.('[data-focus-handle]')) return
       mode = e.button === 0 ? 'orbit' : 'pan'
       startX = e.clientX
       startY = e.clientY
@@ -432,6 +578,8 @@ export function Viewport() {
   )
   const devices = useStudio((s) => s.project.scene.devices)
   const grade = useStudio((s) => s.project.scene.effects.grade)
+  const savedPortrait = useStudio((s) => s.project.scene.effects.portrait)
+  const focusGuide = useStudio((s) => s.focusGuide)
   const exportSize = useStudio((s) => s.project.exportSize)
   const selectDevice = useStudio((s) => s.selectDevice)
   const selectOverlay = useStudio((s) => s.selectOverlay)
@@ -473,6 +621,16 @@ export function Viewport() {
       ? `blur(${(background.blur * rect.width) / 1280}px) brightness(${background.brightness})`
       : undefined
   const gradeCss = useMemo(() => gradeFilter(grade) || undefined, [grade])
+
+  /*
+   * The fallback is applied outside the selector on purpose. `portraitOf`
+   * builds a fresh object when the field is missing, and zustand compares
+   * selector results by identity, so calling it inside would hand back a new
+   * object every render and never settle.
+   */
+  const portrait = portraitOf(savedPortrait)
+  const focused = portrait.mode !== 'none'
+  const geo = portraitGeometry(portrait, rect.width, rect.height)
 
   return (
     <div
@@ -537,6 +695,17 @@ export function Viewport() {
             <EffectsStack />
           </Canvas>
         </div>
+
+        {/*
+          Portrait sits above the graded stage and below the overlays, which is
+          exactly where the exporter applies it. The lens takes the background,
+          the devices and their shadows together, because it does not know which
+          of them were drawn separately; it stops short of a caption or a logo,
+          which are stuck to the front of the frame rather than in the picture.
+        */}
+        {focused && geo.blur > 0 && <PortraitOverlay g={geo} />}
+        {focused && geo.darkness > 0 && <StageOverlay g={geo} />}
+        {focused && focusGuide && <PortraitHandle g={geo} width={rect.width} height={rect.height} />}
 
         <OverlayLayer width={rect.width} height={rect.height} />
         <CaptureFlash />

@@ -35,6 +35,7 @@ import { lineHeightFor, renderScene, toScene } from './render'
 import {
   boxFrom,
   contentOffScreen,
+  copiesOf,
   newLinear,
   newShape,
   newStroke,
@@ -49,6 +50,10 @@ import { useStudio } from '../store'
 
 /** How close counts as "on" a line, in screen pixels. */
 const HIT_SLOP = 10
+/** How far an alt-drag has to travel before it commits to making a copy. */
+const CLONE_SLOP = 4
+/** what the board writes on the clipboard, and the only thing it reads back */
+const CLIP_TAG = 'ribbit/draw'
 const HANDLE_SIZE = 8
 
 type Gesture =
@@ -56,7 +61,14 @@ type Gesture =
   | { kind: 'pan'; startX: number; startY: number; scrollX: number; scrollY: number }
   | { kind: 'draw' }
   | { kind: 'marquee'; startX: number; startY: number; box: Box }
-  | { kind: 'move'; startX: number; startY: number; origin: Map<string, { x: number; y: number }> }
+  | {
+      kind: 'move'
+      startX: number
+      startY: number
+      origin: Map<string, { x: number; y: number }>
+      /** an alt-drag has already handed the drag over to a fresh copy */
+      cloned: boolean
+    }
   | {
       kind: 'resize'
       handle: HandleId
@@ -88,6 +100,8 @@ export function DrawCanvas() {
   const gesture = useRef<Gesture>({ kind: 'none' })
   const spaceDown = useRef(false)
   const pointer = useRef({ x: 0, y: 0, inside: false })
+  /** where the last paste landed, so a second one does not hide under it */
+  const lastPaste = useRef<{ x: number; y: number } | null>(null)
   const size = useRef({ w: 0, h: 0 })
   const imgCache = useRef(new Map<string, HTMLImageElement>())
   const [, force] = useReducer((n: number) => n + 1, 0)
@@ -404,6 +418,7 @@ export function DrawCanvas() {
           startX: scene.x,
           startY: scene.y,
           origin: new Map(moving.map((el) => [el.id, { x: el.x, y: el.y }])),
+          cloned: false,
         }
         s.commit()
       } else {
@@ -500,6 +515,47 @@ export function DrawCanvas() {
         if (Math.abs(dx) > Math.abs(dy)) dy = 0
         else dx = 0
       }
+
+      /*
+       * Alt turns the drag into a copy, the way it does in every design tool:
+       * the originals go back where they started and a fresh set travels on
+       * with the pointer.
+       *
+       * Alt is read live rather than remembered from the press, so reaching for
+       * it part way through a drag works too, which is how people actually use
+       * it. It waits for real movement first, so an alt-click that never went
+       * anywhere cannot leave a duplicate sitting exactly on top of its
+       * original, invisible until the day you drag the wrong one away.
+       *
+       * Once the copy exists it stays, even if alt comes back up: the undo
+       * entry the drag already took covers the whole gesture, so one Ctrl+Z
+       * puts everything back.
+       */
+      if (e.altKey && !g.cloned && Math.hypot(dx, dy) * s.viewport.zoom > CLONE_SLOP) {
+        const originals = s.doc.elements.filter((el) => g.origin.has(el.id))
+        const copies = copiesOf(originals)
+        for (let i = 0; i < copies.length; i++) {
+          // copied from where the drag began, not from the few pixels it has
+          // already travelled: those pixels belong to the copy
+          const o = g.origin.get(originals[i].id)
+          if (!o) continue
+          copies[i].x = o.x
+          copies[i].y = o.y
+        }
+        useDraw.setState((st) => {
+          for (const el of st.doc.elements) {
+            const o = g.origin.get(el.id)
+            if (!o) continue
+            el.x = o.x
+            el.y = o.y
+          }
+          st.doc.elements.push(...copies)
+          st.selectedIds = copies.map((c) => c.id)
+        })
+        g.origin = new Map(copies.map((c) => [c.id, { x: c.x, y: c.y }]))
+        g.cloned = true
+      }
+
       useDraw.setState((st) => {
         for (const el of st.doc.elements) {
           const o = g.origin.get(el.id)
@@ -802,6 +858,86 @@ export function DrawCanvas() {
   useLayoutEffect(() => {
     if (editingTextId) textRef.current?.focus()
   }, [editingTextId])
+
+  /*
+   * Copy, cut and paste, hung off the platform's own clipboard events rather
+   * than off a Ctrl+C of our own.
+   *
+   * That is what makes the system clipboard the storage: the elements travel as
+   * JSON on text/plain, so a copy survives a reload and crosses into a second
+   * tab, and no permission prompt or async clipboard read is involved because
+   * the event hands over the data directly.
+   *
+   * Anything that is not ours is left alone, so pasting a screenshot still
+   * reaches the image import that App already runs, and a caret inside the text
+   * editor keeps the platform's own copy and paste.
+   */
+  useEffect(() => {
+    const typing = () => {
+      const el = document.activeElement as HTMLElement | null
+      return !!el && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT' || el.isContentEditable)
+    }
+
+    const write = (e: ClipboardEvent, cut: boolean) => {
+      if (typing()) return
+      const s = useDraw.getState()
+      const wanted = new Set(s.selectedIds)
+      const picked = s.doc.elements.filter((el) => wanted.has(el.id))
+      if (picked.length === 0 || !e.clipboardData) return
+      e.clipboardData.setData('text/plain', JSON.stringify({ type: CLIP_TAG, elements: picked }))
+      // only now, so a clipboard we could not write to still gets its default
+      e.preventDefault()
+      // a locked element can be copied but not cut, same as it cannot be deleted
+      if (cut) s.removeElements(picked.filter((el) => !el.locked).map((el) => el.id))
+    }
+
+    const onCopy = (e: ClipboardEvent) => write(e, false)
+    const onCut = (e: ClipboardEvent) => write(e, true)
+
+    const onPaste = (e: ClipboardEvent) => {
+      if (typing()) return
+      const raw = e.clipboardData?.getData('text/plain')
+      if (!raw || !raw.includes(CLIP_TAG)) return
+      let elements: DrawElement[]
+      try {
+        const parsed = JSON.parse(raw) as { type?: string; elements?: DrawElement[] }
+        if (parsed.type !== CLIP_TAG || !Array.isArray(parsed.elements)) return
+        elements = parsed.elements
+      } catch {
+        return
+      }
+      e.preventDefault()
+      const s = useDraw.getState()
+      // where you are looking: under the pointer, or the middle of the view
+      const p = pointer.current
+      const at = p.inside
+        ? toScene(p.x, p.y, s.viewport)
+        : toScene(size.current.w / 2, size.current.h / 2, s.viewport)
+      /*
+       * Ctrl+V twice without moving the mouse would otherwise drop the second
+       * copy exactly on the first, where it is invisible and reads as a paste
+       * that did nothing. Landing on the same spot steps the next one along
+       * instead, and the run resets as soon as the pointer moves.
+       */
+      const prev = lastPaste.current
+      const spot =
+        prev && Math.hypot(at.x - prev.x, at.y - prev.y) < 1
+          ? { x: prev.x + 12, y: prev.y + 12 }
+          : at
+      lastPaste.current = spot
+      s.pasteElements(elements, spot)
+      invalidate()
+    }
+
+    window.addEventListener('copy', onCopy)
+    window.addEventListener('cut', onCut)
+    window.addEventListener('paste', onPaste)
+    return () => {
+      window.removeEventListener('copy', onCopy)
+      window.removeEventListener('cut', onCut)
+      window.removeEventListener('paste', onPaste)
+    }
+  }, [])
 
   const commitText = () => useDraw.getState().endTextEdit()
 

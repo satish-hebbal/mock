@@ -73,18 +73,21 @@ export function toolWash(tool: Tool, strength = 1): string {
  * you picked, it's the room you're standing in, and it should read as switched
  * on. So this spends exactly what that class withholds, and spends all of it
  * from the tool's own near tint: a hot spot behind the icon, a tinted edge, and
- * a bloom underneath. Each tool warms in its own colour rather than every
+ * a brighter chip. Each tool warms in its own colour rather than every
  * selection glowing the same borrowed blue.
  *
  * It arrives in three pieces because a tool card does: the hairline is the
  * card's own background, the surface is a fill layer inset inside it, and the
  * chip sits on top of both.
  *
- * The bloom is a `filter` rather than a `box-shadow` because these cards are cut
- * to shape. A box-shadow is drawn from the border box, so on an interlocked card
- * it would bloom around the rectangle the card is no longer shaped like, and
- * every part of it outside the clip would be cut away in any case. `drop-shadow`
- * reads the silhouette that actually got painted, so the bloom follows the step.
+ * There is no bloom under the card any more. A box-shadow is drawn from the
+ * border box, so on an interlocked card it blooms around a rectangle the card
+ * is no longer shaped like, and the parts of it outside the clip are cut away
+ * regardless. `drop-shadow` does follow the cut silhouette, but it has no
+ * spread to pull the falloff back in the way `-14px` was doing, so the lit card
+ * ended up sitting in a halo twice the size of the one it replaced and read as
+ * a different component from the two beside it. The tint carries the state on
+ * its own, at the same weight as an unlit card.
  */
 export function toolLit(tool: Tool): {
   card: CSSProperties
@@ -94,15 +97,7 @@ export function toolLit(tool: Tool): {
   const [near] = tool.tint
   return {
     // lighting the card starts with lighting its hairline, which is this
-    card: {
-      background: `rgba(${near}, 0.5)`,
-      filter: [
-        // the tight halo the old `0 0 0 1px` ring was doing
-        `drop-shadow(0 0 2px rgba(${near}, 0.35))`,
-        `drop-shadow(0 8px 10px rgba(${near}, 0.4))`,
-        'drop-shadow(0 4px 6px rgba(0, 0, 0, 0.5))',
-      ].join(' '),
-    },
+    card: { background: `rgba(${near}, 0.5)` },
     fill: {
       // the hot spot rides above the standard wash, turned up a quarter
       background: [

@@ -5,6 +5,7 @@ import { SIZE_PRESETS } from '../lib/presets'
 import { MiniButton, Segments, SliderRow } from '../components/controls'
 import { CircleMinus } from 'lucide-react'
 import { ui } from '../lib/ui'
+import { track } from '../lib/analytics'
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   return (
@@ -47,11 +48,30 @@ export function ShotsExportDialog() {
     setError(null)
     const s = useShots.getState()
     s.setExporting(true)
+
+    const shape = {
+      editor: 'shots',
+      kind: 'image',
+      format,
+      width: outW,
+      height: outH,
+      scale,
+      screens: s.doc.images.length,
+    }
+    const startedAt = performance.now()
+    track('export_started', shape)
+
     try {
       await exportShot(s.doc, s.assets, { width: outW, height: outH, format, quality })
+      track('export_completed', {
+        ...shape,
+        duration_ms: Math.round(performance.now() - startedAt),
+      })
       setDialog(null)
     } catch (err) {
-      ui.error(`Export failed: ${(err as Error).message}`)
+      const reason = (err as Error).message
+      track('export_failed', { ...shape, reason: reason.slice(0, 120) })
+      ui.error(`Export failed: ${reason}`)
     } finally {
       useShots.getState().setExporting(false)
     }

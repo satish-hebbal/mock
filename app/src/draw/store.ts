@@ -20,6 +20,7 @@ import { immer } from 'zustand/middleware/immer'
 import { loadAsset, loadJSON, saveAsset, saveJSON } from '../lib/db'
 import { coalesces, endEditRun } from '../lib/history'
 import { ui } from '../lib/ui'
+import { track } from '../lib/analytics'
 import { PENS, strokeBounds } from './pens'
 import { dropGeometry, sceneBounds, unionBounds, type Box } from './geometry'
 import { measureText } from './render'
@@ -655,6 +656,7 @@ export const useDraw = create<DrawState>()(
     importImage: async (file) => {
       try {
         const bmp = await createImageBitmap(file)
+        track('media_imported', { editor: 'draw', kind: 'image' })
         const id = uid()
         await saveAsset(id, file)
         const url = URL.createObjectURL(file)

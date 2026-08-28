@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { loadAsset, loadProjectJSON, saveAsset, saveProjectJSON } from './lib/db'
 import { ui } from './lib/ui'
+import { track } from './lib/analytics'
 import { getTargetValue, sampleKeyframes, setTargetValue } from './lib/evaluator'
 import { DEFAULT_DEVICE_ID, getDevice } from './lib/registry'
 import { ANIMATION_PRESETS, TEMPLATES } from './lib/presets'
@@ -373,6 +374,7 @@ export const useStudio = create<StudioState>()(
     },
 
     newProject: () => {
+      track('project_created')
       get().commit('new-project')
       set((s) => {
         s.project = defaultProject()
@@ -457,6 +459,7 @@ export const useStudio = create<StudioState>()(
     applyStudioLook: (lookId, withCamera = true) => {
       const look = getLook(lookId)
       if (!look) return
+      track('studio_look_applied', { look_id: lookId, with_camera: withCamera })
       get().commit(`look-${lookId}`)
       set((s) => {
         s.project.scene.environment = { ...look.env }
@@ -529,6 +532,7 @@ export const useStudio = create<StudioState>()(
     },
 
     addDevice: (modelId) => {
+      track('device_added', { model_id: modelId, count: get().project.scene.devices.length + 1 })
       get().commit('add-device')
       set((s) => {
         const spec = getDevice(modelId)
@@ -637,6 +641,7 @@ export const useStudio = create<StudioState>()(
       }
       const type = mime ?? (file instanceof File ? file.type : 'image/png')
       const meta = await metaForBlob(file, type)
+      track('media_imported', { editor: 'studio', kind: meta.kind, mime: type, role })
       const id = `asset_${uid()}`
       await saveAsset(id, file)
       const url = URL.createObjectURL(file)
@@ -806,6 +811,7 @@ export const useStudio = create<StudioState>()(
     applyAnimationPreset: (presetId) => {
       const preset = ANIMATION_PRESETS.find((p) => p.id === presetId)
       if (!preset) return
+      track('animation_preset_applied', { preset_id: presetId })
       get().commit('anim-preset')
       set((s) => {
         const cam = s.project.scene.camera
@@ -845,6 +851,7 @@ export const useStudio = create<StudioState>()(
     applyTemplate: (templateId) => {
       const tpl = TEMPLATES.find((t) => t.id === templateId)
       if (!tpl) return
+      track('template_applied', { template_id: templateId })
       get().commit('template')
       set((s) => {
         const currentAsset =
@@ -871,10 +878,12 @@ export const useStudio = create<StudioState>()(
     setDialog: (d) => set((s) => void (s.dialog = d)),
     setExportProgress: (p) => set((s) => void (s.exportProgress = p)),
     setTheme: (t) => {
+      track('theme_changed', { theme: t })
       localStorage.setItem('ms-theme', t)
       set((s) => void (s.theme = t))
     },
     setMode: (m) => {
+      if (m !== get().mode) track('mode_changed', { mode: m, from: get().mode })
       localStorage.setItem('ms-mode', m)
       set((s) => void (s.mode = m))
     },

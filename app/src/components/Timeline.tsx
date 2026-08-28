@@ -45,6 +45,40 @@ interface Marquee {
   additive: boolean
 }
 
+/**
+ * Runs one pointer drag: captures the pointer, holds `cursor` over the whole
+ * document until it comes back up, and suppresses text selection for as long as
+ * it lasts. The document-wide hold is what keeps a scrub honest: a captured
+ * drag still paints whatever cursor sits under the pointer, so sweeping down
+ * over the lanes would otherwise flicker the cursor and leave a trail of
+ * selected labels behind it.
+ */
+function beginDrag(
+  e: React.PointerEvent,
+  cursor: string,
+  onMove: (ev: PointerEvent) => void,
+  onEnd?: (ev: PointerEvent) => void,
+) {
+  const el = e.currentTarget as HTMLElement
+  el.setPointerCapture(e.pointerId)
+  const body = document.body
+  const prevCursor = body.style.cursor
+  const prevSelect = body.style.userSelect
+  body.style.cursor = cursor
+  body.style.userSelect = 'none'
+  const end = (ev: PointerEvent) => {
+    el.removeEventListener('pointermove', onMove)
+    el.removeEventListener('pointerup', end)
+    el.removeEventListener('pointercancel', end)
+    body.style.cursor = prevCursor
+    body.style.userSelect = prevSelect
+    onEnd?.(ev)
+  }
+  el.addEventListener('pointermove', onMove)
+  el.addEventListener('pointerup', end)
+  el.addEventListener('pointercancel', end)
+}
+
 export function Timeline() {
   const project = useStudio((s) => s.project)
   const timeMs = useStudio((s) => s.timeMs)
@@ -98,19 +132,11 @@ export function Timeline() {
     const startY = e.clientY
     const startH = height
     const max = Math.round(window.innerHeight * 0.7)
-    const el = e.currentTarget as HTMLElement
-    el.setPointerCapture(e.pointerId)
-    const onMove = (ev: PointerEvent) => {
+    beginDrag(e, 'ns-resize', (ev) => {
       // dragging the grip is also a way to open a collapsed timeline
       if (!useStudio.getState().timelineOpen) setCollapsed(false)
       setHeight(Math.min(max, Math.max(MIN_H, startH - (ev.clientY - startY))))
-    }
-    const onUp = () => {
-      el.removeEventListener('pointermove', onMove)
-      el.removeEventListener('pointerup', onUp)
-    }
-    el.addEventListener('pointermove', onMove)
-    el.addEventListener('pointerup', onUp)
+    })
   }
 
   // ----- time <-> pixels -----
@@ -133,16 +159,8 @@ export function Timeline() {
   }
 
   const startScrub = (e: React.PointerEvent) => {
-    const el = e.currentTarget as HTMLElement
-    el.setPointerCapture(e.pointerId)
     scrubFrom(e.clientX)
-    const onMove = (ev: PointerEvent) => scrubFrom(ev.clientX)
-    const onUp = () => {
-      el.removeEventListener('pointermove', onMove)
-      el.removeEventListener('pointerup', onUp)
-    }
-    el.addEventListener('pointermove', onMove)
-    el.addEventListener('pointerup', onUp)
+    beginDrag(e, 'grabbing', (ev) => scrubFrom(ev.clientX))
   }
 
   // ----- keyframe drag (moves the whole selection, with snapping) -----
@@ -166,77 +184,71 @@ export function Timeline() {
     const others = project.keyframes.filter((k) => !ids.includes(k.id)).map((k) => k.timeMs)
     const stops = [...others, timeMs, 0, duration]
 
-    const el = e.currentTarget as HTMLElement
-    el.setPointerCapture(e.pointerId)
     let last = startTime
 
-    const onMove = (ev: PointerEvent) => {
-      const perPx = msPerPx()
-      let target = startTime + (ev.clientX - startX) * perPx
-      if (!ev.altKey) {
-        // magnet to a nearby stop, else fall back to the frame grid
-        const snap = stops.find((s) => Math.abs(s - target) < SNAP_PX * perPx)
-        target = snap ?? Math.round(target / frameMs) * frameMs
-      }
-      target = Math.min(duration, Math.max(0, target))
-      const delta = target - last
-      if (Math.abs(delta) < 0.5) return
-      st().moveKeyframesBy(ids, delta)
-      last = target
-      setDragTime(target)
-    }
-    const onUp = () => {
-      el.removeEventListener('pointermove', onMove)
-      el.removeEventListener('pointerup', onUp)
-      setDragTime(null)
-    }
-    el.addEventListener('pointermove', onMove)
-    el.addEventListener('pointerup', onUp)
+    beginDrag(
+      e,
+      'grabbing',
+      (ev) => {
+        const perPx = msPerPx()
+        let target = startTime + (ev.clientX - startX) * perPx
+        if (!ev.altKey) {
+          // magnet to a nearby stop, else fall back to the frame grid
+          const snap = stops.find((s) => Math.abs(s - target) < SNAP_PX * perPx)
+          target = snap ?? Math.round(target / frameMs) * frameMs
+        }
+        target = Math.min(duration, Math.max(0, target))
+        const delta = target - last
+        if (Math.abs(delta) < 0.5) return
+        st().moveKeyframesBy(ids, delta)
+        last = target
+        setDragTime(target)
+      },
+      () => setDragTime(null),
+    )
   }
 
   // ----- marquee selection over the lanes -----
 
   const startMarquee = (e: React.PointerEvent) => {
     if (e.button !== 0) return
-    const el = e.currentTarget as HTMLElement
-    el.setPointerCapture(e.pointerId)
     const base = e.shiftKey ? selectedKfIds : []
     if (!e.shiftKey) st().selectKeyframes([])
     const box: Marquee = { x0: e.clientX, y0: e.clientY, x1: e.clientX, y1: e.clientY, additive: e.shiftKey }
     let moved = false
 
-    const onMove = (ev: PointerEvent) => {
-      box.x1 = ev.clientX
-      box.y1 = ev.clientY
-      if (Math.abs(box.x1 - box.x0) + Math.abs(box.y1 - box.y0) > 4) moved = true
-      if (!moved) return
-      setMarquee({ ...box })
-      // hit-test the rendered diamonds, cheap and always in sync with layout
-      const rect = {
-        left: Math.min(box.x0, box.x1),
-        right: Math.max(box.x0, box.x1),
-        top: Math.min(box.y0, box.y1),
-        bottom: Math.max(box.y0, box.y1),
-      }
-      const hits: string[] = []
-      for (const node of tracksRef.current?.querySelectorAll<HTMLElement>('[data-kf]') ?? []) {
-        const b = node.getBoundingClientRect()
-        const cx = b.left + b.width / 2
-        const cy = b.top + b.height / 2
-        if (cx >= rect.left && cx <= rect.right && cy >= rect.top && cy <= rect.bottom)
-          hits.push(node.dataset.kf!)
-      }
-      st().selectKeyframes([...new Set([...base, ...hits])])
-    }
-    const onUp = (ev: PointerEvent) => {
-      el.removeEventListener('pointermove', onMove)
-      el.removeEventListener('pointerup', onUp)
-      setMarquee(null)
-      // a click on empty lane space (no drag) moves the playhead there
-      if (!moved) scrubFrom(ev.clientX)
-    }
-    el.addEventListener('pointermove', onMove)
-    el.addEventListener('pointerup', onUp)
+    beginDrag(
+      e,
+      'crosshair',
+      (ev) => {
+        box.x1 = ev.clientX
+        box.y1 = ev.clientY
+        if (Math.abs(box.x1 - box.x0) + Math.abs(box.y1 - box.y0) > 4) moved = true
+        if (!moved) return
+        setMarquee({ ...box })
+        // hit-test the rendered diamonds, cheap and always in sync with layout
+        const rect = {
+          left: Math.min(box.x0, box.x1),
+          right: Math.max(box.x0, box.x1),
+          top: Math.min(box.y0, box.y1),
+          bottom: Math.max(box.y0, box.y1),
+        }
+        const hits: string[] = []
+        for (const node of tracksRef.current?.querySelectorAll<HTMLElement>('[data-kf]') ?? []) {
+          const b = node.getBoundingClientRect()
+          const cx = b.left + b.width / 2
+          const cy = b.top + b.height / 2
+          if (cx >= rect.left && cx <= rect.right && cy >= rect.top && cy <= rect.bottom)
+            hits.push(node.dataset.kf!)
+        }
+        st().selectKeyframes([...new Set([...base, ...hits])])
+      },
+      (ev) => {
+        setMarquee(null)
+        // a click on empty lane space (no drag) moves the playhead there
+        if (!moved) scrubFrom(ev.clientX)
+      },
+    )
   }
 
   // ----- keyboard nudging -----
@@ -417,7 +429,7 @@ export function Timeline() {
       </div>
 
       {!collapsed && (
-        <div className="flex min-h-0 flex-1 flex-col px-3 pb-2">
+        <div className="flex min-h-0 flex-1 flex-col px-3 pb-2 select-none">
           {/* ruler + lanes share one horizontal coordinate space */}
           <div className="relative flex min-h-0 flex-1 flex-col">
             <div className="flex shrink-0 items-stretch">
@@ -426,7 +438,7 @@ export function Timeline() {
                 ref={laneRef}
                 onPointerDown={startScrub}
                 style={{ height: RULER_H }}
-                className="relative flex-1 cursor-col-resize rounded-t bg-(--panel2)"
+                className="relative flex-1 cursor-grab rounded-t bg-(--panel2) active:cursor-grabbing"
               >
                 {Array.from({ length: secs + 1 }, (_, i) => {
                   // A tick sitting on (or nearly on) 100% has no room to its

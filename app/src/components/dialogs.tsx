@@ -6,6 +6,7 @@ import { TEMPLATES } from '../lib/presets'
 import { SHORTCUT_GROUPS } from '../lib/shortcuts'
 import { CircleMinus } from 'lucide-react'
 import { ui } from '../lib/ui'
+import { track } from '../lib/analytics'
 import { Dropdown, MiniButton, Segments, SliderRow } from './controls'
 
 /** Sentinel size option: follow the project's frame instead of a fixed preset. */
@@ -87,6 +88,28 @@ export function ExportDialog() {
     if (mode !== 'batch') st().setExportSize(baseW, baseH)
     st().setDialog(null)
     const s = st()
+
+    /*
+     * What was asked for, recorded identically whether it lands or not, so a
+     * failure rate can be read per format and per size rather than per event.
+     * Nothing here describes the picture itself: sizes, formats and counts
+     * only, never a project name or a file the user opened.
+     */
+    const shape = {
+      editor: 'studio',
+      kind: mode,
+      format: mode === 'video' ? (transparent ? 'webm' : vFormat) : format,
+      width: mode === 'batch' ? undefined : outW,
+      height: mode === 'batch' ? undefined : outH,
+      sizes: mode === 'batch' ? batchIdxs.length : undefined,
+      transparent,
+      devices: s.project.scene.devices.length,
+      overlays: s.project.overlays.length,
+      keyframes: s.project.keyframes.length,
+    }
+    const startedAt = performance.now()
+    track('export_started', shape)
+
     try {
       if (mode === 'image') {
         s.setExportProgress({ label: 'Rendering image…', done: 0, total: 1 })
@@ -125,8 +148,14 @@ export function ExportDialog() {
           (done, total) => s.setExportProgress({ label: 'Encoding video…', done, total }),
         )
       }
+      track('export_completed', {
+        ...shape,
+        duration_ms: Math.round(performance.now() - startedAt),
+      })
     } catch (err) {
-      ui.error(`Export failed: ${(err as Error).message}`)
+      const reason = (err as Error).message
+      track('export_failed', { ...shape, reason: reason.slice(0, 120) })
+      ui.error(`Export failed: ${reason}`)
     } finally {
       useStudio.getState().setExportProgress(null)
     }

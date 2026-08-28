@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { X } from 'lucide-react'
 import { ui } from '../lib/ui'
+import { track } from '../lib/analytics'
 
 /**
  * Where feedback goes. Web3Forms relays the POST below to the inbox that
@@ -54,6 +55,13 @@ export function FeedbackDialog({ onClose }: { onClose: () => void }) {
       })
       const data = (await res.json().catch(() => null)) as { success?: boolean } | null
       if (!res.ok || !data?.success) throw new Error(String(res.status))
+      /*
+       * The mood and whether prose came with it, never the note itself. What
+       * someone wrote belongs in the inbox behind this form and nowhere else,
+       * and a rating that can be charted over releases is the part analytics
+       * can actually use.
+       */
+      track('feedback_sent', { mood: mood !== null ? mood + 1 : null, has_note: !!note.trim() })
       ui.toast('Thanks, your feedback is on its way', 'success')
       onClose()
     } catch {

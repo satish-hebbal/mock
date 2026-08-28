@@ -16,6 +16,7 @@ import { useStudio } from '../store'
 import { CircleMinus, Download } from 'lucide-react'
 import { MiniButton, Segments } from '../components/controls'
 import { ui } from '../lib/ui'
+import { track } from '../lib/analytics'
 import { DrawCanvas } from './DrawCanvas'
 import { PenTray } from './PenTray'
 import { DrawCorner, DrawNotchBar, ZoomBar } from './ToolRail'
@@ -39,6 +40,19 @@ function DrawExportDialog() {
 
   const run = async (action: 'save' | 'copy') => {
     setBusy(true)
+
+    const shape = {
+      editor: 'draw',
+      kind: action === 'copy' ? 'clipboard' : 'file',
+      format,
+      width: size.w,
+      height: size.h,
+      transparent,
+      elements: doc.elements.length,
+    }
+    const startedAt = performance.now()
+    track('export_started', shape)
+
     try {
       if (action === 'copy') {
         await copyToClipboard(doc, images, { transparent, scale })
@@ -46,9 +60,15 @@ function DrawExportDialog() {
       } else {
         await download(doc, images, 'drawing', format, { transparent, scale })
       }
+      track('export_completed', {
+        ...shape,
+        duration_ms: Math.round(performance.now() - startedAt),
+      })
       close()
     } catch (e) {
-      ui.error(`Export failed: ${(e as Error).message}`)
+      const reason = (e as Error).message
+      track('export_failed', { ...shape, reason: reason.slice(0, 120) })
+      ui.error(`Export failed: ${reason}`)
     } finally {
       setBusy(false)
     }

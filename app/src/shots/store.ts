@@ -4,6 +4,7 @@ import { loadAsset, loadJSON, saveAsset, saveJSON } from '../lib/db'
 import type { AssetMeta, AssetRuntime } from '../types'
 import { coalesces, endEditRun, patchLabel } from '../lib/history'
 import { ui } from '../lib/ui'
+import { track } from '../lib/analytics'
 import { migrateDeviceId } from './devices'
 import { applyLayoutToDoc, getLayoutPreset } from './layouts'
 import {
@@ -597,6 +598,7 @@ export const useShots = create<ShotsState>()(
       const id = `asset_${uid()}`
       await saveAsset(id, file)
       const url = URL.createObjectURL(file)
+      track('media_imported', { editor: 'shots', kind: meta.kind, mime: type })
 
       // Sample the screenshot's dominant colors for "Magic" backgrounds.
       let palette: string[] = []

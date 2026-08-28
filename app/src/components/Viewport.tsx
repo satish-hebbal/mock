@@ -590,6 +590,37 @@ export function Viewport() {
   const rect = useFitRect(outerRef, exportSize.width / exportSize.height, NOTCH.depth)
   useCameraGestures(frameRef)
 
+  /*
+   * The focal rings put themselves away once you go and do something else.
+   *
+   * They are scaffolding for one decision, and a pair of bright circles laid
+   * over the picture is the last thing you want while judging a background or
+   * placing a caption. Shots dismisses them on any canvas click, which it can
+   * afford because a click on a flat shot means nothing else. Here the frame
+   * is the one place that must *not* dismiss them: a click in it picks a
+   * device, starts an orbit, or drags the ring itself, so tying the guide to
+   * the canvas would make it almost impossible to keep on screen. Everywhere
+   * else does, which is what makes the rest of the app usable with a portrait
+   * set up.
+   *
+   * The Portrait panel is the exception to the exception. Reaching for those
+   * controls is the clearest sign you still want to see what they do, and
+   * without that check grabbing a slider would hide the rings on pointerdown
+   * only for setPortrait to bring them back on the first change, one frame
+   * later, as a flicker.
+   */
+  useEffect(() => {
+    if (!focusGuide) return
+    const onPointerDown = (e: PointerEvent) => {
+      const target = e.target as Element | null
+      if (frameRef.current?.contains(target as Node)) return
+      if (target?.closest?.('[data-portrait-ui]')) return
+      useStudio.getState().setFocusGuide(false)
+    }
+    window.addEventListener('pointerdown', onPointerDown)
+    return () => window.removeEventListener('pointerdown', onPointerDown)
+  }, [focusGuide])
+
   const [hintsVisible, setHintsVisible] = useState(() => localStorage.getItem('ms-hints-seen') !== '1')
   const [hintsFading, setHintsFading] = useState(false)
   useEffect(() => {

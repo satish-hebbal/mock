@@ -612,6 +612,13 @@ function PortraitSection() {
   const on = portrait.mode !== 'none'
 
   return (
+    /*
+     * Tagged so the outside-click dismissal in Viewport can tell "went off to
+     * do something else" from "reached for a portrait control". Without it,
+     * grabbing a slider would hide the rings on pointerdown and setPortrait
+     * would bring them back on the first change, which reads as a flicker.
+     */
+    <div data-portrait-ui>
     <Section title="Portrait" icon={<Aperture {...secIcon} />}>
       <div className="grid grid-cols-2 gap-1.5">
         {PORTRAIT_MODES.map((m) => (
@@ -630,10 +637,12 @@ function PortraitSection() {
         <div className="mt-3">
           {/*
             The rings are a toggle here rather than something the canvas
-            dismisses, which is the one place this parts company with Shots. A
-            click on a flat shot means nothing else; a click in this viewport
-            picks a device or starts an orbit, so tying the guide to it would
-            make the rings almost impossible to keep on screen.
+            dismisses, which is where this parts company with Shots. A click on
+            a flat shot means nothing else; a click in this viewport picks a
+            device, starts an orbit, or drags the ring itself, so tying the
+            guide to the canvas would make it almost impossible to keep on
+            screen. Clicking anywhere outside the frame does put it away, which
+            Viewport handles.
           */}
           <button
             onClick={() => setFocusGuide(!guide)}
@@ -685,6 +694,7 @@ function PortraitSection() {
         </div>
       )}
     </Section>
+    </div>
   )
 }
 

@@ -18,20 +18,25 @@
  * furniture out.
  */
 
-import { useEffect, useLayoutEffect, useReducer, useRef } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState } from 'react'
 import {
+  CORNER_HANDLES,
   CURSOR_FOR_HANDLE,
   dropGeometry,
   handlePositions,
   hitTest,
   inBox,
   rotate,
+  rotateCursor,
   sceneBounds,
   unionBounds,
   type Box,
-  type HandleId,
+  type CornerHandleId,
+  type ResizeHandleId,
 } from './geometry'
-import { lineHeightFor, renderScene, toScene } from './render'
+import { CanvasMenu, type MenuAt } from './CanvasMenu'
+import { remapMarks } from './marks'
+import { layoutNote, lineHeightFor, renderScene, toScene } from './render'
 import {
   boxFrom,
   contentOffScreen,
@@ -45,7 +50,7 @@ import {
   setSurfaceSize,
   useDraw,
 } from './store'
-import { FONT_STACKS, isLinear, isStroke, type DrawElement } from './types'
+import { FONT_STACKS, isLinear, isStroke, noteInk, paperIsDark, type DrawElement } from './types'
 import { useStudio } from '../store'
 
 /** How close counts as "on" a line, in screen pixels. */
@@ -71,7 +76,7 @@ type Gesture =
     }
   | {
       kind: 'resize'
-      handle: HandleId
+      handle: ResizeHandleId
       box: Box
       angle: number
       origin: Map<string, DrawElement>
@@ -106,6 +111,16 @@ export function DrawCanvas() {
   const imgCache = useRef(new Map<string, HTMLImageElement>())
   const [, force] = useReducer((n: number) => n + 1, 0)
   const frame = useRef(0)
+  /** the right-click menu, and where it was opened */
+  const [menu, setMenu] = useState<MenuAt | null>(null)
+  /*
+   * Stable, and it has to be. The menu hangs its dismissal listeners off this,
+   * and the canvas re-renders on every animation frame it paints; handing it a
+   * fresh closure each time tore those listeners down and re-armed them on a
+   * timeout that the next render cleared before it could fire. The menu would
+   * then sit there ignoring every click outside it.
+   */
+  const closeMenu = useCallback(() => setMenu(null), [])
 
   /**
    * The live element's geometry has changed.
@@ -190,6 +205,18 @@ export function DrawCanvas() {
     ctx.clearRect(0, 0, size.current.w, size.current.h)
 
     const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#6965db'
+    /*
+     * The marquee has to read as a faint gray on whatever paper it is dragged
+     * across, not just whatever the app chrome's theme happens to be — a dark
+     * custom paper under a light-themed app would otherwise get a marquee
+     * tuned for a white sheet. So it borrows the same paper-vs-ink call the
+     * grid and default stroke colour already make, and stays a low-alpha wash
+     * of that ink rather than a solid line.
+     */
+    const marqueeInk = paperIsDark(doc.background, theme === 'dark') ? '#f4f3f1' : '#1e1e1e'
+    // Figma's own selection blue: kept distinct from the app's purple --accent
+    // so a picked element reads as "selected" rather than "brand-colored"
+    const selectionBlue = '#0d99ff'
     const g = gesture.current
     const z = viewport.zoom
     const sx = (x: number) => (x + viewport.scrollX) * z
@@ -211,8 +238,8 @@ export function DrawCanvas() {
 
     if (g.kind === 'marquee') {
       ctx.save()
-      ctx.fillStyle = accent + '22'
-      ctx.strokeStyle = accent
+      ctx.fillStyle = marqueeInk + '14'
+      ctx.strokeStyle = marqueeInk + '2e'
       ctx.lineWidth = 1
       ctx.fillRect(sx(g.box.x), sy(g.box.y), g.box.w * z, g.box.h * z)
       ctx.strokeRect(sx(g.box.x), sy(g.box.y), g.box.w * z, g.box.h * z)
@@ -228,7 +255,7 @@ export function DrawCanvas() {
       ctx.save()
       ctx.translate(sx(box.x + box.w / 2), sy(box.y + box.h / 2))
       ctx.rotate(angle)
-      ctx.strokeStyle = accent
+      ctx.strokeStyle = selectionBlue
       ctx.lineWidth = 1
       ctx.setLineDash([])
       const w = box.w * z
@@ -255,15 +282,6 @@ export function DrawCanvas() {
           ctx.fill()
           ctx.stroke()
         }
-        // and the rotation grip, on its own stalk
-        ctx.beginPath()
-        ctx.moveTo(0, -h / 2 - 4)
-        ctx.lineTo(0, -h / 2 - 24)
-        ctx.stroke()
-        ctx.beginPath()
-        ctx.arc(0, -h / 2 - 24, HANDLE_SIZE / 2 + 1, 0, Math.PI * 2)
-        ctx.fill()
-        ctx.stroke()
       }
       ctx.restore()
     }
@@ -278,6 +296,7 @@ export function DrawCanvas() {
       ctx.stroke()
       ctx.restore()
     }
+
   })
 
   // ----- keyboard: space to pan, the way every canvas tool does it -----
@@ -310,19 +329,37 @@ export function DrawCanvas() {
     return { x: e.clientX - r.left, y: e.clientY - r.top }
   }
 
-  /** Which grip is under the pointer, if any. */
-  const handleAt = (px: number, py: number): HandleId | null => {
+  /** How far outside a corner grip still counts as "rotate this", not "miss". */
+  const ROTATE_RING = HANDLE_SIZE + 10
+
+  /**
+   * Which grip is under the pointer, if any — a resize handle exactly on a
+   * grip, or (Figma-style) 'rotate' in the ring just outside a corner one, so
+   * there is no separate handle to draw or aim for.
+   */
+  const handleAt = (
+    px: number,
+    py: number,
+  ): { id: ResizeHandleId } | { id: 'rotate'; corner: CornerHandleId; angle: number } | null => {
     const s = useDraw.getState()
     const picked = s.doc.elements.filter((e) => s.selectedIds.includes(e.id))
     if (picked.length === 0) return null
     const single = picked.length === 1 ? picked[0] : null
     if (single && isStroke(single)) return null
     const box = single ? { x: single.x, y: single.y, w: single.w, h: single.h } : unionBounds(picked)!
-    const pos = handlePositions(box, single?.angle ?? 0)
-    for (const [id, [hx, hy]] of Object.entries(pos) as [HandleId, [number, number]][]) {
+    const angle = single?.angle ?? 0
+    const pos = handlePositions(box, angle)
+    for (const [id, [hx, hy]] of Object.entries(pos) as [ResizeHandleId, [number, number]][]) {
       const sxp = (hx + s.viewport.scrollX) * s.viewport.zoom
       const syp = (hy + s.viewport.scrollY) * s.viewport.zoom
-      if (Math.abs(px - sxp) <= HANDLE_SIZE && Math.abs(py - syp) <= HANDLE_SIZE) return id
+      if (Math.abs(px - sxp) <= HANDLE_SIZE && Math.abs(py - syp) <= HANDLE_SIZE) return { id }
+    }
+    for (const corner of CORNER_HANDLES) {
+      const [hx, hy] = pos[corner]
+      const sxp = (hx + s.viewport.scrollX) * s.viewport.zoom
+      const syp = (hy + s.viewport.scrollY) * s.viewport.zoom
+      const d = Math.hypot(px - sxp, py - syp)
+      if (d > HANDLE_SIZE && d <= ROTATE_RING) return { id: 'rotate', corner, angle }
     }
     return null
   }
@@ -339,15 +376,26 @@ export function DrawCanvas() {
     return null
   }
 
+  /**
+   * Did this event start on something floating over the board rather than on
+   * the board itself?
+   *
+   * Everything overlaid — the text editor, the right-click menu, the scroll-
+   * back button — sits *inside* the wrapper, so its events bubble into these
+   * handlers, and the board would read a press on a menu item as a press on
+   * the paper behind it: clear the selection and start a marquee. Worse, it
+   * captures the pointer, so the pointerup lands on the canvas instead of the
+   * button and the click the menu item was waiting for never happens at all.
+   * The board only listens to the board.
+   */
+  const fromOverlay = (e: { target: EventTarget | null; currentTarget: EventTarget | null }) => {
+    const t = e.target as HTMLElement | null
+    return !!t && t !== e.currentTarget && t.tagName !== 'CANVAS'
+  }
+
   // ----- pointer -----
   const onPointerDown = (e: React.PointerEvent) => {
-    /*
-     * A click inside the text editor is a click inside the text editor. The
-     * textarea sits over the canvas, so its pointer events bubble here, and
-     * without this the first attempt to place the caret mid-word committed the
-     * text and closed the editor instead.
-     */
-    if ((e.target as HTMLElement).tagName === 'TEXTAREA') return
+    if (fromOverlay(e)) return
 
     if (e.button === 1 || (e.button === 0 && (spaceDown.current || tool === 'hand'))) {
       const p = localPoint(e)
@@ -380,7 +428,7 @@ export function DrawCanvas() {
         const picked = s.doc.elements.filter((el) => s.selectedIds.includes(el.id))
         const single = picked.length === 1 ? picked[0] : null
         const box = single ? { x: single.x, y: single.y, w: single.w, h: single.h } : unionBounds(picked)!
-        if (grip === 'rotate') {
+        if (grip.id === 'rotate') {
           gesture.current = {
             kind: 'rotate',
             cx: box.x + box.w / 2,
@@ -391,7 +439,7 @@ export function DrawCanvas() {
         } else {
           gesture.current = {
             kind: 'resize',
-            handle: grip,
+            handle: grip.id,
             box,
             angle: single?.angle ?? 0,
             origin: new Map(picked.map((el) => [el.id, JSON.parse(JSON.stringify(el)) as DrawElement])),
@@ -448,6 +496,14 @@ export function DrawCanvas() {
        */
       e.preventDefault()
       s.placeText(scene.x, scene.y)
+      return
+    }
+
+    // ----- sticky note -----
+    if (tool === 'note') {
+      // same focus-stealing trap as the text tool, same fix
+      e.preventDefault()
+      s.placeNote(scene.x, scene.y)
       return
     }
 
@@ -942,11 +998,12 @@ export function DrawCanvas() {
   const commitText = () => useDraw.getState().endTextEdit()
 
   const onDoubleClick = (e: React.PointerEvent) => {
+    if (fromOverlay(e)) return
     const s = useDraw.getState()
     const p = localPoint(e)
     const scene = toScene(p.x, p.y, s.viewport)
     const hitEl = elementAt(scene)
-    if (hitEl?.kind === 'text') {
+    if (hitEl?.kind === 'text' || hitEl?.kind === 'note') {
       s.editText(hitEl.id)
       return
     }
@@ -954,20 +1011,68 @@ export function DrawCanvas() {
     if (tool === 'select' && !hitEl) s.placeText(scene.x, scene.y)
   }
 
+  /**
+   * Right-click, which the board answers itself rather than leaving to the
+   * browser: Reload and View Source are never the question being asked over a
+   * drawing, and inside a note they sit exactly where its colour and its text
+   * settings ought to be.
+   *
+   * It runs through the textarea as well — the note's editor is transparent
+   * and the note is what you think you are clicking, so a right-click on it
+   * should offer the note's own menu rather than a spell-checker's.
+   */
+  const onContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault()
+    // right-clicking the menu is not a request for another one; the note's own
+    // editor, on the other hand, is exactly where the menu is wanted
+    if ((e.target as HTMLElement).closest('[data-canvas-menu]')) return
+    const s = useDraw.getState()
+    const p = localPoint(e)
+    const hitEl = elementAt(toScene(p.x, p.y, s.viewport))
+    /*
+     * Right-clicking something outside the selection takes it, the way every
+     * canvas tool does; right-clicking inside a multi-selection leaves that
+     * selection alone, because the menu is about to act on all of it.
+     */
+    if (hitEl && !s.selectedIds.includes(hitEl.id)) {
+      // through endTextEdit rather than straight to select, so a label being
+      // typed somewhere else settles the way it would on any other click away
+      if (s.editingTextId) s.endTextEdit()
+      s.select([hitEl.id])
+    }
+    /*
+     * What the caret had selected at the moment of the click, which is what a
+     * highlight is going to be laid over. Read here rather than in the menu
+     * because the menu is a click away, and by then the browser may have moved
+     * the caret; right-click leaves a selection it lands inside alone.
+     */
+    const ta = textRef.current
+    const editing = useDraw.getState().editingTextId
+    const selection =
+      editing && hitEl?.id === editing && ta && ta.selectionEnd > ta.selectionStart
+        ? { start: ta.selectionStart, end: ta.selectionEnd }
+        : null
+    setMenu({ x: p.x, y: p.y, id: hitEl?.id ?? null, selection })
+    invalidate()
+  }
+
+  const selectHit = tool === 'select' ? handleAt(pointer.current.x, pointer.current.y) : null
   const cursor =
     gesture.current.kind === 'pan'
       ? 'grabbing'
       : spaceDown.current || tool === 'hand'
         ? 'grab'
-        : tool === 'select'
-          ? (handleAt(pointer.current.x, pointer.current.y) &&
-              CURSOR_FOR_HANDLE[handleAt(pointer.current.x, pointer.current.y)!]) ||
-            'default'
-          : tool === 'text'
-            ? 'text'
-            : tool === 'eraser' && eraserMode === 'area'
-              ? 'none'
-              : 'crosshair'
+        : selectHit
+          ? selectHit.id === 'rotate'
+            ? rotateCursor(selectHit.corner, selectHit.angle)
+            : CURSOR_FOR_HANDLE[selectHit.id]
+          : tool === 'select'
+            ? 'default'
+            : tool === 'text'
+              ? 'text'
+              : tool === 'eraser' && eraserMode === 'area'
+                ? 'none'
+                : 'crosshair'
 
   const showScrollBack = contentOffScreen(doc.elements, viewport)
 
@@ -985,6 +1090,7 @@ export function DrawCanvas() {
         invalidate()
       }}
       onDoubleClick={onDoubleClick as unknown as React.MouseEventHandler}
+      onContextMenu={onContextMenu}
     >
       <canvas ref={sceneRef} className="absolute inset-0" />
       <canvas ref={uiRef} className="pointer-events-none absolute inset-0" />
@@ -1004,7 +1110,12 @@ export function DrawCanvas() {
             useDraw.setState((st) => {
               const el = st.doc.elements.find((x) => x.id === editing.id)
               if (el?.kind === 'text') {
-                el.text = e.target.value
+                const next = e.target.value
+                // before the text moves on, or every mark below the caret is
+                // left pointing at the wrong characters
+                el.highlights = remapMarks(el.highlights, el.text, next)
+                el.strikes = remapMarks(el.strikes, el.text, next)
+                el.text = next
                 refitText(el, ctx)
                 el.version++
               }
@@ -1028,6 +1139,11 @@ export function DrawCanvas() {
               e.preventDefault()
               commitText()
             }
+          }}
+          // as on a note: a right-click formats what is selected, so it must
+          // not be the thing that clears the selection
+          onMouseDown={(e) => {
+            if (e.button === 2) e.preventDefault()
           }}
           spellCheck={false}
           /*
@@ -1064,6 +1180,91 @@ export function DrawCanvas() {
           }}
         />
       )}
+
+      {/*
+       * A note is edited differently: the card, its shadow and its wrapped,
+       * shrink-to-fit, possibly-bulleted text keep painting on the canvas
+       * exactly as they will once you click away, so this textarea draws no
+       * visible glyphs of its own at all — just the caret and the native
+       * selection highlight — sitting over the card's own content box. What
+       * you see while typing is the real render, not a stand-in for it.
+       */}
+      {editing &&
+        editing.kind === 'note' &&
+        (() => {
+          const ctx = sceneRef.current?.getContext('2d')
+          if (!ctx) return null
+          const layout = layoutNote(ctx, editing)
+          const align = editing.bulleted ? 'left' : editing.textAlign
+          return (
+            <textarea
+              ref={textRef}
+              value={editing.text}
+              onChange={(e) => {
+                useDraw.setState((st) => {
+                  const el = st.doc.elements.find((x) => x.id === editing.id)
+                  if (el?.kind === 'note') {
+                    const next = e.target.value
+                    el.highlights = remapMarks(el.highlights, el.text, next)
+                    el.strikes = remapMarks(el.strikes, el.text, next)
+                    el.text = next
+                    el.version++
+                  }
+                })
+              }}
+              onBlur={() => {
+                requestAnimationFrame(() => {
+                  if (document.activeElement === textRef.current) return
+                  commitText()
+                })
+              }}
+              onKeyDown={(e) => {
+                e.stopPropagation()
+                if (e.key === 'Escape') {
+                  e.preventDefault()
+                  commitText()
+                }
+              }}
+              /*
+               * A right-click keeps whatever was selected. Left to itself the
+               * browser collapses the selection to wherever the press landed,
+               * so aiming a hair outside your own highlighted phrase turned
+               * "highlight this" into "highlight the entire note" — with the
+               * menu quietly relabelling itself on the way past.
+               */
+              onMouseDown={(e) => {
+                if (e.button === 2) e.preventDefault()
+              }}
+              spellCheck={false}
+              wrap="soft"
+              className="absolute resize-none overflow-hidden border-none bg-transparent p-0 outline-none"
+              style={{
+                left: (editing.x + layout.pad + viewport.scrollX) * viewport.zoom,
+                top:
+                  (editing.y + layout.pad + viewport.scrollY) * viewport.zoom -
+                  ((layout.lineHeight - layout.fontSize) / 2) * viewport.zoom,
+                /*
+                 * Exactly the column the renderer wrapped to, not a pixel more:
+                 * the two have to break in the same places or the caret drifts
+                 * a line away from the glyphs it is supposed to be sitting in.
+                 * The bullet's hanging indent comes off the same width, as
+                 * padding, since the box sizes borders in.
+                 */
+                width: layout.contentWidth * viewport.zoom,
+                paddingLeft: (editing.bulleted ? layout.indent : 0) * viewport.zoom,
+                height: Math.max(1, editing.h - layout.pad * 2) * viewport.zoom + 2,
+                font: `${layout.fontSize * viewport.zoom}px ${FONT_STACKS[editing.fontFamily]}`,
+                lineHeight: `${layout.lineHeight * viewport.zoom}px`,
+                color: 'transparent',
+                caretColor: noteInk(editing.noteColor),
+                textAlign: align,
+                opacity: editing.opacity,
+              }}
+            />
+          )
+        })()}
+
+      {menu && <CanvasMenu at={menu} onClose={closeMenu} />}
 
       {/*
        * Excalidraw's escape hatch for a canvas you have panned away from. It

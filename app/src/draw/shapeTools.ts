@@ -18,6 +18,7 @@ import {
   MousePointer2,
   Pencil,
   Square,
+  StickyNote,
   Type,
   type LucideIcon,
 } from 'lucide-react'
@@ -44,6 +45,9 @@ export const SHAPE_TOOLS: ToolDef[] = [
   { id: 'freedraw', label: 'Draw', icon: Pencil, digit: '7', letter: 'x' },
   { id: 'text', label: 'Text', icon: Type, digit: '8', letter: 't' },
   { id: 'image', label: 'Image', icon: ImageIcon, digit: '9', letter: '' },
+  // every digit is spoken for by the other nine tools, so this one keys off
+  // its letter alone
+  { id: 'note', label: 'Sticky note', icon: StickyNote, digit: '', letter: 's' },
   { id: 'eraser', label: 'Eraser', icon: Eraser, digit: '0', letter: 'e' },
 ]
 

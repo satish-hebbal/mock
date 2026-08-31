@@ -364,9 +364,13 @@ function ToolRow({ depth }: { depth: number }) {
         <Btn
           key={def.id}
           label={
-            def.letter
+            def.digit && def.letter
               ? `${def.label} — ${def.digit} or ${def.letter.toUpperCase()}`
-              : `${def.label} — ${def.digit}`
+              : def.digit
+                ? `${def.label} — ${def.digit}`
+                : def.letter
+                  ? `${def.label} — ${def.letter.toUpperCase()}`
+                  : def.label
           }
           digit={def.digit}
           active={tool === def.id}

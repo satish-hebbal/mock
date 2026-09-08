@@ -1,5 +1,4 @@
 import type { CSSProperties } from 'react'
-import { TOOLS } from './tools'
 
 /**
  * The stepped seam between the first two tool cards.
@@ -157,27 +156,19 @@ function half(m: Metrics, side: 'in' | 'out'): Half {
   }
 }
 
-export function seam(m: Metrics, count: number): Seam {
+export function seam(m: Metrics): Seam {
   return {
     row: {
       '--tool-step': px(m.step),
-      '--tool-gutter': px(m.gutter),
       '--tool-radius': px(m.radius),
       '--tool-pad': px(m.pad),
-      /*
-       * How many cards share the row. The stylesheet needs it to work out a
-       * track width, and it has to come from here rather than being written
-       * into the CSS, because the row length is a fact about `TOOLS` and the
-       * seam is the only thing that already travels between the two.
-       */
-      '--tool-count': String(count),
     } as CSSProperties,
     parts: [half(m, 'in'), half(m, 'out')],
   }
 }
 
 /** the home screen's row: `gap-3`, `rounded-xl`, `p-4` */
-export const HOME_SEAM = seam({ gutter: 12, step: 28, radius: 16, pad: 16 }, TOOLS.length)
+export const HOME_SEAM = seam({ gutter: 12, step: 28, radius: 16, pad: 16 })
 
 /** the app menu's row, which runs smaller: `gap-2`, `rounded-lg`, `p-3` */
-export const SHEET_SEAM = seam({ gutter: 8, step: 20, radius: 12, pad: 12 }, TOOLS.length)
+export const SHEET_SEAM = seam({ gutter: 8, step: 20, radius: 12, pad: 12 })

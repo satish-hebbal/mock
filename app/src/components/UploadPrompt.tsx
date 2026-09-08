@@ -24,7 +24,7 @@ export function UploadPrompt({ onFiles }: { onFiles: (files: File[]) => void }) 
       */}
       <button
         onClick={() => pickMediaFiles(onFiles)}
-        className="rounded-full bg-(--accent-fill) px-3.5 py-2 t-button text-(--accent-tx) transition-opacity hover:opacity-90"
+        className="rounded-full bg-(--accent-fill) px-3.5 py-2 t-button text-(--accent-tx) hover:bg-(--accent-fill-hover)"
       >
         Upload
       </button>

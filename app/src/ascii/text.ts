@@ -6,16 +6,21 @@
  * the only part of ASCII art that can go in a README, a commit message, a
  * terminal banner or a `<pre>` without being an image of text.
  *
- * Four formats, and they are four genuinely different jobs rather than one
+ * Three formats, and they are three genuinely different jobs rather than one
  * string with different wrappers:
  *
  *   txt    the glyphs alone, which is the one that pastes anywhere
  *   ansi   the glyphs with 24-bit colour escapes, for a terminal
  *   html   a <pre> with a span per run of colour, for a web page
- *   svg    one <text> per row, which stays sharp at any size and stays text
  *
- * All four are cut from the same grid the canvas used, so what leaves as a file
- * is what was on screen, column for column.
+ * All three are cut from the same grid the canvas used, so what leaves as a
+ * file is what was on screen, column for column.
+ *
+ * SVG used to be a fourth entry here and has moved to the picture exports,
+ * where it belongs: it is a drawing of the characters rather than the
+ * characters, it is the only one of the four that means something for the tile
+ * and mark styles, and filing it under "text" meant nobody looking for a vector
+ * export ever found it.
  */
 
 import { brailleFor, glyphFor } from './painters'
@@ -24,7 +29,7 @@ import { buildGrid } from './render'
 import { getStyle } from './styles'
 import type { AsciiDoc } from './types'
 
-export type TextFormat = 'txt' | 'ansi' | 'html' | 'svg'
+export type TextFormat = 'txt' | 'ansi' | 'html'
 
 export interface TextGrid {
   cols: number
@@ -189,75 +194,14 @@ function toHtml(t: TextGrid, doc: AsciiDoc): string {
   ].join('')
 }
 
-/**
- * SVG, with the text left as text.
- *
- * Which is the point of offering it: an SVG of paths would just be a vector
- * picture of characters, and this one can still be selected, searched and
- * restyled. `xml:space="preserve"` is load-bearing, because SVG collapses runs
- * of whitespace by default and every blank cell in the picture is a space.
- */
-function toSvg(t: TextGrid, doc: AsciiDoc): string {
-  const cw = doc.grid.cell
-  const ch = cw * doc.grid.aspect
-  const w = Math.round(t.cols * cw)
-  const h = Math.round(t.rows * ch)
-  const rows: string[] = []
-
-  for (let row = 0; row < t.rows; row++) {
-    const line = t.lines[row]
-    if (!line) continue
-    const y = (row + 0.72) * ch
-    if (!t.colors) {
-      rows.push(`<text x="0" y="${y.toFixed(2)}" xml:space="preserve">${escapeHtml(line)}</text>`)
-      continue
-    }
-    let spans = ''
-    let run = ''
-    let runColor = ''
-    let runStart = 0
-    const flush = (end: number) => {
-      if (!run) return
-      spans += `<tspan x="${(runStart * cw).toFixed(2)}" fill="rgb(${runColor || '255,255,255'})" xml:space="preserve">${escapeHtml(run)}</tspan>`
-      runStart = end
-      run = ''
-    }
-    for (let col = 0; col < line.length; col++) {
-      const c = t.colors[row * t.cols + col] ?? ''
-      if (c !== runColor) {
-        flush(col)
-        runColor = c
-      }
-      run += line[col]
-    }
-    flush(line.length)
-    rows.push(`<text y="${y.toFixed(2)}" xml:space="preserve">${spans}</text>`)
-  }
-
-  const bg =
-    doc.backdrop.mode === 'transparent'
-      ? ''
-      : `<rect width="${w}" height="${h}" fill="${doc.backdrop.color}"/>`
-
-  return [
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">`,
-    bg,
-    `<g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="${(cw / 0.6).toFixed(2)}" fill="${doc.color.ink}">`,
-    rows.join(''),
-    '</g></svg>',
-  ].join('')
-}
-
 export function toText(t: TextGrid, doc: AsciiDoc, format: TextFormat): string {
   if (format === 'txt') return t.lines.join('\n')
   if (format === 'ansi') return toAnsi(t)
-  if (format === 'html') return toHtml(t, doc)
-  return toSvg(t, doc)
+  return toHtml(t, doc)
 }
 
 export const TEXT_FORMATS: { id: TextFormat; label: string; ext: string; mime: string; hint: string }[] = [
   { id: 'txt', label: 'Plain text', ext: 'txt', mime: 'text/plain', hint: 'The glyphs alone. Pastes into anything.' },
   { id: 'ansi', label: 'ANSI', ext: 'ans', mime: 'text/plain', hint: '24-bit colour escapes. `cat` it in a terminal.' },
   { id: 'html', label: 'HTML', ext: 'html', mime: 'text/html', hint: 'A <pre> block with the colours inline.' },
-  { id: 'svg', label: 'SVG', ext: 'svg', mime: 'image/svg+xml', hint: 'Vector, and the text is still text.' },
 ]

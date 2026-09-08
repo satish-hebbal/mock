@@ -104,7 +104,7 @@ export function defaultProject(): ProjectDoc {
   }
 }
 
-export type AppMode = 'home' | 'studio' | 'shots' | 'draw' | 'ascii'
+export type AppMode = 'home' | 'studio' | 'shots' | 'draw' | 'ascii' | 'signal'
 
 /** Sections of the left tool rail in Studio; each one opens the panel beside it. */
 export type ToolSection = 'devices' | 'camera' | 'frame' | 'background' | 'add'
@@ -940,7 +940,8 @@ export const useStudio = create<StudioState>()(
           savedMode === 'shots' ||
           savedMode === 'studio' ||
           savedMode === 'draw' ||
-          savedMode === 'ascii'
+          savedMode === 'ascii' ||
+          savedMode === 'signal'
             ? savedMode
             : 'home'
         set((s) => {

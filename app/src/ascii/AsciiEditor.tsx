@@ -23,7 +23,7 @@ function ExportButton() {
       onClick={() => useAscii.getState().setDialog('export')}
       disabled={!ready}
       title="Export (E)"
-      className="pointer-events-auto flex h-8 items-center gap-1.5 rounded-md bg-(--accent-fill) px-3 t-button text-(--accent-tx) transition-opacity hover:opacity-90 disabled:opacity-40"
+      className="pointer-events-auto flex h-8 items-center gap-1.5 rounded-md bg-(--accent-fill) px-3 t-button text-(--accent-tx) hover:bg-(--accent-fill-hover) disabled:opacity-40"
     >
       <Download size={14} strokeWidth={1.9} />
       Export

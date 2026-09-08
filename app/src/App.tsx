@@ -7,7 +7,9 @@ import { ShotsEditor } from './shots/ShotsEditor'
 import { DrawEditor } from './draw/DrawEditor'
 import { useDraw } from './draw/store'
 import { AsciiEditor } from './ascii/AsciiEditor'
+import { SignalEditor } from './signal/SignalEditor'
 import { useAscii } from './ascii/store'
+import { useSignal } from './signal/store'
 import { RECIPES } from './ascii/presets'
 import { PENS, PEN_ORDER } from './draw/pens'
 import { SHAPE_TOOLS } from './draw/shapeTools'
@@ -152,9 +154,9 @@ function useGlobalShortcuts() {
       const key = keyOf(e)
 
       // Alt, not Ctrl: Ctrl+1/2/3 are browser tab switches and can't be cancelled
-      if (e.altKey && (key === '1' || key === '2' || key === '3' || key === '4')) {
-        const MODES = { '1': 'studio', '2': 'shots', '3': 'draw', '4': 'ascii' } as const
-        s.setMode(MODES[key as '1' | '2' | '3' | '4'])
+      if (e.altKey && key >= '1' && key <= '5') {
+        const MODES = { '1': 'studio', '2': 'shots', '3': 'draw', '4': 'ascii', '5': 'signal' } as const
+        s.setMode(MODES[key as keyof typeof MODES])
         return true
       }
       /*
@@ -276,6 +278,42 @@ function useGlobalShortcuts() {
      * both of the tools this one is modelled on, and on a drawing canvas the
      * eraser wins. Export moves to Ctrl+Shift+E.
      */
+    /*
+     * Signal's own keys. Space is the one that matters and the one that has to
+     * be claimed here: with focus parked on a button the browser would fire
+     * that button instead, which is the bug the root-focus dance elsewhere in
+     * this file exists to prevent.
+     */
+    const handleSignal = (e: KeyboardEvent) => {
+      const g = useSignal.getState()
+      const mod = e.ctrlKey || e.metaKey
+      const key = keyOf(e)
+
+      if (mod && key === 'z') {
+        e.preventDefault()
+        if (e.shiftKey) g.redo()
+        else g.undo()
+      } else if (mod && key === 'y') {
+        e.preventDefault()
+        g.redo()
+      } else if (mod) {
+        return
+      } else if (e.key === ' ') {
+        e.preventDefault()
+        g.togglePlay()
+      } else if (key === 'e') {
+        g.setDialog(g.dialog === 'export' ? null : 'export')
+      } else if (e.key === 'Escape') {
+        g.setDialog(null)
+      } else if (key === 'r') {
+        g.shuffle()
+      } else if (key === 'i') {
+        g.swapInk()
+      } else if (key === '0') {
+        g.restart()
+      }
+    }
+
     const handleDraw = (e: KeyboardEvent) => {
       const d = useDraw.getState()
       const mod = e.ctrlKey || e.metaKey
@@ -524,6 +562,7 @@ function useGlobalShortcuts() {
       else if (st.mode === 'studio') handleStudio(e)
       else if (st.mode === 'draw') handleDraw(e)
       else if (st.mode === 'ascii') handleAscii(e)
+      else if (st.mode === 'signal') handleSignal(e)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -688,6 +727,8 @@ function Editor() {
           <DrawEditor />
         ) : mode === 'ascii' ? (
           <AsciiEditor />
+        ) : mode === 'signal' ? (
+          <SignalEditor />
         ) : (
           <ShotsEditor />
         )}

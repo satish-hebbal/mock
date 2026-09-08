@@ -12,7 +12,15 @@ import type { CSSProperties } from 'react'
  * The squares are a whisper of `--tx3` over the canvas, enough to see the grid
  * if you look for it, not enough to compete with a screenshot.
  */
-const SQUARE = 'color-mix(in srgb, var(--tx3) 8%, transparent)'
+/*
+ * Its own token rather than a percentage of `--tx3`.
+ *
+ * Mixing a percentage out of a colour that is itself translucent multiplies the
+ * two alphas, so once the ink ladder became "white at low strength" this square
+ * quietly dropped to a third of the weight it was drawn at and the grid all but
+ * vanished. The token is defined next to the ink it belongs with.
+ */
+const SQUARE = 'var(--checker-square)'
 const TILE = 22
 
 export const ALPHA_CHECKER: CSSProperties = {

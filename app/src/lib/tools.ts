@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react'
-import { Boxes, Grid3x3, Image as ImageIcon, PenLine, type LucideIcon } from 'lucide-react'
+import { Boxes, Grid3x3, Image as ImageIcon, PenLine, Waves, type LucideIcon } from 'lucide-react'
 import type { AppMode } from '../store'
 
 /**
@@ -53,6 +53,13 @@ export const TOOLS: Tool[] = [
     tagline: 'Redraw a picture as characters, tiles or dither, and keep the text.',
     icon: Grid3x3,
     tint: ['158, 118, 226', '196, 150, 244'],
+  },
+  {
+    id: 'signal',
+    name: 'Signal',
+    tagline: 'Dithered motion out of nothing. Take it away as a loop.',
+    icon: Waves,
+    tint: ['58, 168, 208', '110, 208, 236'],
   },
 ]
 

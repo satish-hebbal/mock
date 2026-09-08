@@ -18,10 +18,18 @@ import { useStudio } from '../store'
 import { track } from '../lib/analytics'
 import { ui } from '../lib/ui'
 import { renderAscii } from './render'
+import { renderAsciiSvg, svgOmissions } from './svg'
 import { canExportText, textGrid, toText, TEXT_FORMATS, type TextFormat } from './text'
 import type { AsciiDoc } from './types'
 
-export type ImageFormat = 'png' | 'jpg'
+/**
+ * SVG sits with the raster formats rather than with the text ones.
+ *
+ * It is a picture of the document, the same as a PNG, and unlike the text
+ * exports it means something for every style: a mosaic or a set of voxels is
+ * just as vector as a wall of characters.
+ */
+export type ImageFormat = 'png' | 'jpg' | 'svg'
 
 export function exportSize(doc: AsciiDoc, scale: number) {
   return {
@@ -43,7 +51,7 @@ function downloadBlob(blob: Blob, filename: string) {
   setTimeout(() => URL.revokeObjectURL(url), 2000)
 }
 
-async function toBlob(canvas: HTMLCanvasElement, format: ImageFormat): Promise<Blob> {
+async function toBlob(canvas: HTMLCanvasElement, format: 'png' | 'jpg'): Promise<Blob> {
   const mime = format === 'png' ? 'image/png' : 'image/jpeg'
   const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, mime, 0.92))
   if (!blob) throw new Error('Encoding failed')
@@ -62,6 +70,14 @@ export async function downloadImage(
   format: ImageFormat,
   scale: number,
 ) {
+  if (format === 'svg') {
+    // no scale: a viewBox carries the proportions and the consumer picks the
+    // size, so there is no such thing as a 2x SVG
+    const svg = renderAsciiSvg(doc, source)
+    downloadBlob(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }), `${safeName(doc.name)}.svg`)
+    return
+  }
+
   const { canvas } = renderAtScale(doc, source, scale)
   /*
    * A JPG has no alpha, and a transparent backdrop encoded as one comes out
@@ -77,6 +93,11 @@ export async function downloadImage(
     ctx.globalCompositeOperation = 'source-over'
   }
   downloadBlob(await toBlob(canvas, format), `${safeName(doc.name)}.${format}`)
+}
+
+/** The SVG markup itself, which is what pastes into a design tool or an editor. */
+export async function copySvg(doc: AsciiDoc, source: CanvasImageSource | null) {
+  await navigator.clipboard.writeText(renderAsciiSvg(doc, source))
 }
 
 export async function copyImage(doc: AsciiDoc, source: CanvasImageSource | null, scale: number) {
@@ -145,5 +166,5 @@ export function trackExport(
   track(phase, shape)
 }
 
-export { canExportText, TEXT_FORMATS }
+export { canExportText, TEXT_FORMATS, svgOmissions }
 export type { TextFormat }

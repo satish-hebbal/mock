@@ -1,11 +1,16 @@
 /**
  * The renderer.
  *
- * One function, `renderAscii`, and both the canvas on screen and every exported
- * file go through it. That is the whole parity story: there is no preview
- * renderer to keep in step with an export renderer, because there is only one,
- * and the only thing that changes between the two calls is the number handed in
- * as the output width.
+ * `paintArt` is the one description of what a document looks like, and it draws
+ * onto a `Surface` rather than onto a canvas. Everything else here is the canvas
+ * path: `renderAscii` gives it a canvas backend and gets pixels, and `svg.ts`
+ * gives it a vector backend and gets elements. Neither knows anything the other
+ * does not.
+ *
+ * That is the whole parity story, and it now covers three outputs rather than
+ * two: the canvas on screen, the exported PNG and the exported SVG are the same
+ * function called three times, and the only thing that differs between the
+ * first two is the number handed in as the output width.
  *
  * Everything positional is derived from `scale`, the ratio of output width to
  * document width, so a blur radius, a scan line gap and a stud highlight all
@@ -21,18 +26,8 @@ import { applyFx, hasFx } from './postfx'
 import { rampChars, getRamp } from './ramps'
 import { applyToneToPixels, sampleGrid, toInk, type CellGrid, type Levels } from './sample'
 import { getStyle } from './styles'
+import { CanvasSurface, MONO, type Surface } from './surface'
 import { gridSize, type AsciiDoc } from './types'
-
-/**
- * The stack a glyph style draws with.
- *
- * Every entry has to be monospaced, because the grid assumes one advance width
- * for every character in the ramp. The block and braille code points are the
- * reason the list runs as long as it does: not every monospace face carries
- * them, and a missing glyph falls back to a proportional face and knocks the
- * whole row out of alignment.
- */
-const MONO = 'ui-monospace, "SF Mono", "DejaVu Sans Mono", "Cascadia Mono", Menlo, Consolas, monospace'
 
 export interface AsciiRender {
   canvas: HTMLCanvasElement
@@ -41,7 +36,7 @@ export interface AsciiRender {
   rows: number
 }
 
-function makeCanvas(w: number, h: number) {
+export function makeCanvas(w: number, h: number) {
   const c = document.createElement('canvas')
   c.width = Math.max(1, Math.round(w))
   c.height = Math.max(1, Math.round(h))
@@ -59,7 +54,7 @@ function drawCover(ctx: CanvasRenderingContext2D, src: CanvasImageSource, w: num
   ctx.drawImage(src, (w - dw) / 2, (h - dh) / 2, dw, dh)
 }
 
-function paintBackdrop(
+export function paintBackdrop(
   ctx: CanvasRenderingContext2D,
   doc: AsciiDoc,
   source: CanvasImageSource | null,
@@ -113,15 +108,8 @@ function cubePalette(levels = 4): RGB[] {
   return out
 }
 
-/**
- * The dither path.
- *
- * Reduce first, dither second, enlarge third. The order is the effect: dithering
- * at full resolution and then shrinking averages the pattern straight back into
- * the grey it was invented to avoid, which is the single most common way this
- * comes out looking like noise instead of like a Game Boy.
- */
-function renderDither(doc: AsciiDoc, source: CanvasImageSource, w: number, h: number) {
+/** The reduced buffer a dither document is really made of, before it is enlarged. */
+export function ditherPixels(doc: AsciiDoc, source: CanvasImageSource) {
   const px = Math.max(1, doc.dither.scale)
   const dw = Math.max(1, Math.round(doc.size.width / px))
   const dh = Math.max(1, Math.round(doc.size.height / px))
@@ -147,7 +135,21 @@ function renderDither(doc: AsciiDoc, source: CanvasImageSource, w: number, h: nu
     serpentine: doc.dither.serpentine,
     amount: doc.dither.amount,
   })
-  sctx.putImageData(img, 0, 0)
+  return { img, cols: dw, rows: dh }
+}
+
+/**
+ * The dither path.
+ *
+ * Reduce first, dither second, enlarge third. The order is the effect: dithering
+ * at full resolution and then shrinking averages the pattern straight back into
+ * the grey it was invented to avoid, which is the single most common way this
+ * comes out looking like noise instead of like a Game Boy.
+ */
+function renderDither(doc: AsciiDoc, source: CanvasImageSource, w: number, h: number) {
+  const { img, cols, rows } = ditherPixels(doc, source)
+  const small = makeCanvas(cols, rows)
+  small.getContext('2d')!.putImageData(img, 0, 0)
 
   const art = makeCanvas(w, h)
   const ctx = art.getContext('2d')!
@@ -173,7 +175,7 @@ function mix(a: RGB, b: RGB, t: number): string {
   return `rgb(${c(0)}, ${c(1)}, ${c(2)})`
 }
 
-function hexRGB(hex: string): RGB {
+export function hexRGB(hex: string): RGB {
   const h = hex.replace('#', '')
   const full = h.length === 3 ? h[0] + h[0] + h[1] + h[1] + h[2] + h[2] : h
   const n = parseInt(full, 16)
@@ -261,77 +263,68 @@ export function buildGrid(doc: AsciiDoc, source: CanvasImageSource): GridResult 
   return { grid, levels, fine, cols, rows }
 }
 
-export function renderAscii(
+/**
+ * The advance width of one character at 100px, in the app's monospace stack.
+ *
+ * Measured rather than assumed, because monospace faces are not all 0.6em wide
+ * and being wrong by five per cent shows up as the right-hand column of the
+ * picture drifting off the canvas. Cached, because it is a property of the
+ * font stack and the machine, and measuring it per render meant creating a
+ * canvas on every slider frame.
+ */
+let advanceCache = 0
+function monoAdvance(): number {
+  if (advanceCache) return advanceCache
+  const ctx = makeCanvas(8, 8).getContext('2d')!
+  ctx.font = `100px ${MONO}`
+  advanceCache = ctx.measureText('M').width || 60
+  return advanceCache
+}
+
+/** The type size a glyph style draws at, for a given cell. */
+export function glyphFontSize(doc: AsciiDoc, cw: number, ch: number): number {
+  const fontPx = (cw / monoAdvance()) * 100
+  /*
+   * Solid ramps get sized to the cell height instead, and so overlap slightly.
+   * A block character has to tile with its neighbours to read as a fill, and a
+   * hairline of backdrop between rows is far more visible than a hairline of
+   * overlap.
+   */
+  if (getRamp(doc.ramp).solid || doc.style === 'blocks') return Math.max(fontPx, ch * 1.04)
+  return fontPx
+}
+
+/**
+ * Draw the document's cells onto a surface.
+ *
+ * The single description of what every style looks like. Called once with a
+ * canvas backend for the preview and the raster exports, and once with a vector
+ * backend for SVG, which is why there is no separate SVG idea of a mosaic tile
+ * to fall out of step with this one.
+ */
+export function paintArt(
+  surface: Surface,
   doc: AsciiDoc,
-  source: CanvasImageSource | null,
+  source: CanvasImageSource,
   outW: number,
   outH: number,
-): AsciiRender {
-  const out = makeCanvas(outW, outH)
-  const ctx = out.getContext('2d')!
-  const scale = outW / Math.max(1, doc.size.width)
-
-  paintBackdrop(ctx, doc, source, out.width, out.height, scale)
-
-  if (!source) {
-    if (hasFx(doc.fx)) applyFx(out, doc.fx, scale)
-    return { canvas: out, cols: 0, rows: 0 }
-  }
-
-  if (doc.style === 'dither') {
-    const art = renderDither(doc, source, out.width, out.height)
-    colorPass(art, doc)
-    ctx.save()
-    ctx.globalAlpha = doc.color.opacity
-    ctx.drawImage(art, 0, 0)
-    ctx.restore()
-    if (hasFx(doc.fx)) applyFx(out, doc.fx, scale)
-    const px = Math.max(1, doc.dither.scale)
-    return {
-      canvas: out,
-      cols: Math.round(doc.size.width / px),
-      rows: Math.round(doc.size.height / px),
-    }
-  }
-
+): { cols: number; rows: number } {
   const spec = getStyle(doc.style)
   const { grid, levels, fine, cols, rows } = buildGrid(doc, source)
 
-  const art = makeCanvas(out.width, out.height)
-  const actx = art.getContext('2d')!
-  const cw = out.width / cols
-  const ch = out.height / rows
-
+  const cw = outW / cols
+  const ch = outH / rows
   const chars = doc.style === 'blocks' ? getRamp('blocks').chars : rampChars(doc.ramp, doc.customRamp)
 
-  if (spec.glyph) {
-    /*
-     * Size the font from its own advance width rather than guessing a ratio.
-     * Monospace faces are not all 0.6em wide, and being wrong by five per cent
-     * shows up as the right-hand column of the picture drifting off the canvas.
-     */
-    actx.font = `100px ${MONO}`
-    const advance = actx.measureText('M').width || 60
-    let fontPx = (cw / advance) * 100
-    /*
-     * Solid ramps get sized to the cell height instead, and so overlap
-     * slightly. A block character has to tile with its neighbours to read as a
-     * fill, and a hairline of backdrop between rows is far more visible than a
-     * hairline of overlap.
-     */
-    if (getRamp(doc.ramp).solid || doc.style === 'blocks') fontPx = Math.max(fontPx, ch * 1.04)
-    actx.font = `${fontPx}px ${MONO}`
-    actx.textAlign = 'center'
-    actx.textBaseline = 'middle'
-  }
+  if (spec.glyph) surface.font(glyphFontSize(doc, cw, ch))
 
-  const painter = PAINTERS[doc.style]
+  const painter = PAINTERS[doc.style as Exclude<AsciiDoc['style'], 'dither'>]
   const paintsEveryCell = spec.group === 'raster'
   const env: PainterEnv = { chars, jitter: doc.grid.jitter, gap: doc.grid.gap, fine }
   const inkHex = hexRGB(doc.color.ink)
   const ink2Hex = hexRGB(doc.color.ink2)
   const cell: CellCtx = {
-    ctx: actx,
+    s: surface,
     x: 0,
     y: 0,
     w: cw,
@@ -399,6 +392,43 @@ export function renderAscii(
       cell.b = b
       painter(cell, env)
     }
+  }
+
+  return { cols, rows }
+}
+
+export function renderAscii(
+  doc: AsciiDoc,
+  source: CanvasImageSource | null,
+  outW: number,
+  outH: number,
+): AsciiRender {
+  const out = makeCanvas(outW, outH)
+  const ctx = out.getContext('2d')!
+  const scale = outW / Math.max(1, doc.size.width)
+
+  paintBackdrop(ctx, doc, source, out.width, out.height, scale)
+
+  if (!source) {
+    if (hasFx(doc.fx)) applyFx(out, doc.fx, scale)
+    return { canvas: out, cols: 0, rows: 0 }
+  }
+
+  const art =
+    doc.style === 'dither'
+      ? renderDither(doc, source, out.width, out.height)
+      : makeCanvas(out.width, out.height)
+
+  let cols = 0
+  let rows = 0
+  if (doc.style === 'dither') {
+    const px = Math.max(1, doc.dither.scale)
+    cols = Math.round(doc.size.width / px)
+    rows = Math.round(doc.size.height / px)
+  } else {
+    const grid = paintArt(new CanvasSurface(art.getContext('2d')!), doc, source, out.width, out.height)
+    cols = grid.cols
+    rows = grid.rows
   }
 
   colorPass(art, doc)

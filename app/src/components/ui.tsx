@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AlertTriangle, CheckCircle2, CircleMinus, Info } from 'lucide-react'
 import { closeRequest, useUI, type Request, type ToastKind } from '../lib/ui'
+import { Scrim } from './Overlay'
 
 function RequestDialog({ request }: { request: Request }) {
   const [draft, setDraft] = useState(request.kind === 'prompt' ? (request.initial ?? '') : '')
@@ -9,69 +10,99 @@ function RequestDialog({ request }: { request: Request }) {
     setDraft(request.kind === 'prompt' ? (request.initial ?? '') : '')
   }, [request])
 
-  const cancel = () => closeRequest(request, request.kind === 'prompt' ? null : false)
-  const accept = () => closeRequest(request, request.kind === 'prompt' ? draft.trim() : true)
+  /*
+   * Which way the dialog was answered, decided the moment a button is pressed
+   * and acted on once the exit animation has finished.
+   *
+   * Every dismissal now runs through the Scrim so that all of them animate out,
+   * including OK. That means the promise is settled by the Scrim's `onClose`
+   * rather than by the button handler, and the two are 130ms apart, so the
+   * answer has to be parked somewhere in between. A ref rather than state
+   * because nothing renders differently for it and a re-render here would
+   * restart the animation that is currently playing.
+   */
+  const accepted = useRef(false)
+  const settle = () => {
+    if (request.kind === 'prompt') closeRequest(request, accepted.current ? draft.trim() : null)
+    else closeRequest(request, accepted.current)
+  }
+
   const danger = request.kind === 'confirm' && request.danger
 
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-6"
-      onMouseDown={cancel}
-    >
-      <div
-        onMouseDown={(e) => e.stopPropagation()}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') cancel()
-          if (e.key === 'Enter' && request.kind === 'prompt' && draft.trim()) accept()
-        }}
-        className="w-full max-w-sm rounded-xl border border-(--line) bg-(--raised) p-5"
-      >
-        <div className="mb-3 flex items-start justify-between gap-3">
-          <h2 className="t-body font-semibold text-(--tx)">{request.title}</h2>
-          <button
-            onClick={cancel}
-            aria-label="Close"
-            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-(--tx3) hover:bg-(--panel3) hover:text-(--tx)"
+    <Scrim onClose={settle} z={60} label={request.title}>
+      {(dismiss) => {
+        const cancel = () => {
+          accepted.current = false
+          dismiss()
+        }
+        const accept = () => {
+          accepted.current = true
+          dismiss()
+        }
+        return (
+          <div
+            /*
+             * Escape used to be handled here and so only worked while focus happened
+             * to be inside the panel; the Scrim now takes it at the document. Enter
+             * stays, because it means "submit this form" rather than "dismiss this
+             * layer", and only the form knows what submitting it does.
+             */
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && request.kind === 'prompt' && draft.trim()) accept()
+            }}
+            className="w-full max-w-sm rounded-xl border border-(--line) bg-(--raised) p-5"
           >
-            <CircleMinus size={16} strokeWidth={1.75} />
-          </button>
-        </div>
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <h2 className="t-body font-semibold text-(--tx)">{request.title}</h2>
+              <button
+                onClick={cancel}
+                aria-label="Close"
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-(--tx3) hover:bg-(--panel3) hover:text-(--tx)"
+              >
+                <CircleMinus size={16} strokeWidth={1.75} />
+              </button>
+          </div>
 
-        {request.kind === 'prompt' ? (
-          <>
-            {request.label && <p className="mb-2 t-body-sm text-(--tx2)">{request.label}</p>}
-            <input
-              autoFocus
-              value={draft}
-              placeholder={request.placeholder}
-              onChange={(e) => setDraft(e.target.value)}
-              className="mb-4 w-full rounded-md bg-(--field) px-3 py-2 t-body-sm text-(--tx) outline-none placeholder:text-(--tx3) focus:ring-2 focus:ring-(--focus)"
-            />
-          </>
-        ) : (
-          request.body && <p className="mb-4 t-body-sm leading-relaxed text-(--tx2)">{request.body}</p>
-        )}
+          {request.kind === 'prompt' ? (
+            <>
+              {request.label && <p className="mb-2 t-body-sm text-(--tx2)">{request.label}</p>}
+              <input
+                autoFocus
+                value={draft}
+                placeholder={request.placeholder}
+                onChange={(e) => setDraft(e.target.value)}
+                className="mb-4 w-full rounded-md bg-(--field) px-3 py-2 t-body-sm text-(--tx) outline-none placeholder:text-(--tx3) focus:ring-2 focus:ring-(--focus)"
+              />
+            </>
+          ) : (
+            request.body && <p className="mb-4 t-body-sm leading-relaxed text-(--tx2)">{request.body}</p>
+          )}
 
-        <div className="flex justify-end gap-2">
-          <button
-            onClick={cancel}
-            className="rounded-md bg-(--field) px-3.5 py-2 t-button text-(--tx2) hover:bg-(--field-h) hover:text-(--tx)"
-          >
-            Cancel
-          </button>
-          <button
-            autoFocus={request.kind === 'confirm'}
-            onClick={accept}
-            disabled={request.kind === 'prompt' && draft.trim() === ''}
-            className={`rounded-md px-3.5 py-2 t-button disabled:opacity-40 ${
-              danger ? 'bg-(--danger) text-white' : 'bg-(--accent-fill) text-(--accent-tx)'
-            } hover:opacity-90`}
-          >
-            {request.confirmLabel ?? (request.kind === 'prompt' ? 'OK' : 'Confirm')}
-          </button>
-        </div>
-      </div>
-    </div>
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={cancel}
+              className="rounded-md bg-(--field) px-3.5 py-2 t-button text-(--tx2) hover:bg-(--field-h) hover:text-(--tx)"
+            >
+              Cancel
+            </button>
+            <button
+              autoFocus={request.kind === 'confirm'}
+              onClick={accept}
+              disabled={request.kind === 'prompt' && draft.trim() === ''}
+              className={`rounded-md px-3.5 py-2 t-button disabled:opacity-40 ${
+                danger
+                  ? 'bg-(--danger) text-white hover:bg-(--danger-hover)'
+                  : 'bg-(--accent-fill) text-(--accent-tx) hover:bg-(--accent-fill-hover)'
+              }`}
+            >
+              {request.confirmLabel ?? (request.kind === 'prompt' ? 'OK' : 'Confirm')}
+            </button>
+            </div>
+          </div>
+        )
+      }}
+    </Scrim>
   )
 }
 
@@ -96,7 +127,8 @@ export function UILayer() {
             <div
               key={t.id}
               role="status"
-              className={`pointer-events-auto flex max-w-sm items-start gap-2 rounded-lg border px-3 py-2 t-body-sm ${
+              data-leaving={t.leaving || undefined}
+              className={`toast-item pointer-events-auto flex max-w-sm items-start gap-2 rounded-lg border px-3 py-2 t-body-sm ${
                 t.kind === 'error'
                   ? 'border-(--danger) bg-(--raised) text-(--danger)'
                   : 'border-(--line) bg-(--raised) text-(--tx2)'

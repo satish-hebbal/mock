@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { X } from 'lucide-react'
 import { ui } from '../lib/ui'
 import { track } from '../lib/analytics'
+import { Scrim } from './Overlay'
 
 /**
  * Where feedback goes. Web3Forms relays the POST below to the inbox that
@@ -73,67 +74,68 @@ export function FeedbackDialog({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-6"
-      onMouseDown={() => !sending && onClose()}
-    >
-      <div
-        onMouseDown={(e) => e.stopPropagation()}
-        onKeyDown={(e) => e.key === 'Escape' && !sending && onClose()}
-        className="w-[360px] rounded-xl border border-(--line) bg-(--raised) p-5"
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="t-subhead text-(--tx)">Send feedback</p>
-            <p className="t-body-sm text-(--tx3)">We read them all.</p>
+    /*
+     * Not dismissible while the note is in flight. Escape and the scrim both go
+     * quiet, because losing what you wrote to a stray key press between pressing
+     * Send and the request landing is the one failure this dialog cannot
+     * apologise for.
+     */
+    <Scrim onClose={onClose} z={60} label="Send feedback" dismissible={!sending}>
+      {(close) => (
+        <div className="w-[360px] rounded-xl border border-(--line) bg-(--raised) p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="t-subhead text-(--tx)">Send feedback</p>
+              <p className="t-body-sm text-(--tx3)">We read them all.</p>
+            </div>
+            <button
+              onClick={close}
+              aria-label="Close"
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-(--field) text-(--tx2) hover:bg-(--field-h) hover:text-(--tx)"
+            >
+              <X size={14} strokeWidth={2} />
+            </button>
           </div>
+
+          {/*
+            The faces come before the box on purpose. One tap is the whole
+            interaction for most people, and asking for prose first is what makes
+            a feedback form feel like homework.
+          */}
+          <div className="mt-4 flex gap-2">
+            {MOODS.map((m, i) => (
+              <button
+                key={m}
+                onClick={() => setMood(i)}
+                aria-label={`Mood ${i + 1} of ${MOODS.length}`}
+                aria-pressed={mood === i}
+                className={`flex h-11 flex-1 items-center justify-center rounded-full text-xl transition-colors ${
+                  mood === i ? 'bg-(--sel)' : 'bg-(--field) hover:bg-(--field-h)'
+                }`}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
+
+          <p className="mt-4 t-body-sm text-(--tx2)">How can we improve your experience?</p>
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Write your feedback…"
+            rows={5}
+            className="mt-2 w-full resize-none rounded-lg bg-(--field) p-3 t-body-sm text-(--tx) placeholder:text-(--tx3) focus:outline-none"
+          />
+
           <button
-            onClick={onClose}
-            aria-label="Close"
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-(--field) text-(--tx2) hover:bg-(--field-h) hover:text-(--tx)"
+            onClick={() => void send()}
+            disabled={sending || (mood === null && !note.trim())}
+            className="mt-3 h-10 w-full rounded-lg bg-(--accent-fill) t-button text-(--accent-tx) hover:bg-(--accent-fill-hover) disabled:opacity-40"
           >
-            <X size={14} strokeWidth={2} />
+            {sending ? 'Sending…' : 'Send feedback'}
           </button>
         </div>
-
-        {/*
-          The faces come before the box on purpose. One tap is the whole
-          interaction for most people, and asking for prose first is what makes
-          a feedback form feel like homework.
-        */}
-        <div className="mt-4 flex gap-2">
-          {MOODS.map((m, i) => (
-            <button
-              key={m}
-              onClick={() => setMood(i)}
-              aria-label={`Mood ${i + 1} of ${MOODS.length}`}
-              aria-pressed={mood === i}
-              className={`flex h-11 flex-1 items-center justify-center rounded-full text-xl transition-colors ${
-                mood === i ? 'bg-(--sel)' : 'bg-(--field) hover:bg-(--field-h)'
-              }`}
-            >
-              {m}
-            </button>
-          ))}
-        </div>
-
-        <p className="mt-4 t-body-sm text-(--tx2)">How can we improve your experience?</p>
-        <textarea
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          placeholder="Write your feedback…"
-          rows={5}
-          className="mt-2 w-full resize-none rounded-lg bg-(--field) p-3 t-body-sm text-(--tx) placeholder:text-(--tx3) focus:outline-none"
-        />
-
-        <button
-          onClick={() => void send()}
-          disabled={sending || (mood === null && !note.trim())}
-          className="mt-3 h-10 w-full rounded-lg bg-(--accent-fill) t-button text-(--accent-tx) transition-opacity hover:opacity-90 disabled:opacity-40"
-        >
-          {sending ? 'Sending…' : 'Send feedback'}
-        </button>
-      </div>
-    </div>
+      )}
+    </Scrim>
   )
 }

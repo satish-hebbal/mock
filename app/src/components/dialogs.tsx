@@ -1,56 +1,16 @@
-import { useState, type ReactNode } from 'react'
+import { useState } from 'react'
 import { useStudio } from '../store'
 import { cancelExport, exportImage, exportImageBatch, exportVideo } from '../lib/export'
 import { SIZE_PRESETS } from '../lib/presets'
 import { TEMPLATES } from '../lib/presets'
 import { SHORTCUT_GROUPS } from '../lib/shortcuts'
-import { CircleMinus } from 'lucide-react'
 import { ui } from '../lib/ui'
 import { track } from '../lib/analytics'
 import { Dropdown, MiniButton, Segments, SliderRow } from './controls'
+import { Dialog } from './Overlay'
 
 /** Sentinel size option: follow the project's frame instead of a fixed preset. */
 const FRAME_IDX = -2
-
-function Modal({
-  title,
-  onClose,
-  children,
-  wide,
-  aside,
-}: {
-  title: string
-  onClose: () => void
-  children: ReactNode
-  wide?: boolean
-  /** small note rendered next to the title (e.g. the key that toggles it) */
-  aside?: ReactNode
-}) {
-  return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-6" onMouseDown={onClose}>
-      <div
-        className={`max-h-[85vh] w-full ${wide ? 'max-w-2xl' : 'max-w-md'} overflow-y-auto rounded-xl border border-(--line) bg-(--raised) p-5`}
-        onMouseDown={(e) => e.stopPropagation()}
-      >
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <h2 className="t-eyebrow text-(--tx) uppercase">{title}</h2>
-            {aside}
-          </div>
-          <button
-            onClick={onClose}
-            aria-label="Close"
-            title="Close"
-            className="flex h-7 w-7 items-center justify-center rounded-full text-(--tx3) hover:bg-(--panel3) hover:text-(--tx)"
-          >
-            <CircleMinus size={18} strokeWidth={1.75} />
-          </button>
-        </div>
-        {children}
-      </div>
-    </div>
-  )
-}
 
 // ----- Export dialog (PRD §6.10) -----
 
@@ -162,7 +122,7 @@ export function ExportDialog() {
   }
 
   return (
-    <Modal title="Export" onClose={() => st().setDialog(null)}>
+    <Dialog title="Export" onClose={() => st().setDialog(null)}>
       <Segments
         options={[
           { id: 'image', label: 'Image' },
@@ -305,11 +265,11 @@ export function ExportDialog() {
           }
           void run()
         }}
-        className="w-full rounded-md bg-(--accent-fill) py-2 t-button text-(--accent-tx) hover:opacity-90"
+        className="w-full rounded-md bg-(--accent-fill) py-2 t-button text-(--accent-tx) hover:bg-(--accent-fill-hover)"
       >
         {mode === 'batch' ? `Export ${batchIdxs.length} images` : `Export ${mode} · ${outW}×${outH}`}
       </button>
-    </Modal>
+    </Dialog>
   )
 }
 
@@ -318,7 +278,7 @@ export function ExportDialog() {
 export function TemplatesDialog() {
   const st = useStudio.getState
   return (
-    <Modal title="Templates" onClose={() => st().setDialog(null)} wide>
+    <Dialog title="Templates" onClose={() => st().setDialog(null)} wide>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {TEMPLATES.map((t) => (
           <button
@@ -334,7 +294,7 @@ export function TemplatesDialog() {
           </button>
         ))}
       </div>
-    </Modal>
+    </Dialog>
   )
 }
 
@@ -382,7 +342,7 @@ export function ShortcutsDialog() {
   })).filter((g) => g.items.length > 0)
 
   return (
-    <Modal
+    <Dialog
       wide
       title="Keyboard shortcuts"
       onClose={() => st().setDialog(null)}
@@ -426,7 +386,7 @@ export function ShortcutsDialog() {
           <p className="py-6 text-center t-body-sm text-(--tx3)">No shortcut matches “{query}”.</p>
         )}
       </div>
-    </Modal>
+    </Dialog>
   )
 }
 
@@ -442,10 +402,20 @@ export function ExportProgressOverlay() {
         <p className="mb-3 t-eyebrow text-(--tx) uppercase">
           {progress.label}
         </p>
+        {/*
+          Scaled, not resized. `transition-all` on a `width` put a layout pass
+          on every progress tick, and during a video export those arrive once
+          per frame: the one moment in the app where the main thread is already
+          the scarce resource is the worst possible place to be reflowing on a
+          timer. `scaleX` on a transform runs on the compositor and never
+          touches layout, and a solid bar has no detail for the scaling to
+          distort. `transition-transform` rather than `transition-all` so it
+          also stays that way if someone adds a colour to this later.
+        */}
         <div className="mb-2 h-2 overflow-hidden rounded-full bg-(--panel2)">
           <div
-            className="h-full bg-(--tx) transition-all"
-            style={{ width: `${pct ?? 40}%` }}
+            className="h-full w-full origin-left bg-(--tx) transition-transform duration-200 ease-out"
+            style={{ transform: `scaleX(${(pct ?? 40) / 100})` }}
           />
         </div>
         {pct !== null && (

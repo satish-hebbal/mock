@@ -3,9 +3,11 @@
  *
  * One function per style, each handed a cell rectangle, an ink level and a
  * colour, and asked to draw exactly one cell. They know nothing about the
- * document, the grid or the output size, which is what makes adding a style a
- * self-contained job: write the function, add the row in `styles.ts`, and the
- * panel and both exporters pick it up without being edited.
+ * document, the grid, the output size, or even what they are drawing onto:
+ * every mark goes through the `Surface` handed to them, so the same function
+ * fills pixels on a canvas and emits elements into an SVG. That is what makes
+ * adding a style a self-contained job, and what makes vector export possible
+ * without a second description of what a LEGO brick looks like.
  *
  * A recurring detail worth stating once: where a mark's *area* should carry the
  * tone (discs, diamonds, studs) the size goes as the square root of the ink.
@@ -15,11 +17,13 @@
  */
 
 import { hash2 } from './sample'
+import type { Surface } from './surface'
 import { BRAILLE_BASE, BRAILLE_DOTS } from './ramps'
 import type { AsciiStyleId } from './types'
 
 export interface CellCtx {
-  ctx: CanvasRenderingContext2D
+  /** where the marks go: pixels on a canvas, or elements in an SVG */
+  s: Surface
   /** cell rectangle in output pixels */
   x: number
   y: number
@@ -99,48 +103,39 @@ function inset(c: CellCtx, gap: number) {
 }
 
 const glyph: Painter = (c, env) => {
-  c.ctx.fillStyle = c.color
-  c.ctx.fillText(glyphFor(env.chars, c.ink, c.col, c.row, env.jitter), c.x + c.w / 2, c.y + c.h / 2)
+  c.s.text(
+    c.x + c.w / 2,
+    c.y + c.h / 2,
+    glyphFor(env.chars, c.ink, c.col, c.row, env.jitter),
+    c.color,
+  )
 }
 
 const braille: Painter = (c, env) => {
   const ch = brailleFor(c.col, c.row, env.fine)
   if (ch === String.fromCharCode(BRAILLE_BASE)) return // the blank cell, not worth a draw call
-  c.ctx.fillStyle = c.color
-  c.ctx.fillText(ch, c.x + c.w / 2, c.y + c.h / 2)
+  c.s.text(c.x + c.w / 2, c.y + c.h / 2, ch, c.color)
 }
 
 const dots: Painter = (c, env) => {
   const box = inset(c, env.gap)
   const r = (Math.min(box.w, box.h) / 2) * Math.sqrt(c.ink)
   if (r < 0.1) return
-  c.ctx.fillStyle = c.color
-  c.ctx.beginPath()
-  c.ctx.arc(c.x + c.w / 2, c.y + c.h / 2, r, 0, Math.PI * 2)
-  c.ctx.fill()
+  c.s.circle(c.x + c.w / 2, c.y + c.h / 2, r, c.color)
 }
 
 const lines: Painter = (c, env) => {
   const box = inset(c, env.gap)
   const t = box.h * c.ink
   if (t < 0.1) return
-  c.ctx.fillStyle = c.color
-  c.ctx.fillRect(box.x, c.y + c.h / 2 - t / 2, box.w, t)
+  c.s.rect(box.x, c.y + c.h / 2 - t / 2, box.w, t, c.color)
 }
 
 const diagonals: Painter = (c, env) => {
   const box = inset(c, env.gap)
   const t = Math.min(box.w, box.h) * c.ink
   if (t < 0.1) return
-  c.ctx.save()
-  c.ctx.strokeStyle = c.color
-  c.ctx.lineWidth = t
-  c.ctx.lineCap = 'butt'
-  c.ctx.beginPath()
-  c.ctx.moveTo(box.x, box.y + box.h)
-  c.ctx.lineTo(box.x + box.w, box.y)
-  c.ctx.stroke()
-  c.ctx.restore()
+  c.s.line(box.x, box.y + box.h, box.x + box.w, box.y, t, c.color)
 }
 
 const cross: Painter = (c, env) => {
@@ -151,9 +146,8 @@ const cross: Painter = (c, env) => {
   if (t < 0.1) return
   const cx = c.x + c.w / 2
   const cy = c.y + c.h / 2
-  c.ctx.fillStyle = c.color
-  c.ctx.fillRect(box.x, cy - t / 2, box.w, t)
-  c.ctx.fillRect(cx - t / 2, box.y, t, box.h)
+  c.s.rect(box.x, cy - t / 2, box.w, t, c.color)
+  c.s.rect(cx - t / 2, box.y, t, box.h, c.color)
 }
 
 const diamond: Painter = (c, env) => {
@@ -164,14 +158,15 @@ const diamond: Painter = (c, env) => {
   if (rx < 0.1) return
   const cx = c.x + c.w / 2
   const cy = c.y + c.h / 2
-  c.ctx.fillStyle = c.color
-  c.ctx.beginPath()
-  c.ctx.moveTo(cx, cy - ry)
-  c.ctx.lineTo(cx + rx, cy)
-  c.ctx.lineTo(cx, cy + ry)
-  c.ctx.lineTo(cx - rx, cy)
-  c.ctx.closePath()
-  c.ctx.fill()
+  c.s.polygon(
+    [
+      [cx, cy - ry],
+      [cx + rx, cy],
+      [cx, cy + ry],
+      [cx - rx, cy],
+    ],
+    c.color,
+  )
 }
 
 /*
@@ -186,10 +181,9 @@ const mixed: Painter = (c, env) => {
 }
 
 const pixel: Painter = (c) => {
-  c.ctx.fillStyle = c.color
   // half a pixel of overlap, because adjacent fills on fractional boundaries
   // leave a hairline of backdrop showing between them
-  c.ctx.fillRect(c.x, c.y, c.w + 0.5, c.h + 0.5)
+  c.s.rect(c.x, c.y, c.w + 0.5, c.h + 0.5, c.color)
 }
 
 const mosaic: Painter = (c, env) => {
@@ -197,14 +191,11 @@ const mosaic: Painter = (c, env) => {
   // each tile catches the light a little differently, which is the whole
   // difference between a mosaic and a grid of squares
   const lit = 0.88 + hash2(c.col, c.row, 5) * 0.24
-  c.ctx.fillStyle = shade(c, lit)
-  c.ctx.fillRect(box.x, box.y, box.w, box.h)
+  c.s.rect(box.x, box.y, box.w, box.h, shade(c, lit))
 }
 
 const lego: Painter = (c) => {
-  const { ctx } = c
-  ctx.fillStyle = shade(c, 1)
-  ctx.fillRect(c.x, c.y, c.w + 0.5, c.h + 0.5)
+  c.s.rect(c.x, c.y, c.w + 0.5, c.h + 0.5, shade(c, 1))
 
   const r = Math.min(c.w, c.h) * 0.29
   if (r < 1.2) return
@@ -213,21 +204,9 @@ const lego: Painter = (c) => {
 
   // the stud's own shadow on the brick below it, then the stud, then the
   // highlight on the side the light comes from: three arcs is all a brick is
-  ctx.fillStyle = shade(c, 0.72)
-  ctx.beginPath()
-  ctx.arc(cx + r * 0.12, cy + r * 0.14, r, 0, Math.PI * 2)
-  ctx.fill()
-
-  ctx.fillStyle = shade(c, 1.06)
-  ctx.beginPath()
-  ctx.arc(cx, cy, r, 0, Math.PI * 2)
-  ctx.fill()
-
-  ctx.strokeStyle = shade(c, 1.3, 0.7)
-  ctx.lineWidth = Math.max(0.6, r * 0.16)
-  ctx.beginPath()
-  ctx.arc(cx, cy, r * 0.82, Math.PI * 0.75, Math.PI * 1.6)
-  ctx.stroke()
+  c.s.circle(cx + r * 0.12, cy + r * 0.14, r, shade(c, 0.72))
+  c.s.circle(cx, cy, r, shade(c, 1.06))
+  c.s.arc(cx, cy, r * 0.82, Math.PI * 0.75, Math.PI * 1.6, Math.max(0.6, r * 0.16), shade(c, 1.3, 0.7))
 }
 
 /**
@@ -239,7 +218,6 @@ const lego: Painter = (c) => {
  * depth sorting for free.
  */
 const voxel: Painter = (c) => {
-  const { ctx } = c
   const w = c.w
   const half = w / 2
   // the top face is a rhombus half as tall as it is wide, the classic 2:1 iso
@@ -247,44 +225,35 @@ const voxel: Painter = (c) => {
   const lift = c.ink * c.h * 1.6
   const bx = c.x + half
   const by = c.y + c.h - lift
-
-  const face = (pts: [number, number][], k: number) => {
-    ctx.fillStyle = shade(c, k)
-    ctx.beginPath()
-    ctx.moveTo(pts[0][0], pts[0][1])
-    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1])
-    ctx.closePath()
-    ctx.fill()
-  }
-
   const body = lift + c.h * 0.5
+
   // left wall, right wall, then the lid: back to front within the cube itself
-  face(
+  c.s.polygon(
     [
       [bx - half, by + q],
       [bx, by + q * 2],
       [bx, by + q * 2 + body],
       [bx - half, by + q + body],
     ],
-    0.62,
+    shade(c, 0.62),
   )
-  face(
+  c.s.polygon(
     [
       [bx + half, by + q],
       [bx, by + q * 2],
       [bx, by + q * 2 + body],
       [bx + half, by + q + body],
     ],
-    0.82,
+    shade(c, 0.82),
   )
-  face(
+  c.s.polygon(
     [
       [bx, by],
       [bx + half, by + q],
       [bx, by + q * 2],
       [bx - half, by + q],
     ],
-    1.12,
+    shade(c, 1.12),
   )
 }
 

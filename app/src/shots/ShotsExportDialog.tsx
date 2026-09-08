@@ -1,35 +1,11 @@
-import { useState, type ReactNode } from 'react'
+import { useState } from 'react'
 import { useShots } from './store'
 import { exportShot } from './export'
 import { SIZE_PRESETS } from '../lib/presets'
 import { MiniButton, Segments, SliderRow } from '../components/controls'
-import { CircleMinus } from 'lucide-react'
 import { ui } from '../lib/ui'
 import { track } from '../lib/analytics'
-
-function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
-  return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-6" onMouseDown={onClose}>
-      <div
-        className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-xl border border-(--line) bg-(--raised) p-5"
-        onMouseDown={(e) => e.stopPropagation()}
-      >
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="t-eyebrow text-(--tx) uppercase">{title}</h2>
-          <button
-            onClick={onClose}
-            aria-label="Close"
-            title="Close"
-            className="flex h-7 w-7 items-center justify-center rounded-full text-(--tx3) hover:bg-(--panel3) hover:text-(--tx)"
-          >
-            <CircleMinus size={18} strokeWidth={1.75} />
-          </button>
-        </div>
-        {children}
-      </div>
-    </div>
-  )
-}
+import { Dialog } from '../components/Overlay'
 
 export function ShotsExportDialog() {
   const doc = useShots((s) => s.doc)
@@ -78,7 +54,7 @@ export function ShotsExportDialog() {
   }
 
   return (
-    <Modal title="Export shot" onClose={() => setDialog(null)}>
+    <Dialog title="Export shot" onClose={() => setDialog(null)}>
       <label className="mb-2 block t-eyebrow text-(--tx3) uppercase">
         Resolution: {SIZE_PRESETS.find((p) => p.width === doc.size.width && p.height === doc.size.height)?.name ?? `${doc.size.width}×${doc.size.height}`}
       </label>
@@ -111,10 +87,10 @@ export function ShotsExportDialog() {
       <button
         disabled={exporting}
         onClick={() => void run()}
-        className="mt-2 w-full rounded-md bg-(--accent-fill) py-2 t-button text-(--accent-tx) hover:opacity-90 disabled:opacity-60"
+        className="mt-2 w-full rounded-md bg-(--accent-fill) py-2 t-button text-(--accent-tx) hover:bg-(--accent-fill-hover) disabled:opacity-60"
       >
         {exporting ? 'Rendering…' : `Export · ${outW}×${outH}`}
       </button>
-    </Modal>
+    </Dialog>
   )
 }

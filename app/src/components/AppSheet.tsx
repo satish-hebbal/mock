@@ -81,7 +81,7 @@ export function AppSheet() {
         onMouseDown={(e) => e.stopPropagation()}
         className="absolute inset-x-0 top-0 animate-[sheet-drop_240ms_cubic-bezier(0.2,0.85,0.25,1)] border-b border-(--line) bg-(--raised)/72 px-6 pt-5 pb-6 backdrop-blur-2xl backdrop-saturate-150"
       >
-        <div className="mx-auto max-w-4xl">
+        <div className="mx-auto max-w-5xl">
           <div className="mb-4 flex items-center gap-2.5">
             <img src="/frog-logo.svg" alt="" width={22} height={22} />
             <span className="t-body font-semibold text-(--tx)">Ribbit</span>
@@ -92,14 +92,14 @@ export function AppSheet() {
             Tools
           </p>
           <div
-            className="tool-row grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4"
+            className="tool-row grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5"
             style={SHEET_SEAM.row}
           >
             {TOOLS.map((t, i) => {
               const active = !t.soon && mode === t.id
               // The wash carries the card on its own; the tool you're actually
               // in gets light on top of it, so "this is where you are" reads
-              // before you've finished scanning the three names.
+              // before you've finished scanning the row.
               const lit = active ? toolLit(t) : null
               const seam = SHEET_SEAM.parts[i]
               return (

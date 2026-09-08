@@ -4,14 +4,14 @@ import { TOOLS, toolTint, toolWash } from '../lib/tools'
 import { HOME_SEAM } from '../lib/interlock'
 
 /*
- * The first two cards interlock, and the third stands clear.
+ * The first two cards interlock, and the rest stand clear.
  *
- * Three cards evenly spaced are three separate offers, and they were being read
- * that way: pick one of three. The first two are the same job at two different
- * fidelities, though, one screen dressed for a video and one dressed for a
- * post, so cutting the seam between them into a step makes them a pair you
- * choose within, while Draw stays a rectangle because it is genuinely somewhere
- * else. The shapes are in interlock.ts.
+ * A row of cards evenly spaced is a row of separate offers, and it was being
+ * read that way: pick one of five. The first two are the same job at two
+ * different fidelities, though, one screen dressed for a video and one dressed
+ * for a post, so cutting the seam between them into a step makes them a pair
+ * you choose within, while the others stay rectangles because they are
+ * genuinely somewhere else. The shapes are in interlock.ts.
  */
 export function Home() {
   const setMode = useStudio((s) => s.setMode)
@@ -21,7 +21,7 @@ export function Home() {
       {/* the bottom padding matches the sides, so the hint is inset from the edge
           by the same amount the content is rather than floating above a band of
           nothing */}
-      <div className="mx-auto flex min-h-full max-w-5xl flex-col px-8 pt-16 pb-8">
+      <div className="mx-auto flex min-h-full max-w-6xl flex-col px-8 pt-16 pb-8">
         {/* brand */}
         <div className="mt-auto mb-10 flex flex-col items-center text-center">
           <Mascot size={128} className="mb-4" />
@@ -38,7 +38,7 @@ export function Home() {
           first two side by side at every size they are drawn as a pair.
         */}
         <div
-          className="tool-row mb-auto grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"
+          className="tool-row mb-auto grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5"
           style={HOME_SEAM.row}
         >
           {TOOLS.map((t, i) => {

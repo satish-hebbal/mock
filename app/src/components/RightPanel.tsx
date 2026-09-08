@@ -23,9 +23,11 @@ import {
   useStudio,
 } from '../store'
 import { persistShots, useShots } from '../shots/store'
+import { persistSignal, useSignal } from '../signal/store'
 import { quickCapture } from '../lib/export'
 import { ui } from '../lib/ui'
 import { quickCaptureShot } from '../shots/export'
+import { downloadStill } from '../signal/export'
 import { FeedbackDialog } from './FeedbackDialog'
 import { HoldButton } from './HoldButton'
 
@@ -82,19 +84,33 @@ function IconBtn({
 function useInspectorActions() {
   const mode = useStudio((s) => s.mode)
   const shots = mode === 'shots'
+  const signal = mode === 'signal'
 
   const studioName = useStudio((s) => s.project.name)
   const shotsName = useShots((s) => s.doc.name)
+  const signalName = useSignal((s) => s.doc.name)
   const studioPast = useStudio((s) => s.past.length)
   const studioFuture = useStudio((s) => s.future.length)
   const shotsPast = useShots((s) => s.past.length)
   const shotsFuture = useShots((s) => s.future.length)
+  const signalPast = useSignal((s) => s.past.length)
+  const signalFuture = useSignal((s) => s.future.length)
 
   const [saved, setSaved] = useState(false)
 
   const capture = () => {
     ui.snap()
-    if (shots) {
+    if (signal) {
+      /*
+       * Signal's quick snap is the frame that is on screen right now, not a
+       * re-render at some canonical time: the whole tool is a moving picture,
+       * and "this one" is the only moment worth capturing without a dialog.
+       */
+      const s = useSignal.getState()
+      void downloadStill(s.doc, s.time, 'png').catch((e) =>
+        ui.error(`Capture failed: ${(e as Error).message}`),
+      )
+    } else if (shots) {
       const s = useShots.getState()
       void quickCaptureShot(s.doc, s.assets).catch((e) =>
         ui.error(`Capture failed: ${(e as Error).message}`),
@@ -109,13 +125,19 @@ function useInspectorActions() {
 
   return {
     shots,
-    name: shots ? shotsName : studioName,
-    canUndo: shots ? shotsPast > 0 : studioPast > 0,
-    canRedo: shots ? shotsFuture > 0 : studioFuture > 0,
+    signal,
+    name: signal ? signalName : shots ? shotsName : studioName,
+    canUndo: signal ? signalPast > 0 : shots ? shotsPast > 0 : studioPast > 0,
+    canRedo: signal ? signalFuture > 0 : shots ? shotsFuture > 0 : studioFuture > 0,
     saved,
     setName: (v: string) =>
-      shots ? useShots.getState().setName(v) : useStudio.getState().setProjectName(v),
-    undo: () => (shots ? useShots.getState().undo() : useStudio.getState().undo()),
+      signal
+        ? useSignal.getState().setName(v)
+        : shots
+          ? useShots.getState().setName(v)
+          : useStudio.getState().setProjectName(v),
+    undo: () =>
+      signal ? useSignal.getState().undo() : shots ? useShots.getState().undo() : useStudio.getState().undo(),
     /*
      * No confirm dialog: the button is held rather than clicked, so the intent
      * is already proven by the time this runs. Both stores commit to history
@@ -123,16 +145,23 @@ function useInspectorActions() {
      * the toast says, since there is no dialog left to say it in.
      */
     startOver: () => {
-      if (shots) useShots.getState().startOver()
+      if (signal) useSignal.getState().reset()
+      else if (shots) useShots.getState().startOver()
       else useStudio.getState().newProject()
       ui.toast('Started over. Undo (Ctrl+Z) brings it back')
     },
-    redo: () => (shots ? useShots.getState().redo() : useStudio.getState().redo()),
+    redo: () =>
+      signal ? useSignal.getState().redo() : shots ? useShots.getState().redo() : useStudio.getState().redo(),
     openExport: () =>
-      shots ? useShots.getState().setDialog('export') : useStudio.getState().setDialog('export'),
+      signal
+        ? useSignal.getState().setDialog('export')
+        : shots
+          ? useShots.getState().setDialog('export')
+          : useStudio.getState().setDialog('export'),
     capture,
     save: async () => {
-      if (shots) await persistShots()
+      if (signal) await persistSignal()
+      else if (shots) await persistShots()
       else await persistProject()
       setSaved(true)
       setTimeout(() => setSaved(false), 1400)
@@ -225,7 +254,7 @@ export function InspectorHeader() {
               {menuItem(SaveIcon, 'Save', () => void a.save())}
               {menuItem(MessageSquare, 'Send feedback…', () => setFeedback(true))}
               {/* the project entries only mean anything in the studio */}
-              {!a.shots && (
+              {!a.shots && !a.signal && (
                 <>
                   <span className="my-1 h-px bg-(--line)" />
                   {menuItem(LayoutTemplate, 'Templates', () =>
@@ -279,7 +308,7 @@ export function InspectorHeader() {
         <button
           onClick={a.openExport}
           title="Export (E)"
-          className="flex h-9 items-center justify-center gap-1.5 rounded-md bg-(--accent-fill) t-button text-(--accent-tx) transition-opacity hover:opacity-90"
+          className="flex h-9 items-center justify-center gap-1.5 rounded-md bg-(--accent-fill) t-button text-(--accent-tx) hover:bg-(--accent-fill-hover)"
         >
           <Download size={15} strokeWidth={1.9} />
           Export
@@ -312,7 +341,7 @@ function CollapsedRail() {
         onClick={a.openExport}
         title="Export (E)"
         aria-label="Export"
-        className="flex h-8 w-8 items-center justify-center rounded-md bg-(--accent-fill) text-(--accent-tx) transition-opacity hover:opacity-90"
+        className="flex h-8 w-8 items-center justify-center rounded-md bg-(--accent-fill) text-(--accent-tx) hover:bg-(--accent-fill-hover)"
       >
         <Download size={15} strokeWidth={2} />
       </button>

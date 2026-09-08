@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { ChevronDown, ChevronRight, Info } from 'lucide-react'
 import { useStudio } from '../store'
 import { endEditRun } from '../lib/history'
 import { KF_MARK } from '../lib/marks'
@@ -58,6 +58,91 @@ export function Section({
       </div>
       {open && <div className="px-3 pb-3">{children}</div>}
     </section>
+  )
+}
+
+/**
+ * An explanation, folded into a dot.
+ *
+ * A panel this dense cannot afford standing prose. A paragraph under a section
+ * heading is read once, on the first visit, and then costs a fixed slice of the
+ * panel forever after: on a 280px column two lines of caption push a control
+ * group off the bottom of the page, so the price of explaining one thing is not
+ * being able to see another. The text is worth having and worth hiding.
+ *
+ * Opens on hover and on focus, and toggles on click, because a dot that only
+ * answers to a pointer is not available to a keyboard or to touch.
+ *
+ * Positioned `fixed` from a measured rect rather than absolutely inside the
+ * panel. Both panel pages scroll, and an element that scrolls on one axis
+ * clips the other, so an absolutely positioned bubble would be cut off at the
+ * panel's edge exactly when it has something to say.
+ */
+export function InfoTip({ children, label = 'What is this?' }: { children: ReactNode; label?: string }) {
+  const ref = useRef<HTMLButtonElement>(null)
+  const [at, setAt] = useState<{ x: number; y: number; flip: boolean } | null>(null)
+
+  const open = () => {
+    const r = ref.current?.getBoundingClientRect()
+    if (!r) return
+    const flip = r.right + 248 > window.innerWidth
+    setAt({ x: flip ? r.left - 8 : r.right + 8, y: r.top + r.height / 2, flip })
+  }
+  const close = () => setAt(null)
+
+  useEffect(() => {
+    if (!at) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      // the dot is inside dialogs and panels that also answer to Escape, and
+      // closing the bubble is the smaller, nearer thing the key should do first
+      e.stopImmediatePropagation()
+      close()
+    }
+    window.addEventListener('keydown', onKey, true)
+    // a scroll moves the button out from under a bubble measured against the
+    // old position, so the honest thing is to drop it rather than chase it
+    window.addEventListener('scroll', close, true)
+    return () => {
+      window.removeEventListener('keydown', onKey, true)
+      window.removeEventListener('scroll', close, true)
+    }
+  }, [at])
+
+  return (
+    <>
+      <button
+        ref={ref}
+        type="button"
+        aria-label={label}
+        aria-expanded={!!at}
+        onPointerEnter={open}
+        onPointerLeave={close}
+        onFocus={open}
+        onBlur={close}
+        onClick={(e) => {
+          e.stopPropagation()
+          if (at) close()
+          else open()
+        }}
+        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-xs text-(--tx3) transition-colors hover:text-(--tx)"
+      >
+        <Info size={13} strokeWidth={1.9} />
+      </button>
+      {at && (
+        <div
+          role="tooltip"
+          style={{
+            left: at.x,
+            top: at.y,
+            transform: `translate(${at.flip ? '-100%' : '0'}, -50%)`,
+          }}
+          className="pointer-events-none fixed z-[60] max-w-[240px] rounded-md border border-(--line) bg-(--raised) px-2.5 py-2 t-caption leading-snug text-(--tx2) shadow-lg"
+        >
+          {children}
+        </div>
+      )}
+    </>
   )
 }
 

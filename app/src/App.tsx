@@ -6,6 +6,9 @@ import { PALETTE_GROUP_SIZE } from './shots/palette'
 import { ShotsEditor } from './shots/ShotsEditor'
 import { DrawEditor } from './draw/DrawEditor'
 import { useDraw } from './draw/store'
+import { AsciiEditor } from './ascii/AsciiEditor'
+import { useAscii } from './ascii/store'
+import { RECIPES } from './ascii/presets'
 import { PENS, PEN_ORDER } from './draw/pens'
 import { SHAPE_TOOLS } from './draw/shapeTools'
 import { ToolRail } from './components/ToolRail'
@@ -149,8 +152,9 @@ function useGlobalShortcuts() {
       const key = keyOf(e)
 
       // Alt, not Ctrl: Ctrl+1/2/3 are browser tab switches and can't be cancelled
-      if (e.altKey && (key === '1' || key === '2' || key === '3')) {
-        s.setMode(key === '1' ? 'studio' : key === '2' ? 'shots' : 'draw')
+      if (e.altKey && (key === '1' || key === '2' || key === '3' || key === '4')) {
+        const MODES = { '1': 'studio', '2': 'shots', '3': 'draw', '4': 'ascii' } as const
+        s.setMode(MODES[key as '1' | '2' | '3' | '4'])
         return true
       }
       /*
@@ -225,6 +229,40 @@ function useGlobalShortcuts() {
         sh.setImage({ scale: img.scale + (key === '-' ? -0.05 : 0.05) })
       } else if (img && (key === ',' || key === '.')) {
         sh.setImage({ rotate: img.rotate + (key === ',' ? -1 : 1) })
+      }
+    }
+
+    /**
+     * ASCII's keyboard.
+     *
+     * Short, because there is no selection here and so nothing to nudge, move
+     * or delete. Undo, export, and the one letter worth spending on a tool
+     * whose whole appeal is trying things: R rerolls the look.
+     */
+    const handleAscii = (e: KeyboardEvent) => {
+      const a = useAscii.getState()
+      const mod = e.ctrlKey || e.metaKey
+      const key = keyOf(e)
+
+      if (mod && key === 'z') {
+        e.preventDefault()
+        if (e.shiftKey) a.redo()
+        else a.undo()
+      } else if (mod && key === 'y') {
+        e.preventDefault()
+        a.redo()
+      } else if (mod) {
+        return
+      } else if (key === 'e') {
+        a.setDialog(a.dialog === 'export' ? null : 'export')
+      } else if (e.key === 'Escape') {
+        a.setDialog(null)
+      } else if (key === 'u') {
+        pickMediaFile((f) => void a.importImage(f), false)
+      } else if (key === 'r') {
+        a.applyLook(RECIPES[Math.floor(Math.random() * RECIPES.length)].id)
+      } else if (key === 'i') {
+        a.patch((d) => void (d.tone.invert = !d.tone.invert))
       }
     }
 
@@ -485,6 +523,7 @@ function useGlobalShortcuts() {
       if (st.mode === 'shots') handleShots(e)
       else if (st.mode === 'studio') handleStudio(e)
       else if (st.mode === 'draw') handleDraw(e)
+      else if (st.mode === 'ascii') handleAscii(e)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -498,6 +537,7 @@ function useMediaDropPaste() {
       const mode = useStudio.getState().mode
       if (mode === 'shots') void useShots.getState().importMedia(file)
       else if (mode === 'draw') void useDraw.getState().importImage(file)
+      else if (mode === 'ascii') void useAscii.getState().importImage(file)
       else void useStudio.getState().importMedia(file)
     }
     /*
@@ -512,6 +552,8 @@ function useMediaDropPaste() {
       // the board takes them all: dropping three screenshots onto a canvas is a
       // normal thing to do, and only one of them landing is baffling
       else if (mode === 'draw') for (const f of files) void useDraw.getState().importImage(f)
+      // ASCII works one picture at a time, so the rest of a multi-file drop is
+      // deliberately ignored rather than silently replacing what just arrived
       else importTo(files[0])
     }
     const onDrop = (e: DragEvent) => {
@@ -644,6 +686,8 @@ function Editor() {
           <StudioLayout />
         ) : mode === 'draw' ? (
           <DrawEditor />
+        ) : mode === 'ascii' ? (
+          <AsciiEditor />
         ) : (
           <ShotsEditor />
         )}

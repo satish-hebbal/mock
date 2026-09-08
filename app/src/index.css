@@ -644,6 +644,54 @@ body {
 }
 
 /*
+ * The tool's glyph, in the tool's own colour.
+ *
+ * It used to be a white icon in a grey chip, which cost 44px of card height and
+ * spent it saying nothing: the chip was the same grey on all four, so the only
+ * thing it distinguished was icon from background. Dropping the box and
+ * colouring the glyph itself does the identifying job the chip was not doing,
+ * and hands the height back.
+ *
+ * The two grounds want opposite ends of the tint. On the near-black canvas the
+ * far tint is the light step and clears 7:1; on the light theme it is a
+ * highlight colour that all but vanishes, so the near tint is used instead and
+ * taken down toward black until it clears 4:1 the other way. Both ends ride in
+ * from `tools.ts` on every card, so this only has to choose.
+ */
+.tool-card-icon {
+  color: rgb(var(--tool-tint-far));
+}
+
+:root.light .tool-card-icon {
+  color: color-mix(in srgb, rgb(var(--tool-tint)) 70%, #000);
+}
+
+/* a tool that isn't built yet has no identity to advertise, so its glyph drops
+   back to tertiary ink on both themes */
+.tool-card:disabled .tool-card-icon {
+  color: var(--tx3);
+}
+
+/*
+ * A look's glyph, in the colour of the look.
+ *
+ * Same problem as the tool cards and the same shape of answer, but it needs a
+ * heavier hand: a tool tint is a UI accent chosen to sit on a panel, while
+ * these are sampled from the artwork and run far brighter, so 70% still leaves
+ * the green at about 3:1 on the light theme. 58% is where the whole set clears
+ * 5:1 without any of them losing their hue.
+ *
+ * The row carries `--icon-tint` per look, so one rule dresses all eight.
+ */
+.look-icon {
+  color: rgb(var(--icon-tint));
+}
+
+:root.light .look-icon {
+  color: color-mix(in srgb, rgb(var(--icon-tint)) 58%, #000);
+}
+
+/*
  * Hover reaches for the tool's own colour rather than the next grey up. Three
  * cards lighting the same borrowed grey answered "something is under the
  * pointer" without answering which, and the tint is already the thing telling
@@ -685,10 +733,17 @@ body {
      * width Draw has and the same width the row had before any of this.
      */
     .tool-row {
+      /* the plain track, before the seam moves the shared edge between the
+         first two. `--tool-count` rides in from `interlock.ts` so the row does
+         not have to be re-typed here every time a tool is added. */
+      --tool-track: calc(
+        (100% - (var(--tool-count) - 1) * var(--tool-gutter)) / var(--tool-count)
+      );
       grid-template-columns:
-        calc((100% - 2 * var(--tool-gutter)) / 3 + var(--tool-step) / 2)
-        calc((100% - 2 * var(--tool-gutter)) / 3 - var(--tool-step) / 2)
-        calc((100% - 2 * var(--tool-gutter)) / 3);
+        calc(var(--tool-track) + var(--tool-step) / 2)
+        calc(var(--tool-track) - var(--tool-step) / 2)
+        var(--tool-track)
+        var(--tool-track);
     }
 
     .tool-step-in,

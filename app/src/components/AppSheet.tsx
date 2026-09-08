@@ -91,7 +91,10 @@ export function AppSheet() {
           <p className="mb-2 t-eyebrow text-(--tx3) uppercase">
             Tools
           </p>
-          <div className="tool-row grid grid-cols-1 gap-2 sm:grid-cols-3" style={SHEET_SEAM.row}>
+          <div
+            className="tool-row grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4"
+            style={SHEET_SEAM.row}
+          >
             {TOOLS.map((t, i) => {
               const active = !t.soon && mode === t.id
               // The wash carries the card on its own; the tool you're actually
@@ -115,14 +118,7 @@ export function AppSheet() {
                     className="tool-card-fill"
                     style={lit?.fill ?? { background: toolWash(t, t.soon ? 0.35 : 0.7) }}
                   />
-                  <span
-                    style={lit?.chip}
-                    className={`flex h-8 w-8 items-center justify-center rounded-md ${
-                      t.soon ? 'bg-(--panel3) text-(--tx3)' : 'bg-(--sel) text-(--tx)'
-                    }`}
-                  >
-                    <t.icon size={16} strokeWidth={1.8} />
-                  </span>
+                  <t.icon className="tool-card-icon" size={18} strokeWidth={1.8} />
                   <span>
                     <span className="flex items-center gap-1.5">
                       <span className="t-body-sm font-semibold text-(--tx)">{t.name}</span>

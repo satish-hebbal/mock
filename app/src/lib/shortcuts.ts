@@ -4,7 +4,7 @@
  * (or miss one we do) as long as both sides are edited together.
  */
 
-export type ShortcutScope = 'global' | 'studio' | 'shots' | 'draw'
+export type ShortcutScope = 'global' | 'studio' | 'shots' | 'draw' | 'ascii'
 
 export interface Shortcut {
   /** key combo, or a mouse gesture written out */
@@ -26,6 +26,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { keys: 'Alt+1', desc: 'Switch to 3D Studio' },
       { keys: 'Alt+2', desc: 'Switch to Shots' },
       { keys: 'Alt+3', desc: 'Switch to Draw' },
+      { keys: 'Alt+4', desc: 'Switch to ASCII' },
       { keys: 'Ctrl+Z', desc: 'Undo' },
       { keys: 'Ctrl+Shift+Z / Ctrl+Y', desc: 'Redo' },
       { keys: 'E', desc: 'Export dialog' },
@@ -137,6 +138,18 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { keys: 'Alt (while dragging)', desc: 'Drag out a copy and leave the original' },
       { keys: 'Double-click', desc: 'Start a label, or edit the one under the pointer' },
       { keys: "'", desc: 'Show / hide the grid' },
+    ],
+  },
+  {
+    title: 'ASCII',
+    scope: 'ascii',
+    items: [
+      { keys: 'Ctrl+Z', desc: 'Undo' },
+      { keys: 'Ctrl+Shift+Z / Ctrl+Y', desc: 'Redo' },
+      { keys: 'U', desc: 'Pick an image' },
+      { keys: 'R', desc: 'Reroll the look' },
+      { keys: 'I', desc: 'Invert' },
+      { keys: 'E', desc: 'Export' },
     ],
   },
 ]

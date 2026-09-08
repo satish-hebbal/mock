@@ -104,7 +104,7 @@ export function defaultProject(): ProjectDoc {
   }
 }
 
-export type AppMode = 'home' | 'studio' | 'shots' | 'draw'
+export type AppMode = 'home' | 'studio' | 'shots' | 'draw' | 'ascii'
 
 /** Sections of the left tool rail in Studio; each one opens the panel beside it. */
 export type ToolSection = 'devices' | 'camera' | 'frame' | 'background' | 'add'
@@ -937,7 +937,12 @@ export const useStudio = create<StudioState>()(
         const theme = localStorage.getItem('ms-theme') === 'light' ? 'light' : 'dark'
         const savedMode = localStorage.getItem('ms-mode')
         const mode: AppMode =
-          savedMode === 'shots' || savedMode === 'studio' || savedMode === 'draw' ? savedMode : 'home'
+          savedMode === 'shots' ||
+          savedMode === 'studio' ||
+          savedMode === 'draw' ||
+          savedMode === 'ascii'
+            ? savedMode
+            : 'home'
         set((s) => {
           s.theme = theme
           s.mode = mode

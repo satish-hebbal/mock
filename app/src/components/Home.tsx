@@ -32,8 +32,15 @@ export function Home() {
         </div>
 
         {/* tools */}
-        {/* one row: three tools sit across, with room to read the taglines */}
-        <div className="tool-row mb-auto grid grid-cols-1 gap-3 sm:grid-cols-3" style={HOME_SEAM.row}>
+        {/*
+          One row once there is width for it. Below that the cards pair off two
+          by two rather than stacking into a column, which keeps the interlocked
+          first two side by side at every size they are drawn as a pair.
+        */}
+        <div
+          className="tool-row mb-auto grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"
+          style={HOME_SEAM.row}
+        >
           {TOOLS.map((t, i) => {
             const seam = HOME_SEAM.parts[i]
             return (
@@ -42,7 +49,7 @@ export function Home() {
                 disabled={t.soon}
                 onClick={() => !t.soon && setMode(t.id)}
                 style={{ ...seam?.style, ...toolTint(t) }}
-                className={`tool-card group flex flex-col items-start gap-3 p-5 text-left ${
+                className={`tool-card group flex flex-col items-start gap-2.5 p-4 text-left ${
                   seam?.className ?? ''
                 } ${t.soon ? 'cursor-default opacity-60' : ''}`}
               >
@@ -52,13 +59,7 @@ export function Home() {
                   className="tool-card-fill"
                   style={{ background: toolWash(t, t.soon ? 0.35 : 0.8) }}
                 />
-                <span
-                  className={`flex h-11 w-11 items-center justify-center rounded-lg ${
-                    t.soon ? 'bg-(--panel3) text-(--tx3)' : 'bg-(--sel) text-(--tx)'
-                  }`}
-                >
-                  <t.icon size={22} strokeWidth={1.75} />
-                </span>
+                <t.icon className="tool-card-icon" size={22} strokeWidth={1.75} />
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="t-body font-semibold text-(--tx)">{t.name}</span>
@@ -68,7 +69,9 @@ export function Home() {
                       </span>
                     )}
                   </div>
-                  <p className="mt-1 t-body-sm leading-relaxed text-(--tx2)">{t.tagline}</p>
+                  {/* snug rather than relaxed: at three lines the extra leading
+                      was most of what made the card tall */}
+                  <p className="mt-1 t-body-sm leading-snug text-(--tx2)">{t.tagline}</p>
                 </div>
               </button>
             )

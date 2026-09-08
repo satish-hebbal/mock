@@ -88,8 +88,33 @@
   --line: var(--hairline);
   --line2: var(--hairline-strong);
   --tx: var(--ink);
-  --tx2: var(--ink-subtle);
-  --tx3: var(--ink-tertiary);
+  /*
+   * Secondary and tertiary ink are the *page's own ink at reduced strength*,
+   * not two greys that happen to sit between the ink and the ground.
+   *
+   * On a flat panel the two are indistinguishable, which is why the ladder
+   * started out as fixed greys. They separate the moment the text sits on
+   * anything tinted, and by now plenty of it does: every tool card carries a
+   * coloured wash, and an opaque blue-grey over an amber card reads as a label
+   * that was pasted on, while translucent white picks the card's own colour up
+   * out of the ground underneath and belongs to it.
+   *
+   * The alphas are not chosen by eye. They are what reproduces Linear's
+   * Ink-Subtle and Ink-Tertiary exactly on the canvas black those tokens were
+   * specified against, so nothing already sitting on a flat panel moves, and
+   * only the text over colour changes.
+   */
+  --tx2: rgb(255 255 255 / 0.55);
+  --tx3: rgb(255 255 255 / 0.38);
+  /*
+   * The alpha checkerboard's square, which used to be mixed out of `--tx3`.
+   * Mixing a percentage of an already-translucent colour multiplies the two
+   * alphas, so it silently faded to a third of its strength when the ink went
+   * translucent. Its own token keeps it independent of how the ink is built.
+   */
+  --checker-square: rgb(255 255 255 / 0.08);
+  /* the dot grid has the same problem and the same answer */
+  --dot-grid-ink: rgb(255 255 255 / 0.1);
   /*
    * `--accent` is INK (text, icons, 1px lines) and takes Primary Hover: at
    * #5e6ad2 the fill colour sits near 4:1 on the near-black canvas, and Linear
@@ -98,10 +123,29 @@
    */
   --accent: var(--primary-hover);
   --accent-fill: var(--primary);
+  /*
+   * What a filled accent button becomes under the pointer.
+   *
+   * Every one of these used to hover with `opacity: 0.9`, which is wrong twice
+   * over. It fades the label along with the fill, so the text goes grey at the
+   * exact moment you have decided to click it; and on a near-black canvas
+   * reducing opacity moves the button *toward the background*, so the loudest
+   * control on screen recedes when approached. Hover should brighten.
+   *
+   * Primary-Hover is Linear's own answer and is already in the file, unused for
+   * this. It only holds on dark: on the light theme the same token is a lighter
+   * blue than the fill, which would be the same recede in a different costume,
+   * so light darkens instead. In both cases the button moves away from its
+   * ground rather than toward it.
+   */
+  --accent-fill-hover: var(--primary-hover);
   --accent-tx: var(--on-primary);
   --accent-soft: color-mix(in srgb, var(--primary) 18%, transparent);
   --accent2: var(--brand-secure);
   --danger: #f2555a; /* DERIVED: the spec names no destructive colour */
+  /* the same brighten-on-hover rule the accent fill follows, so the one button
+     you most want to be sure about behaves like every other filled button */
+  --danger-hover: color-mix(in srgb, var(--danger) 84%, white);
 
   /* "Focus ring: 2px primary-focus outline at 50% opacity." */
   --focus: color-mix(in srgb, var(--primary-focus) 50%, transparent);
@@ -124,9 +168,15 @@
   --line: #e4e5e8;
   --line2: #d2d4d8;
   --tx: #0f1011;
-  --tx2: #62666d;
-  --tx3: #8a8f98;
+  /* the same rule inverted: black at low strength, so the ink takes its colour
+     from whatever pale ground it is sitting on */
+  --tx2: rgb(0 0 0 / 0.62);
+  --tx3: rgb(0 0 0 / 0.44);
+  --checker-square: rgb(0 0 0 / 0.07);
+  --dot-grid-ink: rgb(0 0 0 / 0.12);
   --accent: var(--primary); /* Primary reads cleanly as ink on the light ground */
+  --accent-fill-hover: color-mix(in srgb, var(--primary) 86%, black);
+  --danger-hover: color-mix(in srgb, var(--danger) 88%, black);
   --accent-soft: color-mix(in srgb, var(--primary) 14%, transparent);
 }
 
@@ -144,6 +194,41 @@
    */
   --default-transition-duration: 110ms;
   --default-transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+
+  /*
+   * ----- The motion vocabulary -----
+   *
+   * These three curves were already in the file, but they were declared inside
+   * `.dw-bar`, so the pen tray was the only thing in the app allowed to use
+   * them. Everything else fell back to Tailwind's stock easings, which is why
+   * the tray reads as hand-built and the panels next to it read as a template.
+   * Hoisting them into `@theme` gives them to the whole app twice over: as
+   * `var(--ease-settle)` in handwritten CSS, and as an `ease-settle` utility on
+   * any element, since this is Tailwind's timing-function namespace.
+   *
+   *   settle  decelerates hard and coasts a long way in. For things that
+   *           travel: panels resizing, sheets arriving, anything with distance.
+   *   smooth  the same shape with almost no tail. For paint that changes in
+   *           place: background, colour, opacity.
+   *   snappy  overshoots past its target and comes back. Reserved for direct
+   *           manipulation, where the overshoot reads as the thing having mass.
+   *           It is wrong for anything the user did not physically grab.
+   */
+  --ease-settle: cubic-bezier(0.22, 0.9, 0.16, 1);
+  --ease-smooth: cubic-bezier(0.19, 1, 0.22, 1);
+  --ease-snappy: cubic-bezier(0.175, 0.885, 0.32, 1.1);
+
+  /*
+   * Hover arrives faster than it leaves.
+   *
+   * Symmetric hover is the single most common tell of un-tuned UI. Entering is
+   * an answer to something the user just did and has to feel immediate; leaving
+   * is not an event at all, and at the same speed it reads as the highlight
+   * being yanked away. Roughly a 1:1.6 ratio is enough to feel the difference
+   * without anyone being able to name it.
+   */
+  --dur-in: 110ms;
+  --dur-out: 180ms;
 
   --radius-xs: 4px;
   --radius-sm: 6px;
@@ -176,14 +261,11 @@
    * without competing: it is the same move as a cutting mat, or the canvas in
    * any design tool.
    *
-   * Built from `--tx3` rather than a fixed grey so it tracks the theme, and
-   * kept low enough that it reads as texture rather than as content.
+   * Built from a theme token rather than a fixed grey so it tracks the theme,
+   * and kept low enough that it reads as texture rather than as content.
    */
   .dot-grid {
-    background-image: radial-gradient(
-      color-mix(in srgb, var(--tx3) 26%, transparent) 1px,
-      transparent 1.4px
-    );
+    background-image: radial-gradient(var(--dot-grid-ink) 1px, transparent 1.4px);
     background-size: 18px 18px;
     background-position: 9px 9px;
   }
@@ -515,6 +597,135 @@ body {
 }
 
 /*
+ * ----- How a dialog arrives and how it leaves -----
+ *
+ * Arriving, the panel comes up 6px and out of a slight shrink while the scrim
+ * fades under it. The travel is small on purpose: this is not a thing flying in
+ * from somewhere, it is a thing settling into place, and the eye only needs
+ * enough movement to register a direction.
+ *
+ * Leaving is faster, and drops back barely 2px rather than the 6 it came up.
+ * Symmetry is the obvious choice here and the wrong one. Opening is a thing the
+ * user is about to read, so it can afford to take its time; closing is over as
+ * a decision before the animation starts, and anything that makes the user wait
+ * to get back to their work reads as the app being slow. Leaving also travels
+ * less than it arrived, so it dissolves rather than retreating: a panel that
+ * exits along its entry path looks like it is being put back, which implies it
+ * is still somewhere, which it is not.
+ *
+ * The panel rules are written against `> *` because the wrapper carrying the
+ * class is `display: contents`. That is what lets the shell wrap every existing
+ * dialog without becoming a box in the middle of the layout and changing how
+ * their `max-w-*` and `max-h-*` resolve, while the animation still lands on the
+ * real panel element.
+ */
+@keyframes overlay-scrim-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes overlay-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes overlay-panel-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(2px) scale(0.985);
+  }
+}
+
+.overlay-scrim {
+  animation: scrim-in 160ms var(--ease-smooth) both;
+}
+.overlay-scrim[data-closing] {
+  animation: overlay-scrim-out 130ms var(--ease-smooth) both;
+}
+.overlay-panel > * {
+  animation: overlay-panel-in 190ms var(--ease-settle) both;
+}
+.overlay-panel[data-closing] > * {
+  animation: overlay-panel-out 130ms var(--ease-smooth) both;
+}
+
+/*
+ * ----- Toasts -----
+ *
+ * They come in from the right, which is the edge they live on, and they leave
+ * the same way. This is the one place in the app where entry and exit *should*
+ * mirror each other: a toast was never a place the user was, so there is no
+ * "back" for it to fail to return to, and a thing that slides in from an edge
+ * and then fades out in place looks like it got stuck and gave up.
+ *
+ * Entry carries a small scale as well as the slide, so a toast arriving while
+ * another is already on screen still reads as a second toast rather than as the
+ * first one shifting. Exit collapses the margin so the stack closes up behind
+ * it instead of leaving a hole that snaps shut a frame later.
+ */
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(12px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes toast-out {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+    max-height: 8rem;
+    margin-bottom: 0;
+  }
+  to {
+    opacity: 0;
+    transform: translateX(12px);
+    /*
+     * Collapsed by `max-height` rather than by a negative margin, because a
+     * percentage margin resolves against the container's *width*, so the
+     * obvious `margin-bottom: -100%` would pull the stack up by some fraction
+     * of the viewport instead of by the toast's own height. 8rem is simply a
+     * ceiling comfortably above the tallest toast the app produces; the
+     * animation is from that value rather than from `auto` because `auto` is
+     * not interpolable and the collapse would otherwise not start until the
+     * final frame.
+     */
+    max-height: 0;
+    /* and the flex gap it was holding open, handed back as it goes */
+    margin-bottom: calc(var(--spacing) * -2);
+  }
+}
+
+.toast-item {
+  animation: toast-in 220ms var(--ease-settle) both;
+}
+.toast-item[data-leaving] {
+  animation: toast-out 200ms var(--ease-smooth) both;
+  /* the collapse has to actually clip the text, or the box shrinks and the
+     words stay put */
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/*
  * The empty canvas draws the eye to its prompt: rings travelling inward and
  * dissolving as they reach it. Scale rather than width/height so the whole
  * thing stays on the compositor, and the ring is invisible at both ends so
@@ -644,6 +855,54 @@ body {
 }
 
 /*
+ * The tool's glyph, in the tool's own colour.
+ *
+ * It used to be a white icon in a grey chip, which cost 44px of card height and
+ * spent it saying nothing: the chip was the same grey on all four, so the only
+ * thing it distinguished was icon from background. Dropping the box and
+ * colouring the glyph itself does the identifying job the chip was not doing,
+ * and hands the height back.
+ *
+ * The two grounds want opposite ends of the tint. On the near-black canvas the
+ * far tint is the light step and clears 7:1; on the light theme it is a
+ * highlight colour that all but vanishes, so the near tint is used instead and
+ * taken down toward black until it clears 4:1 the other way. Both ends ride in
+ * from `tools.ts` on every card, so this only has to choose.
+ */
+.tool-card-icon {
+  color: rgb(var(--tool-tint-far));
+}
+
+:root.light .tool-card-icon {
+  color: color-mix(in srgb, rgb(var(--tool-tint)) 70%, #000);
+}
+
+/* a tool that isn't built yet has no identity to advertise, so its glyph drops
+   back to tertiary ink on both themes */
+.tool-card:disabled .tool-card-icon {
+  color: var(--tx3);
+}
+
+/*
+ * A look's glyph, in the colour of the look.
+ *
+ * Same problem as the tool cards and the same shape of answer, but it needs a
+ * heavier hand: a tool tint is a UI accent chosen to sit on a panel, while
+ * these are sampled from the artwork and run far brighter, so 70% still leaves
+ * the green at about 3:1 on the light theme. 58% is where the whole set clears
+ * 5:1 without any of them losing their hue.
+ *
+ * The row carries `--icon-tint` per look, so one rule dresses all eight.
+ */
+.look-icon {
+  color: rgb(var(--icon-tint));
+}
+
+:root.light .look-icon {
+  color: color-mix(in srgb, rgb(var(--icon-tint)) 58%, #000);
+}
+
+/*
  * Hover reaches for the tool's own colour rather than the next grey up. Three
  * cards lighting the same borrowed grey answered "something is under the
  * pointer" without answering which, and the tint is already the thing telling
@@ -670,27 +929,12 @@ body {
  * The seam only makes sense across a row, and only once the cards are wide
  * enough to lose `--tool-step` of text column without the taglines unravelling.
  * Both rows reach that at about the same viewport, so one gate covers them.
- * Below that the three cards stay plain rectangles, which is also the fallback
+ * Below that the cards stay plain rectangles, which is also the fallback
  * anywhere `shape()` is missing: `interlock.ts` still hands over its outlines,
  * nothing reads them, and the cards sit in their tracks untouched.
  */
 @media (min-width: 64rem) {
   @supports (clip-path: shape(from 0 0, line to 1px 1px, close)) {
-    /*
-     * Equal tracks do not give equal cards here. The step moves half its width
-     * out of the left card's lower half and the same amount into the right
-     * card's, so the pair reads lopsided: one card narrow at the bottom, the
-     * other wide. Sliding the shared track edge half a step right hands each
-     * of them a wide half and a narrow half instead, which is the same average
-     * width Draw has and the same width the row had before any of this.
-     */
-    .tool-row {
-      grid-template-columns:
-        calc((100% - 2 * var(--tool-gutter)) / 3 + var(--tool-step) / 2)
-        calc((100% - 2 * var(--tool-gutter)) / 3 - var(--tool-step) / 2)
-        calc((100% - 2 * var(--tool-gutter)) / 3);
-    }
-
     .tool-step-in,
     .tool-step-out {
       border-radius: 0;
@@ -710,20 +954,34 @@ body {
       clip-path: var(--tool-clip-focus);
     }
 
-    /* the left card loses its lower right corner, so its text stops short of
-       where the cut lands rather than running under it */
+    /*
+     * Equal tracks do not give equal cards here. The step moves half its width
+     * out of the left card's lower half and the same amount into the right
+     * card's, so the pair reads lopsided: one card narrow at the bottom, the
+     * other wide. Both cards lean half a step left of the track edge they
+     * share, which hands each of them a wide half and a narrow half instead,
+     * at the same average width every other card in the row has.
+     *
+     * It is a margin rather than a pair of custom track sizes because the row
+     * is a plain `grid-cols-n` at every width, so the number of tools lives in
+     * one Tailwind class and nothing here has to be re-typed to add one.
+     *
+     * The left card also loses its lower right corner, so its text stops short
+     * of where the cut lands rather than running under it.
+     */
     .tool-step-in {
+      margin-right: calc(var(--tool-step) / -2);
       padding-right: calc(var(--tool-pad) + var(--tool-step));
     }
 
     /*
-     * The right card reaches back across the gutter for that corner. The
-     * negative margin buys the width off the grid track, the padding hands the
-     * same amount straight back, so the card grows to the left while its text
-     * stays exactly where it was.
+     * The right card reaches back across the gutter for that corner: its
+     * outline starts a full step in from its own left edge above the jog and
+     * on the edge below it. The padding hands that step straight back, so the
+     * card grows to the left while its text stays where it was.
      */
     .tool-step-out {
-      margin-left: calc(-1 * var(--tool-step));
+      margin-left: calc(var(--tool-step) / -2);
       padding-left: calc(var(--tool-pad) + var(--tool-step));
     }
   }
@@ -1002,6 +1260,100 @@ input[type="checkbox"] {
   height: 0;
 }
 
+/*
+ * ----- What a control does when you touch it -----
+ *
+ * Two things were missing everywhere outside the pen tray, and both are the
+ * kind of thing nobody reports as a bug.
+ *
+ * The first is that most hovers had no transition at all. The theme sets a good
+ * default curve, but Tailwind only reaches for it when a `transition-*` class is
+ * present, and two thirds of the app's hover states never got one. So the panels
+ * snapped between colours while the tray eased, in the same window.
+ *
+ * The second is that nothing moved when pressed. The app had 222 hover states
+ * and effectively no press states: every control in it lit up when approached
+ * and then sat perfectly still while being clicked. Hover says "this is a
+ * target". Only the press says "I got that", and it is the half that carries
+ * the sense of the thing having been physically pushed.
+ *
+ * Both are fixed here rather than at 92 call sites, and the whole block is
+ * wrapped in `:where()` so it contributes zero specificity. Anything that wants
+ * to disagree, including a bare Tailwind utility, simply wins. This is a floor,
+ * not a policy.
+ */
+@layer base {
+  :where(button, [role='button'], [role='tab'], [role='menuitem'], summary, a) {
+    /* Paint only. Never geometry: `width` and `height` here would put a layout
+       pass on the hover of every control in the app. */
+    transition:
+      background-color var(--dur-out) var(--ease-smooth),
+      border-color var(--dur-out) var(--ease-smooth),
+      color var(--dur-out) var(--ease-smooth),
+      fill var(--dur-out) var(--ease-smooth),
+      stroke var(--dur-out) var(--ease-smooth),
+      opacity var(--dur-out) var(--ease-smooth),
+      box-shadow var(--dur-out) var(--ease-smooth),
+      scale 220ms var(--ease-snappy);
+  }
+
+  /* Arriving is an answer and has to be quick; leaving keeps the slower base
+     duration above, so the highlight drains instead of being cut. */
+  :where(button, [role='button'], [role='tab'], [role='menuitem'], summary, a):hover {
+    transition-duration: var(--dur-in);
+  }
+
+  /*
+   * `scale` rather than `transform`, because Tailwind v4 compiles its translate
+   * utilities to the individual `translate` property. The two compose, so a
+   * button that is centred with `-translate-x-1/2` still presses correctly
+   * instead of being thrown across the screen, which is exactly what a global
+   * `transform` here would have done.
+   *
+   * 0.97 is deliberately just past the threshold of noticing. The press is felt
+   * rather than watched, and anything deeper starts to read as the button being
+   * broken rather than pushed.
+   */
+  /*
+   * `.dw-*` and `.tool-card` opt out, for two different reasons.
+   *
+   * The pen tray already presses: `.dw-round` scales to 0.9 and the pens lift
+   * out of the bar on their own curve. Adding this on top would compound into
+   * 0.87 and fight the tray's easing with a second one.
+   *
+   * The tool cards are cut into each other with `clip-path`, and each card's
+   * shape is cut to fit its neighbour's. Scaling one moves its edge off the
+   * cut it is supposed to interlock with, so a press would open a visible seam
+   * between two cards that are meant to read as one piece of material.
+   */
+  :where(button, [role='button'], summary):not(
+      :disabled,
+      [aria-disabled='true'],
+      .press-none,
+      .dw-round,
+      .dw-tool,
+      .dw-wheel,
+      .tool-card
+    ):active {
+    scale: 0.97;
+    /* Down is immediate. Coming back up keeps the snappy curve from the base
+       rule, so release has a small spring in it that the press does not. */
+    transition-duration: 60ms;
+  }
+
+  /* A control that cannot be used should not answer the pointer at all. */
+  :where(button, [role='button']):disabled,
+  :where(button, [role='button'])[aria-disabled='true'] {
+    cursor: not-allowed;
+  }
+
+  /* The grey flash Safari and Chrome paint over a tapped control on touch. It
+     lands on top of everything above and undoes all of it. */
+  :where(button, [role='button'], a, summary, [role='slider']) {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
 @layer components {
   /*
    * The two corner clusters, held back.
@@ -1064,9 +1416,8 @@ input[type="checkbox"] {
     --dw-red: #ff383c;
     --dw-lift: 1;
 
-    --ease-settle: cubic-bezier(0.22, 0.9, 0.16, 1);
-    --ease-smooth: cubic-bezier(0.19, 1, 0.22, 1);
-    --ease-snappy: cubic-bezier(0.175, 0.885, 0.32, 1.1);
+    /* the three easings this bar is built on now live in `@theme`, because the
+       rest of the app should be moving on the same curves it does */
 
     position: relative;
     height: 84px;
@@ -1592,5 +1943,40 @@ input[type="checkbox"] {
   }
   .dw-bar[data-vertical] .dw-swatches {
     flex-direction: column;
+  }
+}
+
+/*
+ * ----- Reduced motion, as a floor rather than a checklist -----
+ *
+ * There were five `prefers-reduced-motion` blocks in this file, each written
+ * against one specific effect. That works exactly until someone adds a sixth
+ * animation, which then ships with no reduced-motion path at all and nobody
+ * notices, because the people who would notice are not the people writing it.
+ * Opt-out does not survive contact with a growing codebase. This inverts it:
+ * everything is covered by default, and the blocks above stay where they are to
+ * say the more interesting thing about the handful of effects that need more
+ * than being switched off.
+ *
+ * Durations collapse to 1ms rather than `animation: none`, and that difference
+ * is load-bearing. Several things here animate in from `opacity: 0` under a
+ * `both` fill mode; removing the animation outright strands them at zero and
+ * the user simply never sees the element. Running it in a millisecond puts them
+ * at their final frame instantly, which is what "no motion" is supposed to mean.
+ *
+ * `scroll-behavior` is included because a smooth-scrolled panel is motion the
+ * user did not ask for in precisely the same way, and it is the one people
+ * routinely forget.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
   }
 }

@@ -13,7 +13,8 @@
 
 import { useEffect, useState } from 'react'
 import { useStudio } from '../store'
-import { CircleMinus, Download } from 'lucide-react'
+import { Download } from 'lucide-react'
+import { Dialog } from '../components/Overlay'
 import { MiniButton, Segments } from '../components/controls'
 import { ui } from '../lib/ui'
 import { track } from '../lib/analytics'
@@ -75,104 +76,63 @@ function DrawExportDialog() {
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-6" onMouseDown={close}>
-      <div
-        className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-xl border border-(--line) bg-(--raised) p-5"
-        onMouseDown={(e) => e.stopPropagation()}
+    <Dialog title="Export drawing" onClose={close}>
+
+      <Segments
+        options={[
+          { id: 'png', label: 'PNG' },
+          { id: 'svg', label: 'SVG' },
+        ]}
+        value={format}
+        onChange={setFormat}
+      />
+
+      {/* SVG is resolution-free, so a scale would be a lie there */}
+      {format === 'png' && (
+        <>
+          <label className="mb-2 block t-eyebrow text-(--tx3) uppercase">Scale</label>
+          <div className="mb-3 flex gap-1">
+            {([1, 2, 3] as const).map((s) => (
+              <MiniButton key={s} active={scale === s} onClick={() => setScale(s)}>
+                {s}×
+              </MiniButton>
+            ))}
+          </div>
+        </>
+      )}
+
+      <button
+        onClick={() => setTransparent(!transparent)}
+        aria-pressed={transparent}
+        className={`mb-3 h-8 w-full rounded-sm t-body-sm transition-colors ${
+          transparent ? 'bg-(--sel) text-(--tx)' : 'bg-(--field) text-(--tx2) hover:text-(--tx)'
+        }`}
       >
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="t-eyebrow text-(--tx) uppercase">Export drawing</h2>
-          <button
-            onClick={close}
-            aria-label="Close"
-            className="flex h-7 w-7 items-center justify-center rounded-full text-(--tx3) hover:bg-(--panel3) hover:text-(--tx)"
-          >
-            <CircleMinus size={18} strokeWidth={1.75} />
-          </button>
-        </div>
+        {transparent ? 'Transparent background' : 'Keep the paper'}
+      </button>
 
-        <Segments
-          options={[
-            { id: 'png', label: 'PNG' },
-            { id: 'svg', label: 'SVG' },
-          ]}
-          value={format}
-          onChange={setFormat}
-        />
-
-        {/* SVG is resolution-free, so a scale would be a lie there */}
-        {format === 'png' && (
-          <>
-            <label className="mb-2 block t-eyebrow text-(--tx3) uppercase">Scale</label>
-            <div className="mb-3 flex gap-1">
-              {([1, 2, 3] as const).map((s) => (
-                <MiniButton key={s} active={scale === s} onClick={() => setScale(s)}>
-                  {s}×
-                </MiniButton>
-              ))}
-            </div>
-          </>
-        )}
-
-        <button
-          onClick={() => setTransparent(!transparent)}
-          aria-pressed={transparent}
-          className={`mb-3 h-8 w-full rounded-sm t-body-sm transition-colors ${
-            transparent ? 'bg-(--sel) text-(--tx)' : 'bg-(--field) text-(--tx2) hover:text-(--tx)'
-          }`}
-        >
-          {transparent ? 'Transparent background' : 'Keep the paper'}
-        </button>
-
-        <p className="mb-4 t-caption text-(--tx3)">
-          {empty ? 'Nothing on the canvas yet.' : `Trimmed to the drawing — ${size.w} × ${size.h}px.`}
-        </p>
-
-        <div className="flex gap-2">
-          <button
-            onClick={() => void run('copy')}
-            disabled={busy || empty}
-            className="h-9 flex-1 rounded-md bg-(--field) t-button text-(--tx2) transition-colors hover:bg-(--field-h) hover:text-(--tx) disabled:opacity-40"
-          >
-            Copy PNG
-          </button>
-          <button
-            onClick={() => void run('save')}
-            disabled={busy || empty}
-            className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-md bg-(--accent-fill) t-button text-(--accent-tx) transition-opacity hover:opacity-90 disabled:opacity-40"
-          >
-            <Download size={15} strokeWidth={1.9} />
-            {busy ? 'Working…' : 'Download'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/**
- * The panning hint, shown only while the sheet is blank.
- *
- * Excalidraw prints this under its toolbar permanently. Permanently is right
- * for a page anyone might land on cold, and wrong for a tool inside an app you
- * already opened on purpose: after the first drawing it is a line of text
- * sitting on your canvas forever. So it greets an empty sheet and then gets out
- * of the way, which is also the only moment the canvas has room to spare.
- */
-function EmptyHint() {
-  const empty = useDraw((s) => s.doc.elements.length === 0)
-  if (!empty) return null
-  return (
-    <div className="pointer-events-none absolute inset-x-0 top-1/2 z-10 -translate-y-24 text-center select-none">
-      <p className="t-body text-(--tx3)">Pick a pen and draw.</p>
-      <p className="mt-1.5 t-caption text-(--tx3)">
-        Hold{' '}
-        <kbd className="rounded-xs border border-(--line2) bg-(--panel3) px-1 t-mono text-[11px] text-(--tx2)">
-          Space
-        </kbd>{' '}
-        or the scroll wheel to move the canvas
+      <p className="mb-4 t-caption text-(--tx3)">
+        {empty ? 'Nothing on the canvas yet.' : `Trimmed to the drawing — ${size.w} × ${size.h}px.`}
       </p>
-    </div>
+
+      <div className="flex gap-2">
+        <button
+          onClick={() => void run('copy')}
+          disabled={busy || empty}
+          className="h-9 flex-1 rounded-md bg-(--field) t-button text-(--tx2) transition-colors hover:bg-(--field-h) hover:text-(--tx) disabled:opacity-40"
+        >
+          Copy PNG
+        </button>
+        <button
+          onClick={() => void run('save')}
+          disabled={busy || empty}
+          className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-md bg-(--accent-fill) t-button text-(--accent-tx) hover:bg-(--accent-fill-hover) disabled:opacity-40"
+        >
+          <Download size={15} strokeWidth={1.9} />
+          {busy ? 'Working…' : 'Download'}
+        </button>
+      </div>
+    </Dialog>
   )
 }
 
@@ -216,7 +176,6 @@ export function DrawEditor() {
           {hydrated && (
             <>
               <DrawCanvas />
-              <EmptyHint />
               <PenTray />
               <ZoomBar />
             </>

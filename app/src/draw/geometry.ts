@@ -171,7 +171,7 @@ function build(el: DrawElement): Geometry {
     return g
   }
 
-  if (el.kind === 'text' || el.kind === 'image') {
+  if (el.kind === 'text' || el.kind === 'image' || el.kind === 'note') {
     g.polygon = [
       [0, 0],
       [w, 0],
@@ -403,7 +403,7 @@ export function hitTest(el: DrawElement, x: number, y: number, tolerance: number
     return false
   }
 
-  if (el.kind === 'text' || el.kind === 'image') {
+  if (el.kind === 'text' || el.kind === 'image' || el.kind === 'note') {
     return lx >= -tolerance && ly >= -tolerance && lx <= el.w + tolerance && ly <= el.h + tolerance
   }
 
@@ -423,10 +423,13 @@ export function inBox(els: DrawElement[], box: Box): DrawElement[] {
   })
 }
 
-/** The eight resize grips plus the rotation grip, in scene coordinates. */
-export type HandleId = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'rotate'
+/** The eight resize grips, in scene coordinates. */
+export type ResizeHandleId = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w'
+/** A resize grip, or the ring just outside a corner grip that means "rotate instead". */
+export type HandleId = ResizeHandleId | 'rotate'
+export type CornerHandleId = 'nw' | 'ne' | 'se' | 'sw'
 
-export function handlePositions(box: Box, angle: number): Record<HandleId, Point> {
+export function handlePositions(box: Box, angle: number): Record<ResizeHandleId, Point> {
   const { x, y, w, h } = box
   const cx = x + w / 2
   const cy = y + h / 2
@@ -440,12 +443,10 @@ export function handlePositions(box: Box, angle: number): Record<HandleId, Point
     s: at(cx, y + h),
     sw: at(x, y + h),
     w: at(x, cy),
-    // far enough clear of the top edge not to be grabbed instead of the n grip
-    rotate: at(cx, y - 24),
   }
 }
 
-export const CURSOR_FOR_HANDLE: Record<HandleId, string> = {
+export const CURSOR_FOR_HANDLE: Record<ResizeHandleId, string> = {
   nw: 'nwse-resize',
   n: 'ns-resize',
   ne: 'nesw-resize',
@@ -454,5 +455,41 @@ export const CURSOR_FOR_HANDLE: Record<HandleId, string> = {
   s: 'ns-resize',
   sw: 'nesw-resize',
   w: 'ew-resize',
-  rotate: 'grab',
+}
+
+/** The four corners eligible for the "hover just outside to rotate" ring. */
+export const CORNER_HANDLES: CornerHandleId[] = ['nw', 'ne', 'se', 'sw']
+
+/**
+ * Each corner's cursor before the element's own rotation is folded in. The
+ * icon is drawn nose-up; these are how far it turns to lean into that corner.
+ */
+const ROTATE_BASE_DEG: Record<CornerHandleId, number> = { ne: 0, se: 90, sw: 180, nw: 270 }
+
+const ROTATE_CURSOR_CACHE = new Map<string, string>()
+
+/**
+ * A small curved-arrow cursor for "drag to rotate", rotated to lean into the
+ * corner it's hovering and to account for the element's current angle — so
+ * the cursor keeps pointing the way the corner will actually move, the way
+ * Figma's does, rather than sitting at one fixed compass angle forever.
+ */
+export function rotateCursor(corner: CornerHandleId, elementAngleRad: number): string {
+  // snapped to the nearest degree: a cache key that never grows unboundedly,
+  // and a degree of precision nobody's eye can tell from the exact float
+  const deg = Math.round(ROTATE_BASE_DEG[corner] + (elementAngleRad * 180) / Math.PI)
+  const key = `${corner}:${deg}`
+  const cached = ROTATE_CURSOR_CACHE.get(key)
+  if (cached) return cached
+  const svg =
+    `<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'>` +
+    `<g transform='rotate(${deg} 10 10)'>` +
+    `<path d='M13.5 7A5 5 0 1 0 14.6 13' fill='none' stroke='white' stroke-width='3' stroke-linecap='round'/>` +
+    `<path d='M11.3,4.3 14,7 10.9,9.1Z' fill='white'/>` +
+    `<path d='M13.5 7A5 5 0 1 0 14.6 13' fill='none' stroke='black' stroke-width='1.3' stroke-linecap='round'/>` +
+    `<path d='M11.3,4.3 14,7 10.9,9.1Z' fill='black'/>` +
+    `</g></svg>`
+  const css = `url("data:image/svg+xml,${encodeURIComponent(svg)}") 10 10, grab`
+  ROTATE_CURSOR_CACHE.set(key, css)
+  return css
 }

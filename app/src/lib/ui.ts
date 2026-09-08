@@ -34,6 +34,16 @@ export interface Toast {
   id: number
   message: string
   kind: ToastKind
+  /**
+   * Set for the last stretch of the toast's life, while it animates out.
+   *
+   * Without it the toast was spliced out of the array the instant its timer
+   * fired, so it did not leave so much as blink: one frame it was there, the
+   * next it was not, and the eye reads that as a glitch rather than as
+   * something finishing. It also meant a toast could vanish while being read.
+   * Two-stage removal lets the exit be seen, and it costs one boolean.
+   */
+  leaving?: boolean
 }
 
 interface UIState {
@@ -52,6 +62,9 @@ export const useUI = create<UIState>(() => ({ request: null, toasts: [], snap: 0
 
 let toastId = 0
 
+/** How long a toast takes to leave. Kept in step with `.toast-item[data-leaving]`. */
+const TOAST_EXIT_MS = 200
+
 /** Imperative API usable from anywhere, including non-React modules. */
 export const ui = {
   prompt(opts: Omit<PromptRequest, 'kind' | 'resolve'>): Promise<string | null> {
@@ -67,8 +80,21 @@ export const ui = {
   toast(message: string, kind: ToastKind = 'info') {
     const id = ++toastId
     useUI.setState((s) => ({ toasts: [...s.toasts, { id, message, kind }] }))
+    /*
+     * The dwell is measured to the *start* of the exit, not to the removal, so
+     * an error still gets its full six seconds of being readable and the
+     * animation is not taken out of that budget.
+     */
     setTimeout(
-      () => useUI.setState((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
+      () => {
+        useUI.setState((s) => ({
+          toasts: s.toasts.map((t) => (t.id === id ? { ...t, leaving: true } : t)),
+        }))
+        setTimeout(
+          () => useUI.setState((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
+          TOAST_EXIT_MS,
+        )
+      },
       kind === 'error' ? 6000 : 3500,
     )
   },

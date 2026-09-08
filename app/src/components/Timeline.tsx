@@ -303,7 +303,7 @@ export function Timeline() {
           </MiniButton>
           <button
             onClick={() => st().setPlaying(!playing)}
-            className="flex h-8 items-center rounded-md bg-(--accent-fill) px-3.5 t-button text-(--accent-tx) hover:opacity-90"
+            className="flex h-8 items-center rounded-md bg-(--accent-fill) px-3.5 t-button text-(--accent-tx) hover:bg-(--accent-fill-hover)"
             title="Play / pause (Space)"
           >
             {playing ? <Pause size={13} fill="currentColor" /> : <Play size={13} fill="currentColor" />}

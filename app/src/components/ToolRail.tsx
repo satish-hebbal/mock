@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
-import { Blend, Smartphone, type LucideIcon } from 'lucide-react'
+import { Blend, Grid3x3, Smartphone, Waves, type LucideIcon } from 'lucide-react'
 import { useStudio } from '../store'
+import { useAscii } from '../ascii/store'
 import { SECTIONS } from '../lib/sections'
 
 /*
@@ -18,6 +19,14 @@ const SHOTS_SECTIONS = [
   ['mockup', 'Mockup', Smartphone],
   ['frame', 'Frame', Blend],
 ] as const
+
+/** ASCII splits the same way: what the picture is made of, then how it is finished. */
+const ASCII_SECTIONS = [
+  ['art', 'Art', Grid3x3],
+  ['look', 'Look', Blend],
+] as const
+
+
 
 function RailButton({
   icon: Icon,
@@ -86,8 +95,12 @@ export function ToolRail() {
   const panelOpen = useStudio((s) => s.toolPanelOpen)
   const st = useStudio.getState
 
+  const asciiSection = useAscii((s) => s.section)
+
   const studio = mode === 'studio'
   const shots = mode === 'shots'
+  const ascii = mode === 'ascii'
+  const signal = mode === 'signal'
 
   return (
     <aside className="z-30 flex w-13 shrink-0 flex-col items-center gap-1 bg-(--panel) py-2.5">
@@ -145,6 +158,56 @@ export function ToolRail() {
               </RailButton>
             )
           })}
+        </>
+      )}
+
+      {ascii && (
+        <>
+          <RailDivider />
+          {ASCII_SECTIONS.map(([id, label, Icon]) => {
+            const on = panelOpen && asciiSection === id
+            return (
+              <RailButton
+                key={id}
+                icon={Icon}
+                title={label}
+                active={on}
+                onClick={() => {
+                  /* the rail is the only way back to a panel you closed, so a
+                     press on the section already showing has to reopen rather
+                     than toggle it shut again */
+                  if (on) st().setToolPanelOpen(false)
+                  else {
+                    useAscii.getState().setSection(id)
+                    st().setToolPanelOpen(true)
+                  }
+                }}
+              >
+                {on && (
+                  <span className="absolute top-1/2 -left-2.5 h-4 w-[2px] -translate-y-1/2 rounded-full bg-(--tx)" />
+                )}
+              </RailButton>
+            )
+          })}
+        </>
+      )}
+
+      {signal && (
+        <>
+          <RailDivider />
+          {/* Signal's controls are split across two panels, so there is no
+              section to choose here, only the pattern panel to show or hide.
+              The inspector has its own collapse in its header. */}
+          <RailButton
+            icon={Waves}
+            title="Pattern ([)"
+            active={panelOpen}
+            onClick={() => st().setToolPanelOpen(!panelOpen)}
+          >
+            {panelOpen && (
+              <span className="absolute top-1/2 -left-2.5 h-4 w-[2px] -translate-y-1/2 rounded-full bg-(--tx)" />
+            )}
+          </RailButton>
         </>
       )}
 

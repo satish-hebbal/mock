@@ -23,6 +23,7 @@ import { ui } from '../lib/ui'
 import { track } from '../lib/analytics'
 import { PENS, strokeBounds } from './pens'
 import { dropGeometry, sceneBounds, unionBounds, type Box } from './geometry'
+import { applyMark } from './marks'
 import { measureText } from './render'
 import {
   DEFAULT_STYLE,
@@ -39,7 +40,9 @@ import {
   type DrawStyle,
   type DrawTool,
   type ElementKind,
+  type NoteElement,
   type PenId,
+  type TextElement,
   type Viewport,
 } from './types'
 
@@ -169,7 +172,16 @@ interface DrawState {
 
   /** add a text element at a scene point and begin editing it; returns its id */
   placeText: (x: number, y: number) => string
-  /** put the caret into an existing text element */
+  /** add a sticky note at a scene point and begin editing it; returns its id */
+  placeNote: (x: number, y: number) => string
+  /**
+   * Lay a marker over part of the selected text, or lift it where `color` is
+   * null. Without a range it covers the whole of each element's text.
+   */
+  setHighlight: (color: string | null, range?: { start: number; end: number }) => void
+  /** Strike part of the selected text through, or lift the line off it. */
+  setStrike: (on: boolean, range?: { start: number; end: number }) => void
+  /** put the caret into an existing text or note element */
   editText: (id: string) => void
   /** finish editing; an untouched label is nothing and is dropped */
   endTextEdit: () => void
@@ -209,10 +221,29 @@ export const getSurfaceSize = () => surface
 const clampZoom = (z: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z))
 
 /** Changes that do not move a single point, so the cached wobble still stands. */
-const PAINT_ONLY = new Set(['stroke', 'opacity', 'textAlign'])
+const PAINT_ONLY = new Set(['stroke', 'opacity', 'textAlign', 'noteColor'])
 
 function bumpNeeded(patch: object): boolean {
   return Object.keys(patch).some((k) => !PAINT_ONLY.has(k))
+}
+
+/**
+ * Run `fn` over every selected element that carries text, with the range the
+ * mark applies to: what the caret had selected, or the whole string when it
+ * had nothing — so a marker is reachable for a label you merely clicked.
+ */
+function overSelectedText(
+  s: { doc: DrawDoc; selectedIds: string[] },
+  ids: string[],
+  range: { start: number; end: number } | undefined,
+  fn: (el: TextElement | NoteElement, start: number, end: number) => void,
+) {
+  const wanted = new Set(ids)
+  for (const el of s.doc.elements) {
+    if (!wanted.has(el.id) || el.locked) continue
+    if (el.kind !== 'text' && el.kind !== 'note') continue
+    fn(el, range?.start ?? 0, range?.end ?? el.text.length)
+  }
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | undefined
@@ -530,7 +561,58 @@ export const useDraw = create<DrawState>()(
       return el.id
     },
 
-    /** Put the caret into an existing text element. */
+    /**
+     * Drop a sticky note and begin editing it, the same way `placeText` does.
+     *
+     * Unlike a label, an empty note is still a thing — a blank coloured card is
+     * a legitimate note someone is about to write on, or one they are
+     * deliberately leaving blank — so nothing here ever deletes it for being
+     * empty the way `endTextEdit` does for a plain label.
+     */
+    placeNote: (x, y) => {
+      if (!get().toolLocked) get().setTool('select')
+      const el = newNote(x, y)
+      get().addElement(el)
+      set((s) => {
+        s.selectedIds = [el.id]
+        s.editingTextId = el.id
+      })
+      return el.id
+    },
+
+    /**
+     * Lay a marker over the selected text, or lift it.
+     *
+     * A range comes from the editor's own selection when there is one, which
+     * is the case anyone means by "highlight this". Without one it covers the
+     * whole string, so a marker is still reachable for a label you have merely
+     * clicked rather than opened — which is most of them.
+     */
+    setHighlight: (color, range) => {
+      const { selectedIds } = get()
+      if (selectedIds.length === 0) return
+      get().commit()
+      set((s) =>
+        overSelectedText(s, selectedIds, range, (el, start, end) => {
+          el.highlights = applyMark(el.highlights, start, end, color ? { color } : null)
+        }),
+      )
+      persist(get().doc)
+    },
+
+    setStrike: (on, range) => {
+      const { selectedIds } = get()
+      if (selectedIds.length === 0) return
+      get().commit()
+      set((s) =>
+        overSelectedText(s, selectedIds, range, (el, start, end) => {
+          el.strikes = applyMark(el.strikes, start, end, on ? {} : null)
+        }),
+      )
+      persist(get().doc)
+    },
+
+    /** Put the caret into an existing text or note element. */
     editText: (id) =>
       set((s) => {
         s.tool = 'select'
@@ -542,6 +624,9 @@ export const useDraw = create<DrawState>()(
      * End a text edit. Lives here rather than in the canvas because Escape can
      * arrive from the global key handler as well as from the textarea, and both
      * routes have to agree about what an abandoned label is worth: nothing.
+     *
+     * Only a plain label is worth nothing empty; a note is a coloured card
+     * whether or not it has anything written on it, so it is exempt.
      */
     endTextEdit: () => {
       const id = get().editingTextId
@@ -784,6 +869,26 @@ export function newText(x: number, y: number): DrawElement {
     y,
     w: s.style.fontSize,
     h: s.style.fontSize * 1.25,
+    angle: 0,
+    version: 1,
+    text: '',
+  }
+}
+
+/** A sticky note, a fixed-size card rather than a label that grows with its text. */
+export function newNote(x: number, y: number): DrawElement {
+  const s = useDraw.getState()
+  const w = 220
+  const h = 200
+  return {
+    ...s.style,
+    kind: 'note',
+    id: uid(),
+    seed: seed(),
+    x: x - w / 2,
+    y: y - h / 2,
+    w,
+    h,
     angle: 0,
     version: 1,
     text: '',

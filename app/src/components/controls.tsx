@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { ChevronDown, ChevronRight, Info } from 'lucide-react'
 import { useStudio } from '../store'
 import { endEditRun } from '../lib/history'
 import { KF_MARK } from '../lib/marks'
@@ -56,8 +56,121 @@ export function Section({
           <ChevronDown size={13} className={`transition-transform ${open ? '' : '-rotate-90'}`} />
         </button>
       </div>
-      {open && <div className="px-3 pb-3">{children}</div>}
+      {/*
+        The chevron animated and the thing it points at teleported.
+        `{open && …}` meant the body was in the DOM or it was not, so a section
+        opening shoved everything below it down the panel in a single frame, and
+        with several sections in a column the eye loses which one moved and has
+        to re-find the control it was reaching for.
+        `grid-template-rows` from `0fr` to `1fr` animates to the content's own
+        height with no measurement, no ResizeObserver and no magic number that
+        breaks the first time a section gains a row. The inner div must own the
+        `min-height: 0`, or the grid refuses to size it below its content and
+        nothing moves at all.
+      */}
+      <div
+        className="grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none"
+        style={{ gridTemplateRows: open ? '1fr' : '0fr' }}
+      >
+        {/*
+          `inert` because the body is now always mounted, and clipping it with
+          `overflow: hidden` hides it from the eye but not from Tab. Without
+          this, collapsing a section would quietly leave its controls in the
+          focus order: the keyboard would walk into a closed section and the
+          focus ring would disappear off the bottom of a 0px-tall box.
+        */}
+        <div className="min-h-0 overflow-hidden" inert={!open}>
+          {/* padding lives inside the clipped box, so it collapses with it
+              rather than leaving a stubborn gap when the section is shut */}
+          <div className="px-3 pb-3">{children}</div>
+        </div>
+      </div>
     </section>
+  )
+}
+
+/**
+ * An explanation, folded into a dot.
+ *
+ * A panel this dense cannot afford standing prose. A paragraph under a section
+ * heading is read once, on the first visit, and then costs a fixed slice of the
+ * panel forever after: on a 280px column two lines of caption push a control
+ * group off the bottom of the page, so the price of explaining one thing is not
+ * being able to see another. The text is worth having and worth hiding.
+ *
+ * Opens on hover and on focus, and toggles on click, because a dot that only
+ * answers to a pointer is not available to a keyboard or to touch.
+ *
+ * Positioned `fixed` from a measured rect rather than absolutely inside the
+ * panel. Both panel pages scroll, and an element that scrolls on one axis
+ * clips the other, so an absolutely positioned bubble would be cut off at the
+ * panel's edge exactly when it has something to say.
+ */
+export function InfoTip({ children, label = 'What is this?' }: { children: ReactNode; label?: string }) {
+  const ref = useRef<HTMLButtonElement>(null)
+  const [at, setAt] = useState<{ x: number; y: number; flip: boolean } | null>(null)
+
+  const open = () => {
+    const r = ref.current?.getBoundingClientRect()
+    if (!r) return
+    const flip = r.right + 248 > window.innerWidth
+    setAt({ x: flip ? r.left - 8 : r.right + 8, y: r.top + r.height / 2, flip })
+  }
+  const close = () => setAt(null)
+
+  useEffect(() => {
+    if (!at) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      // the dot is inside dialogs and panels that also answer to Escape, and
+      // closing the bubble is the smaller, nearer thing the key should do first
+      e.stopImmediatePropagation()
+      close()
+    }
+    window.addEventListener('keydown', onKey, true)
+    // a scroll moves the button out from under a bubble measured against the
+    // old position, so the honest thing is to drop it rather than chase it
+    window.addEventListener('scroll', close, true)
+    return () => {
+      window.removeEventListener('keydown', onKey, true)
+      window.removeEventListener('scroll', close, true)
+    }
+  }, [at])
+
+  return (
+    <>
+      <button
+        ref={ref}
+        type="button"
+        aria-label={label}
+        aria-expanded={!!at}
+        onPointerEnter={open}
+        onPointerLeave={close}
+        onFocus={open}
+        onBlur={close}
+        onClick={(e) => {
+          e.stopPropagation()
+          if (at) close()
+          else open()
+        }}
+        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-xs text-(--tx3) transition-colors hover:text-(--tx)"
+      >
+        <Info size={13} strokeWidth={1.9} />
+      </button>
+      {at && (
+        <div
+          role="tooltip"
+          style={{
+            left: at.x,
+            top: at.y,
+            transform: `translate(${at.flip ? '-100%' : '0'}, -50%)`,
+          }}
+          className="pointer-events-none fixed z-[60] max-w-[240px] rounded-md border border-(--line) bg-(--raised) px-2.5 py-2 t-caption leading-snug text-(--tx2) shadow-lg"
+        >
+          {children}
+        </div>
+      )}
+    </>
   )
 }
 
@@ -175,25 +288,56 @@ export function SliderRow({
     endEditRun()
   }
 
-  // Figma-style relative scrub: drag anywhere on the field, ~180px covers the
-  // full range; a click that never moved opens the value for typing instead.
+  /*
+   * Figma-style relative scrub: drag anywhere on the field, ~180px covers the
+   * full range; a click that never moved opens the value for typing instead.
+   *
+   * Accumulated from `movementX` under pointer lock rather than from
+   * `clientX - startX`. Against absolute positions the drag was bounded by the
+   * screen: these rows sit in a 280px rail hard against the right edge of the
+   * window, so a scrub upward ran out of desk after a couple of hundred pixels
+   * and simply stopped, with the pointer pinned to the bezel and the number
+   * refusing to move. Under lock there is no cursor position to run out of, so
+   * one gesture covers the whole range however far it has to travel, and the
+   * pointer is put back where it started on release rather than stranded
+   * wherever the value happened to end.
+   */
   const onPointerDown = (e: React.PointerEvent) => {
     if (editing || e.button !== 0) return
-    const startX = e.clientX
     const startV = value
     const perPx = (max - min) / 180
     let moved = false
+    let dx = 0
     const el = e.currentTarget as HTMLElement
     el.setPointerCapture(e.pointerId)
     scrubbing.current = true
 
+    /*
+     * Lock is requested, not required. It needs a user gesture and can be
+     * refused (an iframe without the right permission, a browser that has just
+     * exited lock, Safari asking first), and it returns a promise that rejects
+     * rather than throwing. Nothing below depends on it: `movementX` is
+     * populated either way, so a refusal costs the infinite range and keeps the
+     * scrub working exactly as it did before.
+     */
+    let released = false
+    const lock = el.requestPointerLock?.() as Promise<void> | undefined
+    // older engines return undefined here rather than a promise
+    lock?.then?.(() => {
+      // a very short drag can finish before the lock is granted; if it has, let
+      // go again immediately rather than leaving the pointer captured
+      if (released) document.exitPointerLock()
+    })?.catch?.(() => {})
+
     const onMove = (ev: PointerEvent) => {
-      const dx = ev.clientX - startX
+      dx += ev.movementX
       if (Math.abs(dx) > 2) moved = true
       if (!moved) return
       onChange(clamp(startV + dx * perPx * (ev.shiftKey ? 0.2 : 1)))
     }
     const onUp = () => {
+      released = true
+      if (document.pointerLockElement === el) document.exitPointerLock()
       el.releasePointerCapture(e.pointerId)
       el.removeEventListener('pointermove', onMove)
       el.removeEventListener('pointerup', onUp)
@@ -230,14 +374,26 @@ export function SliderRow({
         title={hint ?? label}
         onPointerDown={onPointerDown}
         onKeyDown={onKeyDown}
-        className="relative h-7 flex-1 cursor-ew-resize overflow-hidden rounded-sm bg-(--field) select-none focus:ring-2 focus:ring-(--focus) focus:outline-none"
+        /*
+         * The row is a scrub target that looked identical whether or not the
+         * pointer was on it, so the only way to discover it was draggable was to
+         * press it and see. `cursor-ew-resize` said so, but a cursor is the one
+         * affordance you cannot notice without already being over the thing.
+         * Hover lifts the field and the handle. Deliberately not the filled
+         * portion: the tokens either side of `--sel` step *up* the ladder on
+         * dark and *down* on light, so any fixed hover colour for the fill
+         * brightens it in one theme and dulls it in the other. The track and the
+         * handle both have a token that moves the right way in both, and two
+         * things moving is already more than enough signal.
+         */
+        className="group relative h-7 flex-1 cursor-ew-resize overflow-hidden rounded-sm bg-(--field) transition-colors select-none hover:bg-(--field-h) focus:ring-2 focus:ring-(--focus) focus:outline-none"
       >
         <div
           className="pointer-events-none absolute inset-y-0 left-0 rounded-sm bg-(--sel)"
           style={{ width: `${pct}%` }}
         />
         <div
-          className="pointer-events-none absolute top-1/2 h-3 w-0.5 -translate-y-1/2 rounded-full bg-(--tx2)"
+          className="pointer-events-none absolute top-1/2 h-3 w-0.5 -translate-y-1/2 rounded-full bg-(--tx2) transition-colors group-hover:bg-(--tx)"
           style={{ left: `calc(${pct}% - 6px)` }}
         />
         <div className="absolute inset-0 flex items-center justify-between gap-2 px-2.5">

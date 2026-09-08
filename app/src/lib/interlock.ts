@@ -160,7 +160,6 @@ export function seam(m: Metrics): Seam {
   return {
     row: {
       '--tool-step': px(m.step),
-      '--tool-gutter': px(m.gutter),
       '--tool-radius': px(m.radius),
       '--tool-pad': px(m.pad),
     } as CSSProperties,
@@ -168,8 +167,8 @@ export function seam(m: Metrics): Seam {
   }
 }
 
-/** the home screen's row: `gap-3`, `rounded-xl`, `p-5` */
-export const HOME_SEAM = seam({ gutter: 12, step: 28, radius: 16, pad: 20 })
+/** the home screen's row: `gap-3`, `rounded-xl`, `p-4` */
+export const HOME_SEAM = seam({ gutter: 12, step: 28, radius: 16, pad: 16 })
 
 /** the app menu's row, which runs smaller: `gap-2`, `rounded-lg`, `p-3` */
 export const SHEET_SEAM = seam({ gutter: 8, step: 20, radius: 12, pad: 12 })

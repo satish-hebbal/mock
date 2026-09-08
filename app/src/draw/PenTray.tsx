@@ -39,14 +39,27 @@ import {
   Check,
   ChevronDown,
   Copy,
+  List,
   MoveDown,
   MoveUp,
+  TextAlignCenter,
+  TextAlignEnd,
+  TextAlignStart,
   Trash2,
 } from 'lucide-react'
 import { ERASER, PENS, PEN_ORDER } from './pens'
 import { PenGlyph } from './PenGlyph'
 import { useDraw, type TrayFace } from './store'
-import { FILL_SWATCHES, INK_SWATCHES, STROKE_WIDTHS, type DrawStyle, type PenId } from './types'
+import {
+  FILL_SWATCHES,
+  FONT_SIZES,
+  INK_SWATCHES,
+  NOTE_SWATCHES,
+  STROKE_WIDTHS,
+  type DrawStyle,
+  type PenId,
+  type TextAlign,
+} from './types'
 
 /** Under this the bar stands up on the left edge and trims its toolset. */
 const NARROW = 680
@@ -220,6 +233,15 @@ function ShapeGlyph({ style }: { style: DrawStyle }) {
   )
 }
 
+/** The note face's opener: a little card wearing the current paper colour, square-cut like the real thing. */
+function NoteGlyph({ color }: { color: string }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <rect x="2.5" y="2.5" width="11" height="11" fill={color} stroke="currentColor" strokeOpacity="0.3" strokeWidth="1" />
+    </svg>
+  )
+}
+
 /** A row of picture-options, for the shape face. */
 function Picks<T extends string | number>({
   value,
@@ -326,6 +348,83 @@ function HoldRound({
   )
 }
 
+/**
+ * The note face's controls: paper colour, size, and how the text sits in it.
+ * Nothing here is a shape property — no fill, no sloppiness, no stroke width —
+ * a note is a card with words on it, not a wobbly rectangle wearing one.
+ */
+function NoteControls({
+  style,
+  setStyle,
+}: {
+  style: DrawStyle
+  setStyle: (patch: Partial<DrawStyle>, label?: string) => void
+}) {
+  return (
+    <>
+      <div className="dw-swatches">
+        {NOTE_SWATCHES.map((c) => (
+          <Chip
+            key={c}
+            color={c}
+            active={style.noteColor.toLowerCase() === c.toLowerCase()}
+            onClick={() => setStyle({ noteColor: c }, 'draw-notecolor')}
+          />
+        ))}
+      </div>
+      {/* "custom is the swatch that opens the hex field and spectrum" */}
+      <label className="dw-custom" title="Custom paper colour">
+        <span />
+        <input
+          type="color"
+          value={/^#[0-9a-f]{6}$/i.test(style.noteColor) ? style.noteColor : '#fdf2a1'}
+          onChange={(e) => setStyle({ noteColor: e.target.value }, 'draw-notecolor')}
+          aria-label="Custom paper colour"
+          className="absolute inset-0 cursor-pointer opacity-0"
+        />
+      </label>
+
+      <span className="dw-divider" />
+
+      <Picks
+        value={style.fontSize}
+        onChange={(v) => setStyle({ fontSize: v }, 'draw-fontsize')}
+        options={FONT_SIZES.map((size, i) => ({
+          id: size,
+          label: ['Small', 'Medium', 'Large', 'Extra large'][i],
+          icon: (
+            <span aria-hidden style={{ fontSize: 9 + i * 2, fontWeight: 600, lineHeight: 1 }}>
+              A
+            </span>
+          ),
+        }))}
+      />
+
+      <span className="dw-divider" />
+
+      {/*
+       * One exclusive row of four rather than a bullet toggle beside three
+       * alignment radios: a bulleted note reads left-aligned the way every
+       * list does, so "bulleted" and "aligned" are really one choice with
+       * four answers, not two independent ones that could disagree.
+       */}
+      <Picks<'bullet' | TextAlign>
+        value={style.bulleted ? 'bullet' : style.textAlign}
+        onChange={(v) => {
+          if (v === 'bullet') setStyle({ bulleted: true }, 'draw-format')
+          else setStyle({ bulleted: false, textAlign: v }, 'draw-format')
+        }}
+        options={[
+          { id: 'bullet', label: 'Bulleted', icon: <List size={15} strokeWidth={1.9} /> },
+          { id: 'left', label: 'Align left', icon: <TextAlignStart size={15} strokeWidth={1.9} /> },
+          { id: 'center', label: 'Align centre', icon: <TextAlignCenter size={15} strokeWidth={1.9} /> },
+          { id: 'right', label: 'Align right', icon: <TextAlignEnd size={15} strokeWidth={1.9} /> },
+        ]}
+      />
+    </>
+  )
+}
+
 export function PenTray() {
   const tray = useDraw((s) => s.tray)
   const face = useDraw((s) => s.trayFace)
@@ -338,6 +437,7 @@ export function PenTray() {
   const style = useDraw((s) => s.style)
   const gauge = useDraw((s) => s.trayGauge)
   const selectedIds = useDraw((s) => s.selectedIds)
+  const elements = useDraw((s) => s.doc.elements)
   const st = useDraw.getState
 
   const shellRef = useRef<HTMLDivElement>(null)
@@ -359,7 +459,17 @@ export function PenTray() {
 
   /** Shapes are in play, so the bar should be offering their properties. */
   const shapey =
-    selectedIds.length > 0 || ['rect', 'diamond', 'ellipse', 'arrow', 'line', 'text'].includes(tool)
+    selectedIds.length > 0 || ['rect', 'diamond', 'ellipse', 'arrow', 'line', 'text', 'note'].includes(tool)
+
+  /*
+   * A note's properties are nothing like a shape's — colour and a bit of text
+   * formatting instead of fill and sloppiness — so the "shape" face shows one
+   * or the other rather than both at once. Reaching for the note tool means
+   * it, and so does having only notes selected; a mixed selection falls back
+   * to the shape controls rather than trying to show both.
+   */
+  const selected = selectedIds.length ? elements.filter((e) => selectedIds.includes(e.id)) : []
+  const noteMode = tool === 'note' || (selected.length > 0 && selected.every((e) => e.kind === 'note'))
 
   /*
    * Measure the active face and let the shell animate to it. This is what makes
@@ -375,7 +485,7 @@ export function PenTray() {
     const ro = new ResizeObserver(measure)
     ro.observe(el)
     return () => ro.disconnect()
-  }, [face, vertical, narrow, tool, pen, shapey, style.fill, holdingEraser])
+  }, [face, vertical, narrow, tool, pen, shapey, style.fill, holdingEraser, noteMode, style.bulleted])
 
   // how much canvas the bar has to live in, for the responsive rule
   useEffect(() => {
@@ -587,8 +697,8 @@ export function PenTray() {
             <span className="dw-dot" style={dotStyle} />
           </Round>
           {shapey && (
-            <Round label="Shape style" onClick={() => goto('shape')}>
-              <ShapeGlyph style={style} />
+            <Round label={noteMode ? 'Note style' : 'Shape style'} onClick={() => goto('shape')}>
+              {noteMode ? <NoteGlyph color={style.noteColor} /> : <ShapeGlyph style={style} />}
             </Round>
           )}
 
@@ -708,160 +818,165 @@ export function PenTray() {
       >
         <div className="dw-row">
           {back}
-          <div className="dw-swatches">
-            {FILL_SWATCHES.map((c) => (
-              <Chip
-                key={c}
-                color={c}
-                active={style.fill.toLowerCase() === c.toLowerCase()}
-                onClick={() => setStyle({ fill: c }, 'draw-fill')}
+          {noteMode && <NoteControls style={style} setStyle={setStyle} />}
+          {!noteMode && (
+            <>
+            <div className="dw-swatches">
+              {FILL_SWATCHES.map((c) => (
+                <Chip
+                  key={c}
+                  color={c}
+                  active={style.fill.toLowerCase() === c.toLowerCase()}
+                  onClick={() => setStyle({ fill: c }, 'draw-fill')}
+                />
+              ))}
+            </div>
+            {style.fill !== 'transparent' && (
+              <Picks
+                value={style.fillStyle}
+                onChange={(v) => setStyle({ fillStyle: v }, 'draw-fillstyle')}
+                options={[
+                  {
+                    id: 'hachure' as const,
+                    label: 'Hachure',
+                    icon: (
+                      <G>
+                        <path d="M3 10l6-6M6 12l6-6M9 13.5l4-4" strokeWidth={1.2} />
+                      </G>
+                    ),
+                  },
+                  {
+                    id: 'cross-hatch' as const,
+                    label: 'Cross-hatch',
+                    icon: (
+                      <G>
+                        <path d="M3 10l6-6M6 12l6-6M6 3l6 6M3 6l6 6" strokeWidth={1.1} />
+                      </G>
+                    ),
+                  },
+                  {
+                    id: 'solid' as const,
+                    label: 'Solid',
+                    icon: (
+                      <G>
+                        <rect x="3" y="3" width="10" height="10" rx="1.5" fill="currentColor" strokeWidth={0} />
+                      </G>
+                    ),
+                  },
+                ]}
               />
-            ))}
-          </div>
-          {style.fill !== 'transparent' && (
+            )}
+            <span className="dw-divider" />
             <Picks
-              value={style.fillStyle}
-              onChange={(v) => setStyle({ fillStyle: v }, 'draw-fillstyle')}
+              value={style.strokeWidth}
+              onChange={(v) => setStyle({ strokeWidth: v }, 'draw-sw')}
+              options={STROKE_WIDTHS.map((w, i) => ({
+                id: w,
+                label: ['Thin', 'Bold', 'Extra bold'][i],
+                icon: (
+                  <G>
+                    <path d="M3 8h10" strokeWidth={w === 1 ? 1 : w === 2 ? 2.2 : 3.6} />
+                  </G>
+                ),
+              }))}
+            />
+            <Picks
+              value={style.strokeStyle}
+              onChange={(v) => setStyle({ strokeStyle: v }, 'draw-ss')}
               options={[
-                {
-                  id: 'hachure' as const,
-                  label: 'Hachure',
-                  icon: (
-                    <G>
-                      <path d="M3 10l6-6M6 12l6-6M9 13.5l4-4" strokeWidth={1.2} />
-                    </G>
-                  ),
-                },
-                {
-                  id: 'cross-hatch' as const,
-                  label: 'Cross-hatch',
-                  icon: (
-                    <G>
-                      <path d="M3 10l6-6M6 12l6-6M6 3l6 6M3 6l6 6" strokeWidth={1.1} />
-                    </G>
-                  ),
-                },
                 {
                   id: 'solid' as const,
                   label: 'Solid',
                   icon: (
                     <G>
-                      <rect x="3" y="3" width="10" height="10" rx="1.5" fill="currentColor" strokeWidth={0} />
+                      <path d="M3 8h10" strokeWidth={2} />
+                    </G>
+                  ),
+                },
+                {
+                  id: 'dashed' as const,
+                  label: 'Dashed',
+                  icon: (
+                    <G>
+                      <path d="M3 8h10" strokeWidth={2} strokeDasharray="3.5 3" />
+                    </G>
+                  ),
+                },
+                {
+                  id: 'dotted' as const,
+                  label: 'Dotted',
+                  icon: (
+                    <G>
+                      <path d="M3 8h10" strokeWidth={2} strokeDasharray="0.5 3" />
                     </G>
                   ),
                 },
               ]}
             />
+            <span className="dw-divider" />
+            {/* sloppiness, shown as the thing it does: one box drawn three ways */}
+            <Picks
+              value={style.sloppiness}
+              onChange={(v) => setStyle({ sloppiness: v }, 'draw-slop')}
+              options={[
+                {
+                  id: 0 as const,
+                  label: 'Architect',
+                  icon: (
+                    <G>
+                      <rect x="2.5" y="3.5" width="11" height="9" strokeWidth={1.3} />
+                    </G>
+                  ),
+                },
+                {
+                  id: 1 as const,
+                  label: 'Artist',
+                  icon: (
+                    <G>
+                      <path d="M3 4.2q5-.9 10 0M13.4 4q.4 4-.1 8M13 12.4q-5 .8-10 .1M2.7 12.2q-.4-4 .1-8" strokeWidth={1.3} />
+                    </G>
+                  ),
+                },
+                {
+                  id: 2 as const,
+                  label: 'Cartoonist',
+                  icon: (
+                    <G>
+                      <path
+                        d="M2.6 4.6q5-1.8 10.6-.3M13.8 3.6q.7 4.6-.4 8.6M13.6 12.9q-5.4 1.4-10.8-.2M2.3 13q-1-4.3.1-8.7M3.4 3.9q5.2-1 10 .4"
+                        strokeWidth={1.2}
+                      />
+                    </G>
+                  ),
+                },
+              ]}
+            />
+            <Picks
+              value={style.edges}
+              onChange={(v) => setStyle({ edges: v }, 'draw-edges')}
+              options={[
+                {
+                  id: 'sharp' as const,
+                  label: 'Sharp edges',
+                  icon: (
+                    <G>
+                      <path d="M3 13V3h10" strokeWidth={1.6} />
+                    </G>
+                  ),
+                },
+                {
+                  id: 'round' as const,
+                  label: 'Round edges',
+                  icon: (
+                    <G>
+                      <path d="M3 13V7a4 4 0 0 1 4-4h6" strokeWidth={1.6} />
+                    </G>
+                  ),
+                },
+              ]}
+            />
+            </>
           )}
-          <span className="dw-divider" />
-          <Picks
-            value={style.strokeWidth}
-            onChange={(v) => setStyle({ strokeWidth: v }, 'draw-sw')}
-            options={STROKE_WIDTHS.map((w, i) => ({
-              id: w,
-              label: ['Thin', 'Bold', 'Extra bold'][i],
-              icon: (
-                <G>
-                  <path d="M3 8h10" strokeWidth={w === 1 ? 1 : w === 2 ? 2.2 : 3.6} />
-                </G>
-              ),
-            }))}
-          />
-          <Picks
-            value={style.strokeStyle}
-            onChange={(v) => setStyle({ strokeStyle: v }, 'draw-ss')}
-            options={[
-              {
-                id: 'solid' as const,
-                label: 'Solid',
-                icon: (
-                  <G>
-                    <path d="M3 8h10" strokeWidth={2} />
-                  </G>
-                ),
-              },
-              {
-                id: 'dashed' as const,
-                label: 'Dashed',
-                icon: (
-                  <G>
-                    <path d="M3 8h10" strokeWidth={2} strokeDasharray="3.5 3" />
-                  </G>
-                ),
-              },
-              {
-                id: 'dotted' as const,
-                label: 'Dotted',
-                icon: (
-                  <G>
-                    <path d="M3 8h10" strokeWidth={2} strokeDasharray="0.5 3" />
-                  </G>
-                ),
-              },
-            ]}
-          />
-          <span className="dw-divider" />
-          {/* sloppiness, shown as the thing it does: one box drawn three ways */}
-          <Picks
-            value={style.sloppiness}
-            onChange={(v) => setStyle({ sloppiness: v }, 'draw-slop')}
-            options={[
-              {
-                id: 0 as const,
-                label: 'Architect',
-                icon: (
-                  <G>
-                    <rect x="2.5" y="3.5" width="11" height="9" strokeWidth={1.3} />
-                  </G>
-                ),
-              },
-              {
-                id: 1 as const,
-                label: 'Artist',
-                icon: (
-                  <G>
-                    <path d="M3 4.2q5-.9 10 0M13.4 4q.4 4-.1 8M13 12.4q-5 .8-10 .1M2.7 12.2q-.4-4 .1-8" strokeWidth={1.3} />
-                  </G>
-                ),
-              },
-              {
-                id: 2 as const,
-                label: 'Cartoonist',
-                icon: (
-                  <G>
-                    <path
-                      d="M2.6 4.6q5-1.8 10.6-.3M13.8 3.6q.7 4.6-.4 8.6M13.6 12.9q-5.4 1.4-10.8-.2M2.3 13q-1-4.3.1-8.7M3.4 3.9q5.2-1 10 .4"
-                      strokeWidth={1.2}
-                    />
-                  </G>
-                ),
-              },
-            ]}
-          />
-          <Picks
-            value={style.edges}
-            onChange={(v) => setStyle({ edges: v }, 'draw-edges')}
-            options={[
-              {
-                id: 'sharp' as const,
-                label: 'Sharp edges',
-                icon: (
-                  <G>
-                    <path d="M3 13V3h10" strokeWidth={1.6} />
-                  </G>
-                ),
-              },
-              {
-                id: 'round' as const,
-                label: 'Round edges',
-                icon: (
-                  <G>
-                    <path d="M3 13V7a4 4 0 0 1 4-4h6" strokeWidth={1.6} />
-                  </G>
-                ),
-              },
-            ]}
-          />
 
           {/*
            * Stacking order and the two whole-element actions. These lived in

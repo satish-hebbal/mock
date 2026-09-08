@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react'
-import { Boxes, Image as ImageIcon, PenLine, type LucideIcon } from 'lucide-react'
+import { Boxes, Grid3x3, Image as ImageIcon, PenLine, Waves, type LucideIcon } from 'lucide-react'
 import type { AppMode } from '../store'
 
 /**
@@ -47,17 +47,37 @@ export const TOOLS: Tool[] = [
     icon: PenLine,
     tint: ['64, 176, 140', '96, 200, 176'],
   },
+  {
+    id: 'ascii',
+    name: 'ASCII',
+    tagline: 'Redraw a picture as characters, tiles or dither, and keep the text.',
+    icon: Grid3x3,
+    tint: ['158, 118, 226', '196, 150, 244'],
+  },
+  {
+    id: 'signal',
+    name: 'Signal',
+    tagline: 'Dithered motion out of nothing. Take it away as a loop.',
+    icon: Waves,
+    tint: ['58, 168, 208', '110, 208, 236'],
+  },
 ]
 
 /**
- * The card's own colour, handed to CSS as a custom property.
+ * The card's own colours, handed to CSS as custom properties.
  *
  * The hairline round a tool card is the card's background, so its hover state
  * lives in a stylesheet rather than here, and a stylesheet cannot reach into
- * `TOOLS` for a tint. This passes one down to meet it.
+ * `TOOLS` for a tint. This passes them down to meet it.
+ *
+ * Both ends of the tint travel, because the two grounds want opposite ones. On
+ * the near-black canvas the icon takes the far tint, which is the light step and
+ * clears 7:1 against it; on the light theme it takes the near tint darkened,
+ * because the far one is a highlight colour and all but disappears on white.
+ * The stylesheet picks between them, so neither file has to know the theme.
  */
 export function toolTint(tool: Tool): CSSProperties {
-  return { '--tool-tint': tool.tint[0] } as CSSProperties
+  return { '--tool-tint': tool.tint[0], '--tool-tint-far': tool.tint[1] } as CSSProperties
 }
 
 /**
@@ -87,9 +107,12 @@ export function toolWash(tool: Tool, strength = 1): string {
  * a brighter chip. Each tool warms in its own colour rather than every
  * selection glowing the same borrowed blue.
  *
- * It arrives in three pieces because a tool card does: the hairline is the
- * card's own background, the surface is a fill layer inset inside it, and the
- * chip sits on top of both.
+ * It arrives in two pieces because a tool card does: the hairline is the card's
+ * own background, and the surface is a fill layer inset inside it. There is no
+ * third piece for the icon any more. The icon used to sit in a grey chip that
+ * needed lighting separately; now it is drawn in the tool's own colour with
+ * nothing behind it, so it is already the brightest thing on the card and has
+ * nothing left to switch on.
  *
  * There is no bloom under the card any more. A box-shadow is drawn from the
  * border box, so on an interlocked card it blooms around a rectangle the card
@@ -103,7 +126,6 @@ export function toolWash(tool: Tool, strength = 1): string {
 export function toolLit(tool: Tool): {
   card: CSSProperties
   fill: CSSProperties
-  chip: CSSProperties
 } {
   const [near] = tool.tint
   return {
@@ -117,11 +139,6 @@ export function toolLit(tool: Tool): {
       ].join(', '),
       // a top highlight is what actually sells "lit from above"
       boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.09)',
-    },
-    // the chip stops being a grey inset and becomes the brightest thing on the card
-    chip: {
-      background: `rgba(${near}, 0.3)`,
-      boxShadow: `inset 0 0 0 1px rgba(${near}, 0.45)`,
     },
   }
 }

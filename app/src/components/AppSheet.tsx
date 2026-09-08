@@ -81,7 +81,7 @@ export function AppSheet() {
         onMouseDown={(e) => e.stopPropagation()}
         className="absolute inset-x-0 top-0 animate-[sheet-drop_240ms_cubic-bezier(0.2,0.85,0.25,1)] border-b border-(--line) bg-(--raised)/72 px-6 pt-5 pb-6 backdrop-blur-2xl backdrop-saturate-150"
       >
-        <div className="mx-auto max-w-4xl">
+        <div className="mx-auto max-w-5xl">
           <div className="mb-4 flex items-center gap-2.5">
             <img src="/frog-logo.svg" alt="" width={22} height={22} />
             <span className="t-body font-semibold text-(--tx)">Ribbit</span>
@@ -91,12 +91,15 @@ export function AppSheet() {
           <p className="mb-2 t-eyebrow text-(--tx3) uppercase">
             Tools
           </p>
-          <div className="tool-row grid grid-cols-1 gap-2 sm:grid-cols-3" style={SHEET_SEAM.row}>
+          <div
+            className="tool-row grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5"
+            style={SHEET_SEAM.row}
+          >
             {TOOLS.map((t, i) => {
               const active = !t.soon && mode === t.id
               // The wash carries the card on its own; the tool you're actually
               // in gets light on top of it, so "this is where you are" reads
-              // before you've finished scanning the three names.
+              // before you've finished scanning the row.
               const lit = active ? toolLit(t) : null
               const seam = SHEET_SEAM.parts[i]
               return (
@@ -115,14 +118,7 @@ export function AppSheet() {
                     className="tool-card-fill"
                     style={lit?.fill ?? { background: toolWash(t, t.soon ? 0.35 : 0.7) }}
                   />
-                  <span
-                    style={lit?.chip}
-                    className={`flex h-8 w-8 items-center justify-center rounded-md ${
-                      t.soon ? 'bg-(--panel3) text-(--tx3)' : 'bg-(--sel) text-(--tx)'
-                    }`}
-                  >
-                    <t.icon size={16} strokeWidth={1.8} />
-                  </span>
+                  <t.icon className="tool-card-icon" size={18} strokeWidth={1.8} />
                   <span>
                     <span className="flex items-center gap-1.5">
                       <span className="t-body-sm font-semibold text-(--tx)">{t.name}</span>

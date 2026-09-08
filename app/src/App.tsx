@@ -6,6 +6,11 @@ import { PALETTE_GROUP_SIZE } from './shots/palette'
 import { ShotsEditor } from './shots/ShotsEditor'
 import { DrawEditor } from './draw/DrawEditor'
 import { useDraw } from './draw/store'
+import { AsciiEditor } from './ascii/AsciiEditor'
+import { SignalEditor } from './signal/SignalEditor'
+import { useAscii } from './ascii/store'
+import { useSignal } from './signal/store'
+import { RECIPES } from './ascii/presets'
 import { PENS, PEN_ORDER } from './draw/pens'
 import { SHAPE_TOOLS } from './draw/shapeTools'
 import { ToolRail } from './components/ToolRail'
@@ -149,8 +154,9 @@ function useGlobalShortcuts() {
       const key = keyOf(e)
 
       // Alt, not Ctrl: Ctrl+1/2/3 are browser tab switches and can't be cancelled
-      if (e.altKey && (key === '1' || key === '2' || key === '3')) {
-        s.setMode(key === '1' ? 'studio' : key === '2' ? 'shots' : 'draw')
+      if (e.altKey && key >= '1' && key <= '5') {
+        const MODES = { '1': 'studio', '2': 'shots', '3': 'draw', '4': 'ascii', '5': 'signal' } as const
+        s.setMode(MODES[key as keyof typeof MODES])
         return true
       }
       /*
@@ -229,6 +235,40 @@ function useGlobalShortcuts() {
     }
 
     /**
+     * ASCII's keyboard.
+     *
+     * Short, because there is no selection here and so nothing to nudge, move
+     * or delete. Undo, export, and the one letter worth spending on a tool
+     * whose whole appeal is trying things: R rerolls the look.
+     */
+    const handleAscii = (e: KeyboardEvent) => {
+      const a = useAscii.getState()
+      const mod = e.ctrlKey || e.metaKey
+      const key = keyOf(e)
+
+      if (mod && key === 'z') {
+        e.preventDefault()
+        if (e.shiftKey) a.redo()
+        else a.undo()
+      } else if (mod && key === 'y') {
+        e.preventDefault()
+        a.redo()
+      } else if (mod) {
+        return
+      } else if (key === 'e') {
+        a.setDialog(a.dialog === 'export' ? null : 'export')
+      } else if (e.key === 'Escape') {
+        a.setDialog(null)
+      } else if (key === 'u') {
+        pickMediaFile((f) => void a.importImage(f), false)
+      } else if (key === 'r') {
+        a.applyLook(RECIPES[Math.floor(Math.random() * RECIPES.length)].id)
+      } else if (key === 'i') {
+        a.patch((d) => void (d.tone.invert = !d.tone.invert))
+      }
+    }
+
+    /**
      * Draw's keyboard.
      *
      * Excalidraw's bindings, because they are the ones anyone arriving at a
@@ -238,6 +278,42 @@ function useGlobalShortcuts() {
      * both of the tools this one is modelled on, and on a drawing canvas the
      * eraser wins. Export moves to Ctrl+Shift+E.
      */
+    /*
+     * Signal's own keys. Space is the one that matters and the one that has to
+     * be claimed here: with focus parked on a button the browser would fire
+     * that button instead, which is the bug the root-focus dance elsewhere in
+     * this file exists to prevent.
+     */
+    const handleSignal = (e: KeyboardEvent) => {
+      const g = useSignal.getState()
+      const mod = e.ctrlKey || e.metaKey
+      const key = keyOf(e)
+
+      if (mod && key === 'z') {
+        e.preventDefault()
+        if (e.shiftKey) g.redo()
+        else g.undo()
+      } else if (mod && key === 'y') {
+        e.preventDefault()
+        g.redo()
+      } else if (mod) {
+        return
+      } else if (e.key === ' ') {
+        e.preventDefault()
+        g.togglePlay()
+      } else if (key === 'e') {
+        g.setDialog(g.dialog === 'export' ? null : 'export')
+      } else if (e.key === 'Escape') {
+        g.setDialog(null)
+      } else if (key === 'r') {
+        g.shuffle()
+      } else if (key === 'i') {
+        g.swapInk()
+      } else if (key === '0') {
+        g.restart()
+      }
+    }
+
     const handleDraw = (e: KeyboardEvent) => {
       const d = useDraw.getState()
       const mod = e.ctrlKey || e.metaKey
@@ -485,6 +561,8 @@ function useGlobalShortcuts() {
       if (st.mode === 'shots') handleShots(e)
       else if (st.mode === 'studio') handleStudio(e)
       else if (st.mode === 'draw') handleDraw(e)
+      else if (st.mode === 'ascii') handleAscii(e)
+      else if (st.mode === 'signal') handleSignal(e)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -498,6 +576,7 @@ function useMediaDropPaste() {
       const mode = useStudio.getState().mode
       if (mode === 'shots') void useShots.getState().importMedia(file)
       else if (mode === 'draw') void useDraw.getState().importImage(file)
+      else if (mode === 'ascii') void useAscii.getState().importImage(file)
       else void useStudio.getState().importMedia(file)
     }
     /*
@@ -512,6 +591,8 @@ function useMediaDropPaste() {
       // the board takes them all: dropping three screenshots onto a canvas is a
       // normal thing to do, and only one of them landing is baffling
       else if (mode === 'draw') for (const f of files) void useDraw.getState().importImage(f)
+      // ASCII works one picture at a time, so the rest of a multi-file drop is
+      // deliberately ignored rather than silently replacing what just arrived
       else importTo(files[0])
     }
     const onDrop = (e: DragEvent) => {
@@ -644,6 +725,10 @@ function Editor() {
           <StudioLayout />
         ) : mode === 'draw' ? (
           <DrawEditor />
+        ) : mode === 'ascii' ? (
+          <AsciiEditor />
+        ) : mode === 'signal' ? (
+          <SignalEditor />
         ) : (
           <ShotsEditor />
         )}

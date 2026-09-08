@@ -26,6 +26,7 @@ export type DrawTool =
   | 'line'
   | 'freedraw'
   | 'text'
+  | 'note'
   | 'image'
   | 'eraser'
 
@@ -44,7 +45,7 @@ export type Edges = 'sharp' | 'round'
 
 export type Arrowhead = 'none' | 'arrow' | 'triangle' | 'dot'
 
-export type FontFamily = 'hand' | 'normal' | 'code'
+export type FontFamily = 'hand' | 'marker' | 'normal' | 'serif' | 'display' | 'code'
 
 export type TextAlign = 'left' | 'center' | 'right'
 
@@ -70,6 +71,10 @@ export interface DrawStyle {
   textAlign: TextAlign
   startArrow: Arrowhead
   endArrow: Arrowhead
+  /** the sticky note's paper colour */
+  noteColor: string
+  /** each line of a note prefixed with a bullet, hanging-indented when it wraps */
+  bulleted: boolean
 }
 
 interface ElementBase extends DrawStyle {
@@ -130,9 +135,49 @@ export interface EraserElement extends ElementBase {
   size: number
 }
 
+/**
+ * A marker swipe over part of a string.
+ *
+ * Offsets into `text`, half-open, and the only rich-text idea in the model:
+ * everything else about how an element is set — its size, its face, its
+ * alignment — belongs to the whole of it, because that is what a drawing tool
+ * needs. Highlighting is the exception, since a marker over *all* of a note
+ * is just a differently coloured note, and the thing anyone actually reaches
+ * for is a marker over the one line that matters.
+ */
+export interface TextHighlight {
+  start: number
+  end: number
+  color: string
+}
+
+/** A line struck through part of a string. Same offsets, no colour of its own:
+ * a strike is drawn in the ink it crosses out. */
+export interface TextStrike {
+  start: number
+  end: number
+}
+
 export interface TextElement extends ElementBase {
   kind: 'text'
   text: string
+  highlights?: TextHighlight[]
+  strikes?: TextStrike[]
+}
+
+/**
+ * A sticky note: a coloured card with text that wraps to its width and
+ * shrinks to fit its height, rather than the free label `TextElement` is.
+ * `stroke`, `fill` and the rest of the shape knobs ride along unused, the same
+ * way a `TextElement` carries a `fillStyle` it never reads — the ink for the
+ * text is derived from `noteColor` at paint time instead, so a note is always
+ * legible on whatever paper colour you gave it.
+ */
+export interface NoteElement extends ElementBase {
+  kind: 'note'
+  text: string
+  highlights?: TextHighlight[]
+  strikes?: TextStrike[]
 }
 
 export interface ImageElement extends ElementBase {
@@ -148,6 +193,7 @@ export type DrawElement =
   | FreedrawElement
   | EraserElement
   | TextElement
+  | NoteElement
   | ImageElement
 
 export type ElementKind = DrawElement['kind']
@@ -184,6 +230,31 @@ export const MAX_ZOOM = 30
 export const STROKE_SWATCHES = ['#1e1e1e', '#e03131', '#2f9e44', '#1971c2', '#f08c00']
 
 export const FILL_SWATCHES = ['transparent', '#ffc9c9', '#b2f2bb', '#a5d8ff', '#ffec99']
+
+/**
+ * Marker inks. Saturated rather than pastel, because a highlight is laid down
+ * multiplied into the paper beneath it: a pale swatch over an already pale
+ * note comes out as almost nothing, while these still read as a stripe on
+ * white, on a yellow pad, and — where the band is tinted on rather than
+ * multiplied in — on a dark one.
+ */
+export const HIGHLIGHT_SWATCHES = ['#ffe066', '#8ce99a', '#74c0fc', '#ffa8a8', '#ffc078', '#d0bfff']
+
+/**
+ * Sticky note paper. Six pastel pads and a plain card cover the light end;
+ * graphite is there for anyone working on a dark board who wants a note that
+ * belongs on it rather than a bright pastel square glowing on a blackboard.
+ */
+export const NOTE_SWATCHES = [
+  '#fdf2a1',
+  '#ffd6a0',
+  '#ffb6c8',
+  '#ddc4f7',
+  '#b3ddff',
+  '#bdf0d0',
+  '#e6e4dd',
+  '#3d3f45',
+]
 
 /*
  * ----- what you draw on -----
@@ -283,17 +354,39 @@ export const STROKE_WIDTHS = [1, 2, 4]
 /** Text sizes, Excalidraw's S / M / L / XL. */
 export const FONT_SIZES = [16, 20, 28, 36]
 
+/*
+ * Six voices, and every one of them a stack of faces the machine already has.
+ *
+ * Excalidraw ships Virgil, a hand-drawn face, and the whole look leans on it.
+ * We can't ship a font we don't have a licence to, so each of these reaches
+ * for what is actually installed and falls back through a generic. That
+ * constraint is also why they are picked for *contrast* rather than for
+ * nuance: two similar sans faces would come out identical on a machine
+ * missing one of them, whereas a scrawl, a marker, a sans, a serif, a poster
+ * face and a typewriter stay six different things anywhere they land.
+ */
 export const FONT_STACKS: Record<FontFamily, string> = {
-  /*
-   * Excalidraw ships Virgil, a hand-drawn face, and the whole look leans on it.
-   * We can't ship a font we don't have a licence to, so this reaches for the
-   * handwriting faces that are actually installed: Segoe Print on Windows, then
-   * the Comic faces, then whatever the system calls cursive. It is not Virgil,
-   * but it is hand-drawn, which is the part that matters next to a wobbly box.
-   */
+  /* the printed, slightly prim hand: Segoe Print on Windows, Comic elsewhere */
   hand: '"Segoe Print", "Bradley Hand", "Comic Sans MS", "Comic Neue", cursive',
+  /* the loose one, for a note somebody scrawled: Ink Free on Windows 10+,
+     Marker Felt and Chalkboard on macOS — all fatter and wetter than `hand` */
+  marker: '"Ink Free", "Marker Felt", "Chalkboard SE", "Segoe Script", "Comic Sans MS", cursive',
   normal: 'var(--font-text), system-ui, sans-serif',
+  /* a book serif, which is the one voice the set had no version of */
+  serif: '"Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", ui-serif, serif',
+  /* the poster face, for a label meant to be read across the room */
+  display: 'Impact, Haettenschweiler, "Arial Narrow Bold", "Anton", "Franklin Gothic Bold", sans-serif',
   code: 'var(--font-mono), ui-monospace, monospace',
+}
+
+/** What each face is called, for the picker and its tooltips. */
+export const FONT_NAMES: Record<FontFamily, string> = {
+  hand: 'Handwritten',
+  marker: 'Marker',
+  normal: 'Sans',
+  serif: 'Serif',
+  display: 'Poster',
+  code: 'Mono',
 }
 
 /*
@@ -346,6 +439,15 @@ export const isNeutralInk = (c: string): boolean => {
   return v === INK_DARK || v === INK_LIGHT
 }
 
+/**
+ * The ink a sticky note writes in, decided by its own paper rather than by
+ * whatever surface it is sitting on. A note is a little sheet of its own — the
+ * one thing on the board whose legibility should never depend on which canvas
+ * it was dropped onto — so this reads the paper's own lightness, not the
+ * board's.
+ */
+export const noteInk = (noteColor: string): string => (lightness(noteColor) < 0.5 ? INK_LIGHT : INK_DARK)
+
 export const DEFAULT_STYLE: DrawStyle = {
   stroke: '#1e1e1e',
   fill: 'transparent',
@@ -360,6 +462,8 @@ export const DEFAULT_STYLE: DrawStyle = {
   textAlign: 'left',
   startArrow: 'none',
   endArrow: 'arrow',
+  noteColor: NOTE_SWATCHES[0],
+  bulleted: false,
 }
 
 export function defaultDrawDoc(): DrawDoc {
@@ -385,5 +489,6 @@ export const KIND_TOOL: Record<ElementKind, DrawTool> = {
   freedraw: 'freedraw',
   erase: 'eraser',
   text: 'text',
+  note: 'note',
   image: 'image',
 }

@@ -18,8 +18,17 @@
 import { geometryFor, sceneBounds, unionBounds } from './geometry'
 import { PENS, outlinePath, strokeOutline } from './pens'
 import { dashArray } from './rough'
-import { lineHeightFor, renderScene } from './render'
-import { FONT_STACKS, type DrawDoc, type DrawElement } from './types'
+import { marksOn } from './marks'
+import { fontFor, fontStack, layoutNote, lineHeightFor, renderScene } from './render'
+import {
+  lightness,
+  noteInk,
+  paperIsDark,
+  type DrawDoc,
+  type DrawElement,
+  type TextHighlight,
+  type TextStrike,
+} from './types'
 
 const PAD = 24
 
@@ -35,6 +44,65 @@ function transformFor(el: DrawElement): string {
   return `translate(${cx.toFixed(2)} ${cy.toFixed(2)}) rotate(${deg}) translate(${(-el.w / 2).toFixed(2)} ${(-el.h / 2).toFixed(2)})`
 }
 
+/**
+ * The marker bands under one line, as rects.
+ *
+ * SVG has no text background, so a highlight has to be drawn as geometry
+ * behind the type — which is what it is on the canvas too. Multiplied in on
+ * light paper and tinted on over dark, the same two cases the painter makes,
+ * so an exported note matches the one on screen.
+ */
+function highlightRects(
+  measureCtx: CanvasRenderingContext2D,
+  el: { highlights?: TextHighlight[]; opacity: number },
+  line: { text: string; start: number; end: number },
+  left: number,
+  top: number,
+  fontSize: number,
+  onDark: boolean,
+): string {
+  const spans = marksOn(el.highlights, line.start, line.end)
+  if (!spans.length) return ''
+  const y = (top - fontSize * 0.06).toFixed(2)
+  const h = (fontSize * 1.16).toFixed(2)
+  const paint = onDark
+    ? ` opacity="${(el.opacity * 0.42).toFixed(3)}"`
+    : ` style="mix-blend-mode:multiply"${el.opacity < 1 ? ` opacity="${el.opacity}"` : ''}`
+  return spans
+    .map((s) => {
+      const before = measureCtx.measureText(line.text.slice(0, s.start - line.start)).width
+      const width = measureCtx.measureText(line.text.slice(s.start - line.start, s.end - line.start)).width
+      if (width <= 0) return ''
+      return `<rect x="${(left + before).toFixed(2)}" y="${y}" width="${width.toFixed(2)}" height="${h}" fill="${s.color}"${paint}/>`
+    })
+    .join('')
+}
+
+/** The line struck through one line, as rects laid over the type. */
+function strikeRects(
+  measureCtx: CanvasRenderingContext2D,
+  el: { strikes?: TextStrike[]; opacity: number },
+  line: { text: string; start: number; end: number },
+  left: number,
+  top: number,
+  fontSize: number,
+  ink: string,
+): string {
+  const spans = marksOn(el.strikes, line.start, line.end)
+  if (!spans.length) return ''
+  const thickness = Math.max(1, fontSize * 0.07)
+  const y = (top + fontSize * 0.56 - thickness / 2).toFixed(2)
+  const alpha = el.opacity < 1 ? ` opacity="${el.opacity}"` : ''
+  return spans
+    .map((s) => {
+      const before = measureCtx.measureText(line.text.slice(0, s.start - line.start)).width
+      const width = measureCtx.measureText(line.text.slice(s.start - line.start, s.end - line.start)).width
+      if (width <= 0) return ''
+      return `<rect x="${(left + before).toFixed(2)}" y="${y}" width="${width.toFixed(2)}" height="${thickness.toFixed(2)}" fill="${ink}"${alpha}/>`
+    })
+    .join('')
+}
+
 async function dataUrl(objectUrl: string): Promise<string> {
   const blob = await (await fetch(objectUrl)).blob()
   return await new Promise<string>((res) => {
@@ -44,7 +112,12 @@ async function dataUrl(objectUrl: string): Promise<string> {
   })
 }
 
-function elementSvg(el: DrawElement, images: Record<string, string>): string {
+function elementSvg(
+  el: DrawElement,
+  images: Record<string, string>,
+  measureCtx: CanvasRenderingContext2D,
+  onDark: boolean,
+): string {
   const g = geometryFor(el)
   const t = transformFor(el)
   const alpha = el.opacity < 1 ? ` opacity="${el.opacity}"` : ''
@@ -55,6 +128,69 @@ function elementSvg(el: DrawElement, images: Record<string, string>): string {
     const blend = spec.blend === 'multiply' ? ' style="mix-blend-mode:multiply"' : ''
     const op = el.opacity * spec.opacity
     parts.push(`<path d="${g.inkD[0] ?? ''}" fill="${el.stroke}" opacity="${op.toFixed(3)}"${blend}/>`)
+  } else if (el.kind === 'note') {
+    const layout = layoutNote(measureCtx, el)
+    const ink = noteInk(el.noteColor)
+    const align = el.bulleted ? 'left' : el.textAlign
+    // a bulleted line is always left-set, so its indent only ever shifts x
+    // rightward from the left edge; an unbulleted line's x is the same for
+    // every line in the note, so it is computed once outside the loop
+    const baseX =
+      align === 'center' ? layout.pad + layout.contentWidth / 2 : align === 'right' ? layout.pad + layout.contentWidth : layout.pad
+    const spans = layout.lines
+      .map((line, i) => {
+        const y = (layout.pad + i * layout.lineHeight + layout.fontSize * 0.86).toFixed(2)
+        const bullet = line.bullet ? `<tspan x="${layout.pad.toFixed(2)}" y="${y}">•</tspan>` : ''
+        const x = line.indent ? layout.pad + line.indent : baseX
+        return `${bullet}<tspan x="${x.toFixed(2)}" y="${y}">${esc(line.text)}</tspan>`
+      })
+      .join('')
+
+    /*
+     * Marks are geometry, not text decoration, so they need each line's real
+     * left edge — which `text-anchor` hides. Measured back out here with the
+     * same font the layout was fitted at.
+     */
+    measureCtx.font = fontFor({ fontSize: layout.fontSize, fontFamily: el.fontFamily })
+    const noteDark = lightness(el.noteColor) < 0.5
+    const leftOf = (line: (typeof layout.lines)[number]) => {
+      const width = measureCtx.measureText(line.text).width
+      if (align === 'center')
+        return layout.pad + line.indent + Math.max(0, (layout.contentWidth - line.indent - width) / 2)
+      if (align === 'right') return layout.pad + Math.max(line.indent, layout.contentWidth - width)
+      return layout.pad + line.indent
+    }
+    const bands = layout.lines
+      .map((line, i) =>
+        highlightRects(measureCtx, el, line, leftOf(line), layout.pad + i * layout.lineHeight, layout.fontSize, noteDark),
+      )
+      .join('')
+    const strikes = layout.lines
+      .map((line, i) =>
+        strikeRects(measureCtx, el, line, leftOf(line), layout.pad + i * layout.lineHeight, layout.fontSize, ink),
+      )
+      .join('')
+    const anchor = align === 'center' ? 'middle' : align === 'right' ? 'end' : 'start'
+    const shadowId = `note-shadow-${el.id}`
+    parts.push(
+      `<defs><filter id="${shadowId}" x="-60%" y="-60%" width="220%" height="220%">` +
+        `<feDropShadow dx="3" dy="11" stdDeviation="8" flood-color="#000" flood-opacity="${onDark ? 0.6 : 0.18}"/>` +
+        `<feDropShadow dx="1" dy="3" stdDeviation="2.2" flood-color="#000" flood-opacity="${onDark ? 0.7 : 0.24}"/>` +
+        `</filter></defs>`,
+    )
+    // square corners, the same guillotined-paper edge the canvas painter draws
+    parts.push(
+      `<rect width="${el.w.toFixed(2)}" height="${el.h.toFixed(2)}" fill="${el.noteColor}" filter="url(#${shadowId})"${alpha}/>`,
+    )
+    parts.push(
+      `<rect x="0.5" y="0.5" width="${Math.max(0, el.w - 1).toFixed(2)}" height="${Math.max(0, el.h - 1).toFixed(2)}" ` +
+        `fill="none" stroke="${onDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)'}"/>`,
+    )
+    if (bands) parts.push(bands)
+    parts.push(
+      `<text font-family="${esc(fontStack(el.fontFamily))}" font-size="${layout.fontSize}" fill="${ink}" text-anchor="${anchor}"${alpha}>${spans}</text>`,
+    )
+    if (strikes) parts.push(strikes)
   } else if (el.kind === 'text') {
     const lh = lineHeightFor(el.fontSize)
     const anchor = el.textAlign === 'center' ? 'middle' : el.textAlign === 'right' ? 'end' : 'start'
@@ -66,9 +202,27 @@ function elementSvg(el: DrawElement, images: Record<string, string>): string {
           `<tspan x="${x.toFixed(2)}" y="${(i * lh + el.fontSize * 0.86).toFixed(2)}">${esc(line)}</tspan>`,
       )
       .join('')
+
+    measureCtx.font = fontFor(el)
+    let base = 0
+    const marks = lines
+      .map((text, i) => {
+        const width = measureCtx.measureText(text).width
+        const left = el.textAlign === 'center' ? (el.w - width) / 2 : el.textAlign === 'right' ? el.w - width : 0
+        const line = { text, start: base, end: base + text.length }
+        base += text.length + 1
+        return {
+          band: highlightRects(measureCtx, el, line, left, i * lh, el.fontSize, onDark),
+          strike: strikeRects(measureCtx, el, line, left, i * lh, el.fontSize, el.stroke),
+        }
+      })
+      .reduce((acc, m) => ({ band: acc.band + m.band, strike: acc.strike + m.strike }), { band: '', strike: '' })
+
+    if (marks.band) parts.push(marks.band)
     parts.push(
-      `<text font-family="${esc(FONT_STACKS[el.fontFamily])}" font-size="${el.fontSize}" fill="${el.stroke}" text-anchor="${anchor}"${alpha}>${spans}</text>`,
+      `<text font-family="${esc(fontStack(el.fontFamily))}" font-size="${el.fontSize}" fill="${el.stroke}" text-anchor="${anchor}"${alpha}>${spans}</text>`,
     )
+    if (marks.strike) parts.push(marks.strike)
   } else if (el.kind === 'image') {
     const href = images[el.assetId]
     if (href) parts.push(`<image href="${esc(href)}" width="${el.w.toFixed(2)}" height="${el.h.toFixed(2)}"${alpha}/>`)
@@ -120,6 +274,10 @@ export async function toSvg(
   const y = box.y - PAD
   const w = Math.max(1, box.w + PAD * 2)
   const h = Math.max(1, box.h + PAD * 2)
+  // a standalone file has no app theme to fall back on for transparent or
+  // checkered paper, so opts.dark stands in for it, same as toPng
+  const onDark = paperIsDark(doc.background, !!opts.dark)
+  const measureCtx = document.createElement('canvas').getContext('2d')!
 
   // object URLs mean nothing in a file someone opens tomorrow, so bitmaps are
   // inlined; this is why the export is async where Drawesome's is not
@@ -152,7 +310,7 @@ export async function toSvg(
       body = `<g mask="url(#${id})">${body}`
       open++
     } else {
-      body += elementSvg(el, inlined)
+      body += elementSvg(el, inlined, measureCtx, onDark)
     }
   }
   body += '</g>'.repeat(open)

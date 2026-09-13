@@ -1,7 +1,8 @@
 import { useEffect } from 'react'
 import { Home as HomeIcon, Keyboard, Moon, Sun, X, type LucideIcon } from 'lucide-react'
 import { useStudio, type AppMode } from '../store'
-import { TOOLS, toolLit, toolTint, toolWash } from '../lib/tools'
+import { TOOLS, toolGlow, toolTint } from '../lib/tools'
+import { ToolAurora } from './ToolAurora'
 import { SHEET_SEAM } from '../lib/interlock'
 import { rt } from '../lib/runtime'
 
@@ -97,27 +98,39 @@ export function AppSheet() {
           >
             {TOOLS.map((t, i) => {
               const active = !t.soon && mode === t.id
-              // The wash carries the card on its own; the tool you're actually
-              // in gets light on top of it, so "this is where you are" reads
-              // before you've finished scanning the row.
-              const lit = active ? toolLit(t) : null
+              /*
+               * The glow carries the card on its own, and the tool you are
+               * actually in is simply the one turned all the way up, so "this
+               * is where you are" reads before you have finished scanning the
+               * row. It is the same light hover reaches for, which is the
+               * point: hovering a card shows you what being in it looks like.
+               *
+               * These cards are half the height of the home screen's and their
+               * copy runs closer to the bottom edge the glow comes out of, so
+               * the light is both turned down and pushed 16% further under the
+               * card. Turning it down alone would have cost the lit edge, which
+               * is the half of the effect that survives being this small.
+               */
               const seam = SHEET_SEAM.parts[i]
               return (
                 <button
                   key={t.name}
                   disabled={t.soon}
                   onClick={() => go(t.id)}
-                  style={{ ...seam?.style, ...toolTint(t), ...lit?.card }}
+                  style={{
+                    ...seam?.style,
+                    ...toolTint(t),
+                    ...toolGlow(active ? 1 : t.soon ? 0.22 : 0.5, 16),
+                  }}
                   className={`tool-card flex flex-col items-start gap-2.5 p-3 text-left ${
                     seam?.className ?? ''
                   } ${t.soon ? 'cursor-default opacity-60' : ''}`}
                 >
                   {/* the card's surface, and the 1px of card background left
                       showing around it is the hairline */}
-                  <span
-                    className="tool-card-fill"
-                    style={lit?.fill ?? { background: toolWash(t, t.soon ? 0.35 : 0.7) }}
-                  />
+                  <span className="tool-card-fill">
+                    <ToolAurora tool={t} />
+                  </span>
                   <t.icon className="tool-card-icon" size={18} strokeWidth={1.8} />
                   <span>
                     <span className="flex items-center gap-1.5">
@@ -128,13 +141,17 @@ export function AppSheet() {
                         </span>
                       )}
                     </span>
-                    {/* the copy brightens with the card: a dim tagline under a lit
-                        surface reads as disabled, which is the opposite of the point */}
-                    <span
-                      className={`mt-0.5 block t-caption leading-snug ${
-                        active ? 'text-(--tx2)' : 'text-(--tx3)'
-                      }`}
-                    >
+                    {/*
+                      One ink for every card, where this used to brighten the
+                      copy on the active one. It brightened it because a dim
+                      tagline under a lit surface reads as disabled, and that is
+                      still true, but the glow is doing the lighting now and the
+                      copy no longer has a dark card to be dim against: at full
+                      glow the tagline on a card this short sits right on the
+                      light. `--tool-copy` is the ink that clears that, so it is
+                      the ink all five want.
+                    */}
+                    <span className="mt-0.5 block t-caption leading-snug text-(--tool-copy)">
                       {t.tagline}
                     </span>
                   </span>

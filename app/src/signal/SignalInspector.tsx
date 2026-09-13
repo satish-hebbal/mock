@@ -14,6 +14,7 @@
 import { useState } from 'react'
 import {
   Blend,
+  Dices,
   Grid3x3,
   Monitor,
   Palette,
@@ -22,6 +23,7 @@ import {
   Sparkles,
   Trash2,
   Type,
+  X,
 } from 'lucide-react'
 import {
   ColorRow,
@@ -127,6 +129,68 @@ function DitherGroup() {
   )
 }
 
+/*
+ * The collapsed row for forty-eight swatches.
+ *
+ * "Palettes (48)" is a count standing where a thing should be: it says how much
+ * is behind the fold without saying what any of it looks like, and a number is
+ * the one part of a palette nobody is choosing by. Four overlapping chips say
+ * it the way a stack of faces says how many people are in a room. You see the
+ * kind of thing that is in there before deciding whether to open it.
+ *
+ * The active palette leads the stack, and that is the part that earns its
+ * place rather than decorating. Closed, this fold otherwise hides the single
+ * fact you most want from it, which is the palette you are on right now; the
+ * three colour rows above show the colours but not that they came from a
+ * palette, and nothing else in the panel names it.
+ */
+const STACK_N = 4
+
+function PaletteStack({ activeId }: { activeId: string }) {
+  const active = PALETTES.find((p) => p.id === activeId)
+  /*
+   * An even spread across the list rather than the first four. The list is
+   * grouped, so the head of it is four variations on the house blue: sampling
+   * across the groups is what makes the stack read as a range of things rather
+   * than as one palette shown four times.
+   */
+  const spread = Array.from(
+    { length: STACK_N },
+    (_, i) => PALETTES[Math.floor((i * PALETTES.length) / STACK_N)],
+  )
+  const shown = [...(active ? [active] : []), ...spread.filter((p) => p.id !== active?.id)].slice(
+    0,
+    STACK_N,
+  )
+
+  return (
+    // aria-hidden: the fold's accessible name is its label, and four unlabelled
+    // colour chips read out as nothing anybody can act on
+    <span aria-hidden className="flex shrink-0 items-center">
+      {shown.map((p, i) => (
+        <span
+          key={p.id}
+          className="relative flex h-3.5 w-3.5 overflow-hidden rounded-full"
+          style={{
+            // overlapped by a third, and the ring is the ground this panel is
+            // actually painted on rather than a line: it cuts the chip behind
+            // instead of drawing a border around the one in front. `--raised`
+            // and not `--panel`, because the inspector is one of the things
+            // that genuinely lifts off the canvas
+            marginLeft: i === 0 ? 0 : -5,
+            zIndex: STACK_N - i,
+            boxShadow: '0 0 0 1.5px var(--raised)',
+          }}
+        >
+          <span className="h-full w-1/3" style={{ background: p.paper }} />
+          <span className="h-full w-1/3" style={{ background: p.ink }} />
+          <span className="h-full w-1/3" style={{ background: p.accent }} />
+        </span>
+      ))}
+    </span>
+  )
+}
+
 function ColourGroup() {
   const ink = useSignal((s) => s.doc.ink)
   const kind = useSignal((s) => s.doc.source.kind)
@@ -157,7 +221,22 @@ function ColourGroup() {
       </div>
 
       {/* folded by default: a wall of swatches is worth having and worth hiding */}
-      <Disclosure label={`Palettes (${PALETTES.length})`} open={palettes} onToggle={setPalettes}>
+      <Disclosure
+        label={`${PALETTES.length} palettes`}
+        icon={<PaletteStack activeId={ink.palette} />}
+        open={palettes}
+        onToggle={setPalettes}
+        actions={
+          <button
+            onClick={() => useSignal.getState().shufflePalette()}
+            title="A palette at random, never the one you are on"
+            aria-label="Random palette"
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-xs text-(--tx3) hover:bg-(--panel3) hover:text-(--tx)"
+          >
+            <Dices size={13} strokeWidth={1.9} />
+          </button>
+        }
+      >
         {PALETTE_GROUPS.map((group) => {
           const items = PALETTES.filter((p) => p.group === group)
           if (!items.length) return null
@@ -260,39 +339,45 @@ function FinishGroup() {
       }
     >
       {active.map((spec) => (
-        <div key={spec.id} className="mb-1.5">
-          <SliderRow
-            label={spec.label}
-            hint={spec.hint}
-            value={fx[spec.id]?.amount ?? 0}
-            min={0.01}
-            max={1}
-            step={0.01}
-            format={pct}
-            onChange={(v) =>
-              edit(`signal-fx-${spec.id}`, (d) => void (d.fx[spec.id] = { ...d.fx[spec.id], amount: v }))
-            }
-          />
-          <div className="flex items-center gap-1">
-            <MiniButton onClick={() => toggle(spec.id, false)} title={`Turn ${spec.label} off`}>
-              Off
-            </MiniButton>
-            {spec.colors?.map((slot) => (
-              <input
-                key={slot}
-                type="color"
-                aria-label={`${spec.label} colour`}
-                value={fx[spec.id]?.[slot] ?? (slot === 'color' ? '#ff4400' : '#6496ff')}
-                onChange={(e) =>
-                  edit(`signal-fx-${spec.id}-${slot}`, (d) => {
-                    const cur = d.fx[spec.id]
-                    if (cur) cur[slot] = e.target.value
-                  })
-                }
-                className="h-7 w-7 cursor-pointer rounded-sm border border-(--line) bg-(--field)"
-              />
-            ))}
+        <div key={spec.id} className="mb-1.5 flex items-center gap-1">
+          <div className="min-w-0 flex-1">
+            <SliderRow
+              label={spec.label}
+              hint={spec.hint}
+              value={fx[spec.id]?.amount ?? 0}
+              min={0.01}
+              max={1}
+              step={0.01}
+              format={pct}
+              onChange={(v) =>
+                edit(`signal-fx-${spec.id}`, (d) => void (d.fx[spec.id] = { ...d.fx[spec.id], amount: v }))
+              }
+            />
           </div>
+          {spec.colors?.map((slot) => (
+            <input
+              key={slot}
+              type="color"
+              aria-label={`${spec.label} colour`}
+              value={fx[spec.id]?.[slot] ?? (slot === 'color' ? '#ff4400' : '#6496ff')}
+              onChange={(e) =>
+                edit(`signal-fx-${spec.id}-${slot}`, (d) => {
+                  const cur = d.fx[spec.id]
+                  if (cur) cur[slot] = e.target.value
+                })
+              }
+              className="h-7 w-7 shrink-0 cursor-pointer rounded-sm border border-(--line) bg-(--field)"
+            />
+          ))}
+          {/* the amount and the way out belong to one effect, so they share its row */}
+          <button
+            onClick={() => toggle(spec.id, false)}
+            title={`Turn ${spec.label} off`}
+            aria-label={`Turn ${spec.label} off`}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-sm bg-(--field) text-(--tx3) transition-colors hover:bg-(--field-h) hover:text-(--tx)"
+          >
+            <X size={12} strokeWidth={2} />
+          </button>
         </div>
       ))}
 

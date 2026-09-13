@@ -337,14 +337,44 @@ function SurpriseButton({ notched, centerX }: { notched: boolean; centerX: numbe
         ...(notched
           ? { left: centerX - SURPRISE_NOTCH.width / 2 + NOTCH_PAD, top: NOTCH_PAD }
           : { right: 0, top: NOTCH_PAD }),
-        /* the edge is what carries it on the light theme, where a 14% tint of
-           the accent over white is nearly the panel it sits on */
-        borderColor: 'color-mix(in srgb, var(--accent) 32%, transparent)',
+        /*
+         * White in both themes, from the pair of ladder tokens that do not
+         * swap: on the dark panel it is the brightest thing in the column,
+         * which is what a button nobody has to understand should be, and on
+         * the light one the hairline is what separates #fff from the #f5f6f6
+         * behind it. Both are mixed from the same black, so the edge stays a
+         * grey of the button rather than a colour laid over it.
+         */
+        background: 'var(--inverse-canvas)',
+        color: 'var(--canvas)',
+        borderColor: 'color-mix(in srgb, var(--canvas) 16%, transparent)',
       }}
-      className="absolute z-10 flex items-center justify-center gap-1.5 rounded-md border bg-(--accent-soft) t-body-sm font-medium text-(--accent) transition-colors hover:bg-(--accent-fill) hover:text-(--accent-tx)"
+      className="group absolute z-10 flex items-center justify-center gap-1.5 overflow-hidden rounded-md border t-body-sm font-medium"
     >
-      <Shuffle size={13} strokeWidth={2} />
-      Surprise me
+      {/*
+        The pass of colour, under the label rather than over it: it is a
+        surface the text is sitting on for a moment, not a film across it, and
+        at these alphas the label never drops below its resting contrast.
+
+        Two gradients on one layer, so one transform moves both and they cannot
+        drift apart. The white core is the shine and the hues either side are
+        what makes it read as a spectrum rather than a glare; the rainbow alone
+        looks like a smear, and the highlight alone is every other button's
+        sheen.
+      */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 w-[55%] group-hover:animate-[surprise-sheen_620ms_var(--ease-settle)_forwards]"
+        style={{
+          // parked a full band clear of the left edge; the keyframe carries it
+          // from here to past the right, and `forwards` leaves it out there
+          left: '-60%',
+          background:
+            'linear-gradient(100deg, transparent 34%, rgba(255,255,255,0.85) 50%, transparent 66%), linear-gradient(100deg, transparent 2%, rgba(255,90,110,0.5) 18%, rgba(255,190,90,0.5) 32%, rgba(105,220,150,0.5) 48%, rgba(90,190,255,0.55) 64%, rgba(180,130,255,0.5) 80%, transparent 98%)',
+        }}
+      />
+      <Shuffle size={13} strokeWidth={2} className="relative" />
+      <span className="relative">Surprise me</span>
     </button>
   )
 }

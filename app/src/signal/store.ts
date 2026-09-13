@@ -25,7 +25,7 @@ import { coalesces, endEditRun } from '../lib/history'
 import { track } from '../lib/analytics'
 import { ui } from '../lib/ui'
 import { applyPreset, PRESETS, type Preset } from './presets'
-import { PALETTE_BY_ID } from './palettes'
+import { PALETTE_BY_ID, PALETTES, type Palette } from './palettes'
 import { findSource } from './sources'
 import { defaultSignalDoc, migrateDoc, type SignalDoc } from './types'
 
@@ -70,8 +70,10 @@ interface SignalState {
   restart: () => void
 
   applyLook: (id: string) => void
-  applyPalette: (id: string) => void
+  /** `via` is how it was reached, for analytics only; a hand-picked one omits it. */
+  applyPalette: (id: string, via?: 'shuffle') => void
   swapInk: () => void
+  shufflePalette: () => void
   shuffle: () => void
   reset: () => void
 
@@ -123,6 +125,278 @@ function writeSlots(slots: Slot[]) {
   } catch {
     ui.toast('There was no room to save that look', 'error')
   }
+}
+
+/*
+ * Surprise me lays out a whole lap in advance and then deals it.
+ *
+ * Two different things make this button feel repetitive, and only one of them
+ * is repetition.
+ *
+ * The first is the arithmetic one. A fresh uniform draw over a hundred and
+ * twelve looks hands you one you have already seen inside ten presses about a
+ * third of the time, and excluding only the picture currently on screen fixes
+ * the single case a user can prove and none of the ones they notice. Dealing a
+ * lap of a shuffled list, rather than drawing with replacement, settles that
+ * half: nothing comes back until the lap it belongs to is finished.
+ *
+ * The second is the one that actually got noticed, and no amount of shuffling
+ * ids would have fixed it. A hundred and twelve looks are built on seventy-one
+ * generators: Truchet is three of them, Liquid is four. A plain permutation is
+ * perfectly happy to deal two Truchets back to back, and while those are two
+ * different documents by every field the code compares, to the eye they are one
+ * picture in two colourways. The shape is what people remember. A shuffle that
+ * only guarantees distinct ids guarantees nothing anybody can see.
+ *
+ * So a lap is one preset per generator, seventy-one of them, and no shape can
+ * come back until every other shape has had its turn. A generator with several
+ * presets sends a different one each lap, so all hundred and twelve looks still
+ * get seen, just spread over four laps instead of crammed into one.
+ *
+ * Within a lap the order is spread as well as shuffled. It is laid down one
+ * slot at a time, and each slot takes whichever of the remaining looks is
+ * furthest in character from what was just dealt: a different family, and
+ * different paper, so a press lands on a new picture rather than a variation on
+ * the last one. Ties go to a coin toss, so no two laps run in the same order.
+ *
+ * The lap is module state, not document state: it belongs to this sitting with
+ * the tool, and a reload starting from a clean deal is right.
+ */
+const PRESET_BY_ID = new Map(PRESETS.map((p) => [p.id, p]))
+
+/**
+ * How far apart two looks sharing a generator are held across the seam.
+ *
+ * Inside a lap a generator appears once and the question does not arise. The
+ * seam between two laps is the one place it does, because the end of one and
+ * the start of the next are neighbours in time that were shuffled apart, so the
+ * first slots of a new lap keep clear of what the old one just finished with.
+ */
+const SOURCE_GAP = 20
+/** Families are broad and overlap, so they only have to avoid clumping. */
+const GROUP_GAP = 4
+/** Light paper after dark paper is the cheapest way to make a press land. */
+const TONE_GAP = 3
+
+/**
+ * True for a look on light paper.
+ *
+ * Signal draws two-tone, so the paper is the whole mood of the picture, and
+ * alternating it is most of what makes consecutive presses feel unalike.
+ */
+function onLightPaper(p: Preset) {
+  const hex = p.paper.replace('#', '')
+  if (hex.length < 6) return false
+  const r = parseInt(hex.slice(0, 2), 16)
+  const g = parseInt(hex.slice(2, 4), 16)
+  const b = parseInt(hex.slice(4, 6), 16)
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.5
+}
+
+/** Ids left in this lap, dealt from the end. */
+let lap: string[] = []
+/** What was dealt lately, oldest first, kept to the longest gap that matters. */
+const recent: Preset[] = []
+
+/**
+ * The colourways of each generator, and which one it is that generator's turn
+ * to send.
+ *
+ * A generator gets one slot a lap, so the choice of which of its presets fills
+ * that slot is a rotation: the three Truchets take turns rather than competing,
+ * which is how every look still gets seen without any of them doubling up.
+ */
+const BY_SOURCE = new Map<string, Preset[]>()
+for (const p of PRESETS) {
+  const list = BY_SOURCE.get(p.source)
+  if (list) list.push(p)
+  else BY_SOURCE.set(p.source, [p])
+}
+const rotation = new Map<string, Preset[]>()
+
+function nextOfSource(source: string): Preset {
+  let queue = rotation.get(source)
+  if (!queue?.length) {
+    queue = [...(BY_SOURCE.get(source) ?? [])]
+    // a two-preset generator would otherwise alternate forever in the order it
+    // was written, which is a pattern people do notice over a long sitting
+    for (let i = queue.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[queue[i], queue[j]] = [queue[j], queue[i]]
+    }
+    rotation.set(source, queue)
+  }
+  return queue.pop()!
+}
+
+/** Presses since this generator was last dealt, or Infinity if it is fresh. */
+function sinceSource(history: Preset[], source: string) {
+  for (let i = history.length - 1; i >= 0; i--) {
+    if (history[i].source === source) return history.length - i
+  }
+  return Infinity
+}
+
+/**
+ * What it would cost to deal this look next. Lower is better.
+ *
+ * The terms are orders of magnitude apart on purpose. Repeating a generator is
+ * not a worse version of repeating a family, it is a different kind of mistake,
+ * and no amount of family variety should ever be able to buy it.
+ */
+function clash(p: Preset, history: Preset[]) {
+  // the jitter is the tie-break: without it the pool order decides, and the
+  // pool order is the order the presets happen to be written in
+  let cost = Math.random()
+
+  const back = sinceSource(history, p.source)
+  if (back <= SOURCE_GAP) cost += 1e6 * (SOURCE_GAP - back + 1)
+
+  for (let i = history.length - 1; i >= 0; i--) {
+    const h = history[i]
+    const gap = history.length - i // 1 is the look dealt most recently
+    if (gap > GROUP_GAP) break
+    // the same family twice running is the one people read as a repeat, so it
+    // costs more than the rest of the window put together
+    if (h.group === p.group) cost += gap === 1 ? 400 : 20 * (GROUP_GAP - gap + 1)
+    if (gap <= TONE_GAP) {
+      if (onLightPaper(h) === onLightPaper(p)) cost += 8 * (TONE_GAP - gap + 1)
+      if (h.kind === p.kind) cost += 3
+    }
+  }
+  return cost
+}
+
+/**
+ * Deal order for one lap: every generator once, in an order that spreads them.
+ *
+ * Greedy rather than optimal, which is the right trade: the cost function is a
+ * stand-in for taste, and solving it exactly would be a hundred lines spent
+ * perfecting a guess. The pool is shuffled first so the greedy run meets equal
+ * candidates in a different order every lap.
+ */
+function buildLap() {
+  const pool = [...BY_SOURCE.keys()].map(nextOfSource)
+  // Fisher-Yates. The sort-by-random one-liner is shorter and is not uniform.
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[pool[i], pool[j]] = [pool[j], pool[i]]
+  }
+
+  /* the history carries over from the lap before, which is what keeps the seam
+     between two laps as well spread as the middle of one */
+  const history = recent.slice()
+  const order: string[] = []
+  while (pool.length) {
+    let best = 0
+    let bestCost = Infinity
+    for (let i = 0; i < pool.length; i++) {
+      const cost = clash(pool[i], history)
+      if (cost < bestCost) {
+        bestCost = cost
+        best = i
+      }
+    }
+    const [chosen] = pool.splice(best, 1)
+    order.push(chosen.id)
+    history.push(chosen)
+    if (history.length > SOURCE_GAP) history.shift()
+  }
+
+  lap = order.reverse() // dealt from the end, so the first slot is the last item
+}
+
+function noteDealt(p: Preset) {
+  recent.push(p)
+  if (recent.length > SOURCE_GAP) recent.shift()
+}
+
+/**
+ * The next look, never the one already on screen.
+ *
+ * A reload arrives with a document but no memory of what dealt it, so the
+ * picture on screen is recognised by what it looks like rather than by an id.
+ * Anything skipped for that reason goes back under the deck, not out of the
+ * lap, so a lap still shows every generator exactly once.
+ */
+function dealPreset(doc: SignalDoc): Preset {
+  const onScreen = (p: Preset) => p.source === doc.source.id && p.ink === doc.ink.ink
+  const skipped: string[] = []
+  let pick: Preset | undefined
+
+  // at most two passes: what is left of this lap, then a fresh one
+  for (let pass = 0; pass < 2 && !pick; pass++) {
+    if (!lap.length) buildLap()
+    while (lap.length) {
+      const p = PRESET_BY_ID.get(lap.pop()!)
+      if (!p) continue
+      if (onScreen(p)) {
+        skipped.push(p.id)
+        continue
+      }
+      pick = p
+      break
+    }
+  }
+  lap.unshift(...skipped)
+
+  const chosen = pick ?? PRESETS[0]
+  noteDealt(chosen)
+  return chosen
+}
+
+/**
+ * A look the user picked by hand counts as dealt.
+ *
+ * Otherwise pressing Surprise me straight after clicking a preset can hand back
+ * the preset you just clicked, or its twin on the same generator, which is the
+ * same broken-looking outcome from a different direction.
+ */
+function markDealt(id: string) {
+  const p = PRESET_BY_ID.get(id)
+  if (!p) return
+  // the generator leaves the lap, not just the preset: the shape is what was
+  // seen, and its other colourway sitting two slots away is the whole bug
+  lap = lap.filter((other) => PRESET_BY_ID.get(other)?.source !== p.source)
+  noteDealt(p)
+}
+
+/*
+ * Palettes get the lap and none of the rest of it.
+ *
+ * Forty-eight drawn uniformly hand back one you have just seen inside a handful
+ * of presses, and colour is the loudest thing on screen, so that repeat is
+ * noticed the moment it lands. Dealing a lap settles it on its own: nothing
+ * comes back until the other forty-seven have had their turn.
+ *
+ * The spread scoring above is deliberately not reused here. It exists because a
+ * hundred and twelve looks are built on seventy-one generators, so two
+ * different ids can be the same picture and distinct ids guarantee nothing
+ * anybody can see. Two palettes are never the same palette. The id is the whole
+ * of what is being shown, so a plain permutation is already the answer.
+ */
+let paletteLap: string[] = []
+
+function dealPalette(current: string): Palette {
+  if (!paletteLap.length) {
+    paletteLap = PALETTES.map((p) => p.id)
+    // Fisher-Yates, as above. The sort-by-random one-liner is not uniform.
+    for (let i = paletteLap.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[paletteLap[i], paletteLap[j]] = [paletteLap[j], paletteLap[i]]
+    }
+  }
+  /*
+   * The one case a user can prove: asking for another palette and being handed
+   * the one already applied. Inside a lap it cannot happen, because the current
+   * palette was dealt out of this one; at the seam between two laps it can, so
+   * the head goes under the deck rather than out of the lap and all forty-eight
+   * are still shown.
+   */
+  if (paletteLap.length > 1 && paletteLap[paletteLap.length - 1] === current) {
+    paletteLap.unshift(paletteLap.pop()!)
+  }
+  return PALETTE_BY_ID.get(paletteLap.pop()!)!
 }
 
 export const useSignal = create<SignalState>()(
@@ -227,8 +501,9 @@ export const useSignal = create<SignalState>()(
       }),
 
     applyLook: (id) => {
-      const preset = PRESETS.find((p) => p.id === id)
+      const preset = PRESET_BY_ID.get(id)
       if (!preset) return
+      markDealt(id)
       get().commit()
       set((s) => {
         applyPreset(s.doc, preset)
@@ -237,7 +512,7 @@ export const useSignal = create<SignalState>()(
       persist(get().doc)
     },
 
-    applyPalette: (id) => {
+    applyPalette: (id, via) => {
       const pal = PALETTE_BY_ID.get(id)
       if (!pal) return
       get().commit()
@@ -248,8 +523,21 @@ export const useSignal = create<SignalState>()(
         s.doc.ink.mix = pal.mix
         s.doc.ink.palette = id
       })
-      track('studio_look_applied', { editor: 'signal', palette: id })
+      track('studio_look_applied', { editor: 'signal', palette: id, ...(via && { via }) })
       persist(get().doc)
+    },
+
+    /**
+     * Another palette, at random, never the one already applied.
+     *
+     * The dice sit next to the fold rather than inside it because the wall of
+     * forty-eight is the thing you open when you have something in mind. Not
+     * having something in mind is the commoner case and had no control at all:
+     * the alternative was opening the fold and picking by eye, which is a
+     * decision the tool can make better than a tired person can.
+     */
+    shufflePalette: () => {
+      get().applyPalette(dealPalette(get().doc.ink.palette).id, 'shuffle')
     },
 
     /*
@@ -271,16 +559,12 @@ export const useSignal = create<SignalState>()(
     /**
      * A different picture, at random.
      *
-     * Never the one already on screen. Landing on your own document is the one
-     * outcome that makes the button look broken, and it is the outcome a naive
-     * random index gives roughly one time in eighty.
+     * Never the one already on screen, never one seen recently, and never the
+     * same shape twice in a row: the pick comes off the spread lap above, which
+     * is what stops a hundred and twelve looks from feeling like a dozen.
      */
     shuffle: () => {
-      const current = get().doc
-      const pool = PRESETS.filter(
-        (p) => !(p.source === current.source.id && p.ink === current.ink.ink),
-      )
-      const pick: Preset = pool[Math.floor(Math.random() * pool.length)] ?? PRESETS[0]
+      const pick: Preset = dealPreset(get().doc)
       get().commit()
       set((s) => {
         applyPreset(s.doc, pick)

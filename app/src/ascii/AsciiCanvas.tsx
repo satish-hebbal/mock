@@ -19,6 +19,13 @@ import { pickMediaFile } from '../store'
 import { ALPHA_CHECKER } from '../lib/checker'
 import { useAscii } from './store'
 import { renderAscii } from './render'
+import { ASCII_NOTCH } from './notch'
+import { StarterRow } from './AsciiPresets'
+
+/** Air between the picture and the panel's walls, on the app's own 4pt step. */
+const GUTTER = 24
+/** The same, once the wall above it is the floor of the toolbar's pocket. */
+const BAND = ASCII_NOTCH.depth + GUTTER
 
 function useContainerSize(ref: React.RefObject<HTMLDivElement | null>) {
   const [size, setSize] = useState({ w: 0, h: 0 })
@@ -47,10 +54,20 @@ export function AsciiCanvas() {
   /*
    * The picture is fitted to the space rather than the space to the picture, so
    * changing the source's aspect ratio never moves the panels beside it.
+   *
+   * One gutter, kept on all four sides, and the notch counts as wall.
+   *
+   * Reserving exactly the pocket's depth was not enough: it left a tall source
+   * flush against the floor of the cut, and a picture whose edge is the same
+   * line as a piece of chrome reads as a mistake even when it is deliberate,
+   * which is what the top-right corner looked like. So the top band is the
+   * pocket plus the same gutter the sides get, and the bottom carries that band
+   * too, since the alternative is a picture that no longer sits in the middle
+   * of its own canvas. The readout in the bottom-left gets clear air out of it.
    */
   const aspect = doc.size.width / Math.max(1, doc.size.height)
-  const boxW = Math.max(0, availW - 48)
-  const boxH = Math.max(0, availH - 48)
+  const boxW = Math.max(0, availW - 2 * GUTTER)
+  const boxH = Math.max(0, availH - 2 * BAND)
   const dispW = Math.max(1, Math.min(boxW, boxH * aspect))
   const dispH = Math.max(1, dispW / aspect)
 
@@ -76,16 +93,32 @@ export function AsciiCanvas() {
   }, [doc, bitmap, dispW, dispH, boxW])
 
   return (
+    /* no border, radius or shadow of its own any more: the frame around this is
+       a real notched shape, and a rectangle drawn inside it would trace a
+       corner the panel no longer has */
     <div
       ref={wrap}
-      className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-lg border border-(--line) bg-(--panel)"
+      className="relative flex h-full w-full items-center justify-center overflow-hidden bg-(--panel)"
     >
       {bitmap ? (
         <>
-          {/* the checkerboard only exists to prove a transparent export is
-              actually transparent, so it appears only when one would be */}
+          {/*
+            The checkerboard only exists to prove a transparent export is
+            actually transparent, so it appears only when one would be.
+
+            The rounded corner is on this wrapper rather than on the canvas, so
+            the checkerboard is cut by it too and a transparent picture has the
+            same silhouette as an opaque one. `--radius-md`, which is what the
+            source thumbnail in the panel already wears: the same picture in two
+            places should not round differently.
+
+            Preview only, and deliberately so. It is a way of showing the
+            artwork as an object sitting on the panel rather than as paint that
+            runs to the edge of a rectangle; the export is the document, and it
+            keeps its square corners.
+          */}
           <div
-            className="relative"
+            className="relative overflow-hidden rounded-md"
             style={{
               width: dispW,
               height: dispH,
@@ -103,19 +136,33 @@ export function AsciiCanvas() {
           </p>
         </>
       ) : (
-        <button
-          onClick={() => pickMediaFile((f) => void useAscii.getState().importImage(f), false)}
-          className="media-drop relative flex h-64 w-96 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-(--line) text-(--tx3) transition-colors hover:border-(--tx3) hover:text-(--tx2)"
-        >
-          <span className="media-glow" aria-hidden />
-          <span className="media-ripple" aria-hidden>
-            {Array.from({ length: 8 }, (_, i) => (
-              <span key={i} className="media-ring" />
-            ))}
-          </span>
-          <ImagePlus className="media-plus" size={20} strokeWidth={1.75} />
-          <span className="t-body-sm">Drop an image here, paste one, or click to browse</span>
-        </button>
+        /*
+         * The empty state is two offers, not one.
+         *
+         * A drop zone alone asks for a decision (which of my photographs is
+         * this for?) before it has shown what it does with one, and the answer
+         * to that is not obvious even once you know: a flat snapshot turns to
+         * mud. So the pictures sit right under it, already chosen to survive
+         * the treatment, and the first press lands you in a finished ASCII
+         * image with every control live. The drop zone keeps the top spot
+         * because your own picture is still the point of the tool.
+         */
+        <div className="flex flex-col items-center gap-5">
+          <button
+            onClick={() => pickMediaFile((f) => void useAscii.getState().importImage(f), false)}
+            className="media-drop relative flex h-56 w-96 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-(--line) text-(--tx3) transition-colors hover:border-(--tx3) hover:text-(--tx2)"
+          >
+            <span className="media-glow" aria-hidden />
+            <span className="media-ripple" aria-hidden>
+              {Array.from({ length: 8 }, (_, i) => (
+                <span key={i} className="media-ring" />
+              ))}
+            </span>
+            <ImagePlus className="media-plus" size={20} strokeWidth={1.75} />
+            <span className="t-body-sm">Drop an image here, paste one, or click to browse</span>
+          </button>
+          <StarterRow />
+        </div>
       )}
     </div>
   )

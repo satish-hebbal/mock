@@ -114,6 +114,7 @@ export function HoldButton({
   hint,
   onHold,
   spinIcon = false,
+  hintBelow = false,
   className = '',
 }: {
   icon: ReactNode
@@ -121,6 +122,14 @@ export function HoldButton({
   /** what the hold is for; shown as the tooltip alongside the hold instruction */
   hint: string
   onHold: () => void
+  /**
+   * Put the "press and hold" nudge under the button instead of over it.
+   *
+   * For a button near the top of the window, where the default placement puts
+   * the nudge off the screen entirely: ASCII's Start over sits in the notch cut
+   * into its canvas, a few points below the browser's own edge.
+   */
+  hintBelow?: boolean
   /**
    * Turn the glyph through a full revolution across the hold.
    *
@@ -212,7 +221,9 @@ export function HoldButton({
         <span
           aria-hidden
           onAnimationEnd={clearNudge}
-          className="hold-hint pointer-events-none absolute bottom-full left-1/2 z-0 whitespace-nowrap rounded-full border border-(--line) bg-(--raised) px-2.5 py-1 t-caption text-(--tx2)"
+          className={`pointer-events-none absolute left-1/2 z-0 whitespace-nowrap rounded-full border border-(--line) bg-(--raised) px-2.5 py-1 t-caption text-(--tx2) ${
+            hintBelow ? 'hold-hint-below top-full' : 'hold-hint bottom-full'
+          }`}
         >
           Press and hold
         </span>

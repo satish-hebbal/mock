@@ -87,6 +87,10 @@
   --field-h: var(--surface-3); /* input chip hover */
   --line: var(--hairline);
   --line2: var(--hairline-strong);
+  /* the same hairline as channels, for the places that fade one out rather
+     than draw it: a gradient from a hairline to nothing cannot be built out of
+     an opaque hex */
+  --line-rgb: 35, 37, 42;
   --tx: var(--ink);
   /*
    * Secondary and tertiary ink are the *page's own ink at reduced strength*,
@@ -167,6 +171,7 @@
   --field-h: #ebecec;
   --line: #e4e5e8;
   --line2: #d2d4d8;
+  --line-rgb: 228, 229, 232;
   --tx: #0f1011;
   /* the same rule inverted: black at low strength, so the ink takes its colour
      from whatever pale ground it is sitting on */
@@ -214,9 +219,20 @@
    *           manipulation, where the overshoot reads as the thing having mass.
    *           It is wrong for anything the user did not physically grab.
    */
+  /*
+   *   bloom   the only one of the four that eases in as well as out. For a
+   *           level coming up rather than a thing arriving: light, opacity,
+   *           a value being turned. The other three all put most of the change
+   *           in the first few frames, which is right for something that has
+   *           travelled and is landing and wrong for something switching on,
+   *           where it reads as a hard cut with a long tail rather than as a
+   *           fade. `smooth` is the worst of the three at this: it is an
+   *           exponential out, so a 340ms fade on it is 90% finished in 60ms.
+   */
   --ease-settle: cubic-bezier(0.22, 0.9, 0.16, 1);
   --ease-smooth: cubic-bezier(0.19, 1, 0.22, 1);
   --ease-snappy: cubic-bezier(0.175, 0.885, 0.32, 1.1);
+  --ease-bloom: cubic-bezier(0.4, 0, 0.6, 1);
 
   /*
    * Hover arrives faster than it leaves.
@@ -436,6 +452,37 @@ body {
 }
 
 /*
+ * The rainbow pass over Surprise me.
+ *
+ * The button is white and stays white. Colour is not what it is, it is
+ * something that crosses it once when the pointer lands, which is the whole
+ * argument for the control underneath: press it and something you did not pick
+ * goes past. A permanently coloured button would be making that claim all the
+ * time and so making it about nothing.
+ *
+ * The band is parked off the left edge by its own `left`, not by a starting
+ * transform, and travels from zero. Tailwind v4 writes its translate utilities
+ * to the `translate` property rather than to `transform`, so a resting
+ * `-translate-x-*` would have *composed* with this animation instead of being
+ * replaced by it, and the whole sweep would have run a button-width to the left
+ * of where it was drawn. Keeping the parking in `left` leaves this keyframe the
+ * only thing touching transforms.
+ *
+ * It finishes clear of the right edge under the button's own `overflow-hidden`,
+ * so there is no resting frame with a band parked on it in either direction:
+ * the animation can be attached to `:hover` and left to restart itself every
+ * time the pointer comes back.
+ */
+@keyframes surprise-sheen {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(300%);
+  }
+}
+
+/*
  * The receipt for a completed press-and-hold.
  *
  * The button has been compressing under the hold, so it releases past its
@@ -519,11 +566,59 @@ body {
   animation: hold-hint 2600ms cubic-bezier(0.2, 0, 0, 1) both;
 }
 
+/*
+ * The same nudge, for a button with no room above it.
+ *
+ * ASCII's Start over sits in the notch cut into the top of its canvas, six
+ * points below the window's own edge, so a hint that springs upward goes
+ * straight off the top of the screen and is never seen at all. Under the button
+ * there is a whole canvas of space.
+ *
+ * Mirrored rather than re-timed: every offset is the sign flipped, so it leaves
+ * from under the button's bottom edge with the same overshoot and settles the
+ * same distance clear of it, and the two placements stay one behaviour.
+ */
+@keyframes hold-hint-below {
+  0% {
+    transform: translate(-50%, -105%) scale(0.7);
+    opacity: 0;
+  }
+  16% {
+    transform: translate(-50%, 42%) scale(1.08);
+    opacity: 1;
+  }
+  26% {
+    transform: translate(-50%, 18%) scale(0.97);
+  }
+  34% {
+    transform: translate(-50%, 28%) scale(1.01);
+  }
+  42% {
+    transform: translate(-50%, 24%) scale(1);
+  }
+  84% {
+    transform: translate(-50%, 24%) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -105%) scale(0.86);
+    opacity: 0;
+  }
+}
+
+.hold-hint-below {
+  animation: hold-hint-below 2600ms cubic-bezier(0.2, 0, 0, 1) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   /* the spring is the funny part, but the words are the useful part */
   .hold-hint {
     animation: none;
     transform: translate(-50%, -24%);
+  }
+  .hold-hint-below {
+    animation: none;
+    transform: translate(-50%, 24%);
   }
 }
 
@@ -820,24 +915,171 @@ body {
  * the gap to 2px and colours it instead, which stays inside the card and so
  * survives the cut.
  */
+/*
+ * `--glow` is how far up the card's light is turned, and `--au-lift` is how far
+ * the light has climbed out of the bottom edge. Every layer of the aurora, the
+ * lit bottom edge and the hairline are all written in terms of the first, so
+ * hover is one line rather than a second copy of the background.
+ *
+ * They are registered, not just used, and that is the whole trick. An
+ * unregistered custom property is a string as far as the engine is concerned,
+ * so a rule that changes it snaps and takes every gradient built on it along
+ * for the ride. Given a syntax, both become interpolable, and the ten-odd
+ * colour stops downstream of them ramp together off one transition.
+ */
+@property --glow {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+
+@property --au-lift {
+  syntax: "<percentage>";
+  inherits: true;
+  initial-value: 0%;
+}
+
+/*
+ * How far the light has opened out. Climbing alone moves the whole picture up
+ * the card without changing how much of it there is, which reads as a texture
+ * sliding rather than a light growing. Scaling it from the bottom edge at the
+ * same time makes the curtains taller and their gaps wider, so the glow reaches
+ * further up *and* gets softer doing it, which is what spreading actually is.
+ */
+@property --au-spread {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 1;
+}
+
 .tool-card {
   position: relative;
   border-radius: var(--tool-radius);
-  background: var(--line);
+  /* `--glow-rest` is what the component sets, because an inline style outranks
+     any rule and a card that named `--glow` itself could never be hovered */
+  --glow: var(--glow-rest, 0.62);
+  --au-lift: 0%;
+  --au-spread: 1;
   /*
-   * The highlight comes up over a beat rather than snapping on. At the app's
-   * default 110ms the tint arrives as a state flag: it is either on or off and
-   * you never see it move. Long enough to watch, and on a curve that spends its
-   * time in the middle rather than racing to the colour and easing out, the
-   * same tint reads as the card warming under the pointer.
+   * How far below the card the whole glow is pushed, for a card too short to
+   * hold it.
    *
-   * Leaving is quicker, and the direction is chosen by which rule is in play
-   * when the transition starts: hover raises `--tool-fade` on the way in, and
-   * reverting drops back to the base value on the way out.
+   * The aurora is measured in percentages of the card, so on paper it fits any
+   * card. It does not, because the text does not scale with it: the home screen
+   * card is 190-odd px and its tagline stops around three quarters of the way
+   * down, the same card in the app menu is barely 100px and its tagline runs to
+   * nearly nine tenths. The identical glow that sits under the copy on one lands
+   * behind it on the other. Sinking the light rather than dimming it keeps the
+   * lit edge the menu cards are recognised by and gives the copy its dark back.
    */
-  --tool-fade: 170ms;
+  --au-drop: 0%;
+  /*
+   * The tagline is brighter here than secondary ink is anywhere else in the app.
+   * `--tx2` is 55% white, which was chosen against a flat panel, and the bottom
+   * of a lit card is not a flat panel.
+   *
+   * 0.8 is set by measurement, not taste. Sampling the rendered pixels under a
+   * card at full glow and full spread, the two warm palettes bottom out around
+   * three quarters of the way down, which is where the tagline's last line
+   * sits: at 0.72 white that was 4.1:1, under the 4.5 floor. The alternative
+   * was to dim the glow, and the glow is the feature. It is also the closer
+   * match to the reference, where the body copy over the light is near-white.
+   */
+  --tool-copy: rgb(255 255 255 / 0.8);
+
+  /* the theme swap, declared here rather than on the fill because the border
+     below wants the same colours the glow is made of */
+  --au-scrim: 0, 0, 0;
+  --au-scrim-a: 0.46;
+  --au-hot: var(--au-core);
+  --au-strength: 1;
+  /*
+   * How far the outline has turned from grey to the tool's own colour. The
+   * fourth power, not the square the rest of the card uses, because the
+   * colour is meant to be a hover state and nothing else: at the resting 0.62
+   * this is 0.15, so a card sitting in the row wears a grey hairline with a
+   * suggestion of tint in it, and only the card under the pointer wears the
+   * colour. A square would have put it a third of the way there on all five.
+   */
+  --au-edge: calc(var(--glow) * var(--glow) * var(--glow) * var(--glow));
+
+  /*
+   * The hairline is a gradient, and hover changes its colour rather than its
+   * strength.
+   *
+   * The ramp itself is the constant: near nothing at the top, full at the
+   * bottom, on every card in every state. A card lit from underneath has no
+   * business having an even outline, since the light is at the bottom and the
+   * top edge is in shadow, and fading the top to almost nothing is also what
+   * lets the top corners dissolve into the page the way the reference's do.
+   *
+   * What hover does is walk each stop from a grey hairline to the tool's own
+   * colour, through `color-mix`, with the alphas baked into both ends so the
+   * transparent-to-opaque ramp survives the mix. A first attempt scaled the
+   * alphas by `--au-edge` instead, which did make hover obvious and also
+   * deleted the outline at rest, since fifteen percent of a hairline is not a
+   * hairline.
+   *
+   * The hues climb in the reverse of the order the light stacks in, `hot` at
+   * the bottom where the core is, `mid` through the middle, `accent` at the
+   * very top, so the lit outline reads as the same light seen edge-on.
+   */
+  background: linear-gradient(
+    to bottom,
+    color-mix(
+      in srgb,
+      rgba(var(--au-accent), 0.5) calc(var(--au-edge) * 100%),
+      rgba(var(--line-rgb), 0.05)
+    ) 0%,
+    color-mix(
+      in srgb,
+      rgba(var(--au-mid), 0.68) calc(var(--au-edge) * 100%),
+      rgba(var(--line-rgb), 0.36)
+    ) 34%,
+    color-mix(
+      in srgb,
+      rgba(var(--au-mid), 0.85) calc(var(--au-edge) * 100%),
+      rgba(var(--line-rgb), 0.78)
+    ) 70%,
+    color-mix(
+      in srgb,
+      rgba(var(--au-hot), 0.96) calc(var(--au-edge) * 100%),
+      rgba(var(--line-rgb), 1)
+    ) 100%
+  );
+  /*
+   * The light comes up over a beat rather than snapping on. At the app's
+   * default 110ms it arrives as a state flag: it is either on or off and you
+   * never see it move.
+   *
+   * Both properties ride `bloom`, and that is the whole of why this reads as a
+   * fade now. The out curves in the house set front-load the change: on
+   * `smooth`, an exponential out, a 340ms glow was effectively finished in
+   * about 60ms and then spent 280ms doing nothing you could see, which is a
+   * hard cut with a tail on it, not a fade. `bloom` eases in as well as out, so
+   * the first frames are slow, the middle carries the change, and the light
+   * settles instead of stopping.
+   *
+   * They ride the *same* curve, rather than the lift taking `settle` as
+   * anything that travels normally would, because they are not two things. It
+   * is one light source getting brighter and closer, and splitting the curves
+   * made the climb finish under a glow that was still building.
+   *
+   * Leaving is quicker and on a shorter version of the same shape. The
+   * direction is chosen by which rule is in play when the transition starts:
+   * hover raises `--tool-fade` on the way in, and reverting drops back to the
+   * base value on the way out.
+   *
+   * Only the two custom properties are transitioned. Everything they feed, the
+   * hairline gradient, the four aurora layers and the lit edge, recomputes off
+   * them each frame, so transitioning those as well would be two animations
+   * racing over one value.
+   */
+  --tool-fade: 220ms;
   transition:
-    background-color var(--tool-fade) cubic-bezier(0.4, 0, 0.6, 1),
+    --glow var(--tool-fade) var(--ease-bloom),
+    --au-lift var(--tool-fade) var(--ease-bloom),
+    --au-spread var(--tool-fade) var(--ease-bloom),
     color 110ms linear;
   /*
    * The fill sits behind the card's text on z-index -1, and that only lands
@@ -847,11 +1089,140 @@ body {
   isolation: isolate;
 }
 
+/*
+ * ----- the aurora -----
+ *
+ * The light does not come from inside the card, it comes from under it, and it
+ * is drawn as shapes rather than as gradients. The four blurred curtains live
+ * in `ToolAurora.tsx`; what is here is the three things around them.
+ *
+ * The layer order is base, then curtains, then this element's `::after`. That
+ * ordering is the reason the scrim is a pseudo-element instead of the first
+ * entry in a background stack: an inset `box-shadow` paints above its own
+ * element's background but below that element's children, so once the light
+ * became a child `<svg>` rather than a background layer, the seat and the rim
+ * would have been painted underneath it and vanished. `::after` generates a
+ * box that is the *last* child, which puts them back on top where they belong.
+ */
 .tool-card-fill {
   position: absolute;
   inset: 1px;
   z-index: -1;
   border-radius: calc(var(--tool-radius) - 1px);
+  overflow: hidden;
+  background: var(--field);
+}
+
+/*
+ * The curtains, positioned and lit.
+ *
+ * Opacity carries the whole layer's strength, which is the one real economy of
+ * moving the light into SVG: it used to be ten-odd colour stops recomputing
+ * every frame of a hover, and it is now one opacity and four transforms, which
+ * the compositor can do without repainting anything.
+ *
+ * `--au-drop` sinks the light for a card too short to hold it, and it is a
+ * percentage of the card, so it has to become a translate here rather than the
+ * gradient offsets it used to be.
+ */
+.tool-card-aurora {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: calc(var(--glow) * var(--au-strength));
+  transform: translateY(var(--au-drop));
+  pointer-events: none;
+}
+
+/*
+ * Each curtain climbs at its own rate on hover.
+ *
+ * `transform-box: view-box` is what makes the percentage mean anything: without
+ * it a percentage translate on an SVG child resolves against that path's own
+ * bounding box, so every curtain would move by a different amount for the wrong
+ * reason. Against the view box they all measure the same 100-unit card, and the
+ * only thing separating them is `--k`, which is deliberate.
+ */
+.tool-card-aurora path {
+  transform-box: view-box;
+  /* the origin is the bottom edge, because that is where the light comes from:
+     scaling about the centre would lift the source off the edge and the glow
+     would detach from the rim it is meant to be spilling over */
+  transform-origin: 50% 100%;
+  transform: translateY(calc(var(--au-lift) * -1 * var(--k)))
+    scaleY(calc(1 + (var(--au-spread) - 1) * var(--s)));
+}
+
+/*
+ * The scrim, the lit edge, and the card's own thickness, all on top.
+ *
+ * The scrim is over the light rather than under it. Under it, it would only
+ * darken the base and the curtains would paint straight over the top; over it,
+ * it takes the colour out of the half of the card the text sits in and leaves
+ * the bottom eighth alone, which both protects the tagline and deepens the
+ * contrast between the dead-black top and the hot edge. It is the same move as
+ * the reference, where the card is blacker than the page above the glow line.
+ *
+ * Then the bright rim where the glow meets the cut, a faint sheen along the top
+ * that stops the black half reading as a hole, and under both of those the
+ * seat: a negative spread a little smaller than half the blur keeps an inset
+ * shadow off the top and the middle of the sides and lets it round the two
+ * bottom corners, and the offset pushes it down. What is left is a soft dark
+ * seat along the bottom that curls an inch up the left and right, so the glow
+ * has something to be the edge of instead of running flat into the cut.
+ */
+.tool-card-fill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  /*
+   * The 68% stop is the one doing real work and it is placed by measurement,
+   * not by eye. The tagline's last line lands at about three quarters of the
+   * card, which is exactly where the spread half of the hover reaches, and
+   * sampling the rendered pixels there put the warm cards at 3.9:1 against
+   * their copy. Holding the scrim at nearly half strength that far down and
+   * only letting go over the last eighth buys those back without touching the
+   * bottom edge, where the hot core and the lit rim live.
+   */
+  background: linear-gradient(
+    to bottom,
+    rgba(var(--au-scrim), var(--au-scrim-a)) 0%,
+    rgba(var(--au-scrim), calc(var(--au-scrim-a) * 0.72)) 40%,
+    rgba(var(--au-scrim), calc(var(--au-scrim-a) * 0.46)) 68%,
+    rgba(var(--au-scrim), calc(var(--au-scrim-a) * 0.16)) 82%,
+    transparent 94%
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, calc(0.07 * var(--glow))),
+    inset 0 -1px 0 rgba(var(--au-hot), calc(0.42 * var(--glow) * var(--au-strength))),
+    inset 0 -20px 34px -14px rgba(0, 0, 0, 0.62);
+}
+
+/*
+ * The same glow on the light theme, at a third strength and inverted where it
+ * has to be. The scrim goes white, because its job is to push the far end of
+ * the card back to the ground colour and the ground colour is now pale. And the
+ * hot spot drops from `core` to `mid`: `core` is a near-white by construction,
+ * which is the brightest thing on a black card and invisible on a white one, so
+ * the light theme takes the step below it and the glow keeps a visible centre.
+ */
+:root.light .tool-card {
+  --au-scrim: 255, 255, 255;
+  --au-scrim-a: 0.55;
+  --au-hot: var(--au-mid);
+  --au-strength: 0.38;
+}
+
+/* the top sheen is white light on a dark card, and there is no such thing on a
+   pale one: the top edge takes the ground instead, and only the lit bottom rim
+   carries over */
+:root.light .tool-card-fill::after {
+  box-shadow:
+    inset 0 -1px 0 rgba(var(--au-mid), calc(0.3 * var(--glow))),
+    inset 0 -20px 34px -14px rgba(0, 0, 0, 0.16);
 }
 
 /*
@@ -875,6 +1246,12 @@ body {
 
 :root.light .tool-card-icon {
   color: color-mix(in srgb, rgb(var(--tool-tint)) 70%, #000);
+}
+
+/* the same reasoning as `--tool-copy` above, inverted: black at strength, so
+   the copy takes its colour from whatever the glow has done to the ground */
+:root.light .tool-card {
+  --tool-copy: rgb(0 0 0 / 0.7);
 }
 
 /* a tool that isn't built yet has no identity to advertise, so its glyph drops
@@ -903,14 +1280,26 @@ body {
 }
 
 /*
- * Hover reaches for the tool's own colour rather than the next grey up. Three
- * cards lighting the same borrowed grey answered "something is under the
- * pointer" without answering which, and the tint is already the thing telling
- * these three apart everywhere else on the card.
+ * Hover turns the light up, and the light rises.
+ *
+ * Brightness alone is a dimmer switch, and a dimmer switch is what the card
+ * already does at rest against its neighbours, so it would be answering
+ * "something is under the pointer" in the same language the row is using to say
+ * "these are five different tools". Moving the source is what makes it a
+ * different statement: `--au-lift` walks all four lobes 9% up the card, so the
+ * glow swells over the bottom edge and climbs, and because the lobes sit at
+ * four different heights and widths they do not climb together. The shape
+ * changes, not just the level.
+ *
+ * 380ms is long for a hover and it is long on purpose: the whole point of the
+ * effect is that you watch the light arrive, and on the bloom curve the middle
+ * of that is where the movement actually is.
  */
 .tool-card:not(:disabled):hover {
-  --tool-fade: 320ms;
-  background: rgba(var(--tool-tint), 0.55);
+  --tool-fade: 380ms;
+  --glow: 1;
+  --au-lift: 14%;
+  --au-spread: 1.5;
 }
 
 /* after hover, and matching its specificity, so a card that is both reads as
@@ -923,6 +1312,25 @@ body {
 .tool-card:focus-visible .tool-card-fill {
   inset: 2px;
   border-radius: calc(var(--tool-radius) - 2px);
+}
+
+/*
+ * Reduced motion keeps the brightness and drops the travel. The glow is
+ * information, it says which card the pointer is on, so it stays; the climb is
+ * decoration and goes. What is left still crossfades, because a custom property
+ * with no transition snaps the whole background at once and that is a harsher
+ * thing to sit under than the movement being removed.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .tool-card {
+    --tool-fade: 140ms;
+  }
+
+  .tool-card:not(:disabled):hover {
+    --tool-fade: 140ms;
+    --au-lift: 0%;
+    --au-spread: 1;
+  }
 }
 
 /*

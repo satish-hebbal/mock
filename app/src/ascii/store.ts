@@ -19,6 +19,7 @@ import { immer } from 'zustand/middleware/immer'
 import { loadAsset, loadJSON, saveAsset, saveJSON } from '../lib/db'
 import { coalesces, endEditRun } from '../lib/history'
 import { track } from '../lib/analytics'
+import { getPresetPhoto, loadPresetPhotoBlob } from '../lib/presetPhotos'
 import { ui } from '../lib/ui'
 import { applyRecipe, RECIPES, type DeepPatch } from './presets'
 import { getStyle } from './styles'
@@ -42,6 +43,14 @@ const MAX_DOC_EDGE = 1600
 export type AsciiSection = 'art' | 'look'
 export type AsciiDialog = 'export' | null
 
+/** What the picture being imported is, for the document name and the event. */
+interface SourceMeta {
+  name?: string
+  from?: 'file' | 'preset'
+  /** set only when `from` is 'preset', so the picker can tick it */
+  presetId?: string
+}
+
 interface AsciiState {
   hydrated: boolean
   doc: AsciiDoc
@@ -52,6 +61,8 @@ interface AsciiState {
   url: string | null
   /** the decoded source, which is what the renderer actually draws from */
   bitmap: ImageBitmap | null
+  /** which asset `bitmap` was decoded from, so a history move can spot a drift */
+  loadedId: string | null
   section: AsciiSection
   dialog: AsciiDialog
 
@@ -63,9 +74,12 @@ interface AsciiState {
   setStyle: (id: AsciiDoc['style']) => void
   applyLook: (id: string) => void
   reset: () => void
+  startOver: () => void
 
-  importImage: (file: Blob) => Promise<void>
+  importImage: (file: Blob, meta?: SourceMeta) => Promise<void>
+  importPreset: (id: string) => Promise<void>
   clearImage: () => void
+  syncSource: () => Promise<void>
 
   setSection: (s: AsciiSection) => void
   setDialog: (d: AsciiDialog) => void
@@ -86,6 +100,7 @@ export const useAscii = create<AsciiState>()(
     future: [],
     url: null,
     bitmap: null,
+    loadedId: null,
     section: 'art',
     dialog: null,
 
@@ -106,6 +121,7 @@ export const useAscii = create<AsciiState>()(
         s.future.push(clone(s.doc))
         s.doc = prev
       })
+      void get().syncSource()
       persist(get().doc)
     },
 
@@ -117,6 +133,7 @@ export const useAscii = create<AsciiState>()(
         s.past.push(clone(s.doc))
         s.doc = next
       })
+      void get().syncSource()
       persist(get().doc)
     },
 
@@ -171,14 +188,37 @@ export const useAscii = create<AsciiState>()(
         // the picture survives a reset; only the treatment of it goes back.
         // `size` is copied rather than carried across, so no piece of the old
         // draft ends up inside the new document.
-        const { assetId, name } = s.doc
+        const { assetId, presetId, name } = s.doc
         const size = { ...s.doc.size }
-        s.doc = { ...defaultAsciiDoc(), assetId, size, name }
+        s.doc = { ...defaultAsciiDoc(), assetId, presetId, size, name }
       })
       persist(get().doc)
     },
 
-    importImage: async (file) => {
+    /**
+     * An empty document, picture and all.
+     *
+     * Not the same button as Reset next to the Looks: that one keeps your
+     * photograph and puts only the treatment back, which is what you want
+     * ninety times out of a hundred. This is the other ten: wrong picture,
+     * start again. The history entry goes in first, so a hold you did not mean
+     * costs one Ctrl+Z rather than the image.
+     */
+    startOver: () => {
+      get().commit()
+      set((s) => {
+        if (s.url) URL.revokeObjectURL(s.url)
+        s.bitmap?.close()
+        s.url = null
+        s.bitmap = null
+        s.loadedId = null
+        s.doc = defaultAsciiDoc()
+      })
+      ui.toast('Started over. Undo (Ctrl+Z) brings it back')
+      persist(get().doc)
+    },
+
+    importImage: async (file, meta) => {
       try {
         const bmp = await createImageBitmap(file)
         const id = uid()
@@ -198,14 +238,40 @@ export const useAscii = create<AsciiState>()(
           s.bitmap?.close()
           s.url = url
           s.bitmap = bmp
+          s.loadedId = id
           s.doc.assetId = id
+          s.doc.presetId = meta?.presetId ?? null
           s.doc.size = { width, height }
+          if (meta?.name) s.doc.name = meta.name
         })
-        track('media_imported', { editor: 'ascii', kind: 'image' })
+        track('media_imported', { editor: 'ascii', kind: 'image', from: meta?.from ?? 'file' })
         persist(get().doc)
       } catch {
         ui.toast('That image could not be read', 'error')
       }
+    },
+
+    /**
+     * Start from one of the shipped photographs.
+     *
+     * The blank canvas is the worst place to meet this editor: every control in
+     * the panel is about a picture, so with no picture there is nothing to
+     * learn anything from, and finding a file that ASCII-ises well is its own
+     * small task. The presets are the same ones Shots and Studio offer as
+     * backgrounds, which is why there is no second folder of images to ship.
+     *
+     * It fetches and then goes through `importImage`, so a preset ends up as an
+     * ordinary asset: replaceable, undoable, and still there after a reload
+     * with no memory of where it came from.
+     */
+    importPreset: async (id) => {
+      const photo = getPresetPhoto(id)
+      const blob = await loadPresetPhotoBlob(id)
+      if (!blob || !photo) {
+        ui.toast('That preset could not be loaded', 'error')
+        return
+      }
+      await get().importImage(blob, { name: photo.name, from: 'preset', presetId: id })
     },
 
     clearImage: () => {
@@ -215,9 +281,55 @@ export const useAscii = create<AsciiState>()(
         s.bitmap?.close()
         s.url = null
         s.bitmap = null
+        s.loadedId = null
         s.doc.assetId = null
+        s.doc.presetId = null
       })
       persist(get().doc)
+    },
+
+    /**
+     * Bring the decoded picture back in line with the document.
+     *
+     * The source deliberately lives outside `doc`, so undo restores a document
+     * without restoring what it points at. That was invisible while the only
+     * way to change the picture was a file dialog; now that swapping presets is
+     * one press, undoing a swap left the previous document's dimensions on
+     * screen with the new photograph still in them. So every history move ends
+     * here, and this reloads, drops, or leaves the source to match.
+     */
+    syncSource: async () => {
+      const want = get().doc.assetId
+      if (want === get().loadedId) return
+
+      if (!want) {
+        set((s) => {
+          if (s.url) URL.revokeObjectURL(s.url)
+          s.bitmap?.close()
+          s.url = null
+          s.bitmap = null
+          s.loadedId = null
+        })
+        return
+      }
+
+      const blob = await loadAsset(want)
+      if (!blob) return
+      const bmp = await createImageBitmap(blob)
+      // a second move can land while the blob is being read; the last one to be
+      // asked for is the one that wins, not the last one to finish decoding
+      if (get().doc.assetId !== want) {
+        bmp.close()
+        return
+      }
+      const url = URL.createObjectURL(blob)
+      set((s) => {
+        if (s.url) URL.revokeObjectURL(s.url)
+        s.bitmap?.close()
+        s.url = url
+        s.bitmap = bmp
+        s.loadedId = want
+      })
     },
 
     setSection: (section) => {
@@ -236,6 +348,8 @@ export const useAscii = create<AsciiState>()(
         if (doc && doc.version === 1) {
           let bitmap: ImageBitmap | null = null
           let url: string | null = null
+          // written before presets existed: absent means "not from one"
+          doc.presetId = doc.presetId ?? null
           if (doc.assetId) {
             const blob = await loadAsset(doc.assetId)
             if (blob) {
@@ -245,12 +359,14 @@ export const useAscii = create<AsciiState>()(
               // the blob is gone but the document still refers to it: forget the
               // reference rather than leaving a picture that can never load
               doc.assetId = null
+              doc.presetId = null
             }
           }
           set((s) => {
             s.doc = doc
             s.bitmap = bitmap
             s.url = url
+            s.loadedId = bitmap ? doc.assetId : null
           })
         }
       } catch {

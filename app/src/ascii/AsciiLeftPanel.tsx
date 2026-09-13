@@ -18,7 +18,7 @@
  */
 
 import { useEffect, useRef, type CSSProperties } from 'react'
-import { Blend, Grid3x3, RotateCcw, Trash2, Type } from 'lucide-react'
+import { Blend, Grid3x3, ImagePlus, RotateCcw, Trash2, Type } from 'lucide-react'
 import { pickMediaFile, useStudio } from '../store'
 import {
   ColorRow,
@@ -36,6 +36,7 @@ import { PALETTES } from './palettes'
 import { COLOR_PRESETS, RECIPES } from './presets'
 import { RAMPS, getRamp } from './ramps'
 import { STYLES, STYLE_GROUPS, getStyle } from './styles'
+import { PresetCatalog } from './AsciiPresets'
 import { useAscii, type AsciiSection } from './store'
 import type { AsciiDoc, BlendId, ColorMode } from './types'
 
@@ -91,19 +92,29 @@ function SourceGroup() {
           <div className="mb-2 overflow-hidden rounded-md border border-(--line)">
             <img src={url} alt="" className="block max-h-28 w-full object-cover" />
           </div>
-          <div className="flex gap-1">
+          {/* one row: the two things you can do to the picture on the left, and
+              what it currently is on the right, rather than three short lines
+              stacked down the panel's left edge */}
+          <div className="flex items-center gap-1">
             <MiniButton
               onClick={() => pickMediaFile((f) => void useAscii.getState().importImage(f), false)}
+              title="Swap in another image"
             >
+              {/* the glyph does the asking: a plus over a picture reads as "put
+                  one in" before the label beside it has been read at all */}
+              <ImagePlus size={13} strokeWidth={1.9} />
               Replace
             </MiniButton>
             <MiniButton onClick={() => useAscii.getState().clearImage()} title="Remove the image">
               <Trash2 size={13} strokeWidth={1.9} />
             </MiniButton>
+            <span
+              title="The document this picture is being cut into"
+              className="ml-auto shrink-0 t-caption text-(--tx3) tabular-nums"
+            >
+              {size.width} × {size.height}
+            </span>
           </div>
-          <p className="mt-1.5 t-caption text-(--tx3) tabular-nums">
-            {size.width} × {size.height} document
-          </p>
         </>
       ) : (
         <button
@@ -111,9 +122,16 @@ function SourceGroup() {
           className="media-drop relative flex w-full flex-col items-center justify-center gap-1 rounded-md border border-dashed border-(--line) py-6 text-(--tx3) transition-colors hover:border-(--tx3) hover:text-(--tx2)"
         >
           <span className="media-glow" aria-hidden />
+          {/* the same glyph the Replace button wears, so "put a picture in
+              here" looks the same before and after there is one */}
+          <ImagePlus size={16} strokeWidth={1.75} />
           <span className="t-caption">Add an image, or drop one anywhere</span>
         </button>
       )}
+      {/* the full library, one row per folder until a row is opened, in both
+          states: the canvas shows six before there is a picture, and this is
+          where the rest of them are and where you swap between them after */}
+      <PresetCatalog />
     </Section>
   )
 }

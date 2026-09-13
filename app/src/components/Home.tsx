@@ -1,6 +1,7 @@
 import { Mascot } from './Mascot'
 import { useStudio } from '../store'
-import { TOOLS, toolTint, toolWash } from '../lib/tools'
+import { TOOLS, toolGlow, toolTint } from '../lib/tools'
+import { ToolAurora } from './ToolAurora'
 import { HOME_SEAM } from '../lib/interlock'
 
 /*
@@ -48,17 +49,17 @@ export function Home() {
                 key={t.name}
                 disabled={t.soon}
                 onClick={() => !t.soon && setMode(t.id)}
-                style={{ ...seam?.style, ...toolTint(t) }}
+                style={{ ...seam?.style, ...toolTint(t), ...toolGlow(t.soon ? 0.25 : 0.62) }}
                 className={`tool-card group flex flex-col items-start gap-2.5 p-4 text-left ${
                   seam?.className ?? ''
                 } ${t.soon ? 'cursor-default opacity-60' : ''}`}
               >
-                {/* the card's surface, and everything the 1px of card
-                    background around it is left reading as a hairline */}
-                <span
-                  className="tool-card-fill"
-                  style={{ background: toolWash(t, t.soon ? 0.35 : 0.8) }}
-                />
+                {/* the card's surface: the ground, the tool's four curtains of
+                    light, and a scrim over the top of them. The 1px of card
+                    background it leaves uncovered reads as a hairline */}
+                <span className="tool-card-fill">
+                  <ToolAurora tool={t} />
+                </span>
                 <t.icon className="tool-card-icon" size={22} strokeWidth={1.75} />
                 <div>
                   <div className="flex items-center gap-2">
@@ -70,8 +71,10 @@ export function Home() {
                     )}
                   </div>
                   {/* snug rather than relaxed: at three lines the extra leading
-                      was most of what made the card tall */}
-                  <p className="mt-1 t-body-sm leading-snug text-(--tx2)">{t.tagline}</p>
+                      was most of what made the card tall. The ink is the card's
+                      own rather than secondary ink, because the last line of it
+                      sits over the glow */}
+                  <p className="mt-1 t-body-sm leading-snug text-(--tool-copy)">{t.tagline}</p>
                 </div>
               </button>
             )

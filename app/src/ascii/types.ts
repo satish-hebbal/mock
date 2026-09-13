@@ -206,6 +206,14 @@ export interface AsciiDoc {
   name: string
   /** the one source image, by asset id */
   assetId: string | null
+  /**
+   * Which shipped preset the source came from, if it came from one.
+   *
+   * The picture itself is already an asset like any other by the time it is
+   * here, so this is not how it is loaded: it is only so the picker can tick
+   * the one you are looking at. A dropped file clears it.
+   */
+  presetId: string | null
   size: { width: number; height: number }
   style: AsciiStyleId
   ramp: RampId
@@ -224,6 +232,7 @@ export function defaultAsciiDoc(): AsciiDoc {
     version: 1,
     name: 'Untitled',
     assetId: null,
+    presetId: null,
     size: { width: 1600, height: 1200 },
     style: 'characters',
     ramp: 'standard',
@@ -258,7 +267,18 @@ export function defaultAsciiDoc(): AsciiDoc {
       amount: 1,
       scale: 3,
     },
-    backdrop: { mode: 'paper', blur: 24, opacity: 1, color: '#08090a', mesh: defaultMesh() },
+    /*
+     * The source photograph at a third strength, not flat paper.
+     *
+     * Characters on a plain ground is the austere version of this effect and a
+     * poor first impression of it: the grid throws away most of the picture's
+     * tone, so a portrait lands as a grey mass with nothing underneath to say
+     * what it was. A faint print of the original behind the glyphs puts the
+     * subject back without competing with them, and it is the setting almost
+     * everybody arrived at by hand anyway. Thirty per cent is where the picture
+     * reads and the characters still carry the image rather than decorate it.
+     */
+    backdrop: { mode: 'source', blur: 24, opacity: 0.3, color: '#08090a', mesh: defaultMesh() },
     fx: { vignette: 0, scanlines: 0, curvature: 0, bloom: 0, chromatic: 0, grain: 0, glitch: 0 },
   }
 }

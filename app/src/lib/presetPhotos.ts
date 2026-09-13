@@ -54,10 +54,32 @@ export const PRESET_PHOTOS: PresetPhoto[] = PRESET_PHOTO_CATEGORIES.flatMap((c) 
   buildCategory(c.id, c.label, c.count),
 )
 
-export function getPresetPhoto(id: string | undefined): PresetPhoto | null {
+export function getPresetPhoto(id: string | null | undefined): PresetPhoto | null {
   return PRESET_PHOTOS.find((p) => p.id === id) ?? null
 }
 
 export function presetPhotosByCategory(category: PresetPhotoCategory): PresetPhoto[] {
   return PRESET_PHOTOS.filter((p) => p.category === category)
+}
+
+/**
+ * A shipped preset, fetched as a blob.
+ *
+ * Shots and Studio paint a background straight from the URL, so they never need
+ * this. An editor that takes a picture as its *source* does: ASCII decodes it,
+ * saves it as an asset and sizes its document from it, all of which is the code
+ * path an upload already goes down. Handing that path a blob means a preset and
+ * a dropped file are the same thing from there on, rather than a second import
+ * that has to be kept in step with the first.
+ */
+export async function loadPresetPhotoBlob(id: string): Promise<Blob | null> {
+  const photo = getPresetPhoto(id)
+  if (!photo) return null
+  try {
+    const res = await fetch(photo.src)
+    if (!res.ok) return null
+    return await res.blob()
+  } catch {
+    return null
+  }
 }

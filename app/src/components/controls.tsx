@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { ChevronDown, ChevronRight, Info } from 'lucide-react'
 import { useStudio } from '../store'
 import { endEditRun } from '../lib/history'
@@ -105,18 +106,47 @@ export function Section({
  * panel. Both panel pages scroll, and an element that scrolls on one axis
  * clips the other, so an absolutely positioned bubble would be cut off at the
  * panel's edge exactly when it has something to say.
+ *
+ * `fixed` is not enough on its own, though, and this is the part that is easy
+ * to get wrong twice. The panel that holds the Surprise me notch cuts its shape
+ * with `clip-path`, and a clip-path clips every descendant, whatever its
+ * position: viewport coordinates do not buy an escape from it the way they buy
+ * an escape from `overflow`. A bubble rendered in place came out sliced down
+ * the panel's right edge, three words wide. So it goes through a portal to the
+ * body, which is the only way out of an ancestor's clip.
  */
+/** Breathing room the bubble keeps from the edge of the window. */
+const EDGE = 8
+
 export function InfoTip({ children, label = 'What is this?' }: { children: ReactNode; label?: string }) {
   const ref = useRef<HTMLButtonElement>(null)
+  const bubble = useRef<HTMLDivElement>(null)
   const [at, setAt] = useState<{ x: number; y: number; flip: boolean } | null>(null)
+  /** how far the bubble had to move to stay on screen, in pixels */
+  const [lift, setLift] = useState(0)
 
   const open = () => {
     const r = ref.current?.getBoundingClientRect()
     if (!r) return
     const flip = r.right + 248 > window.innerWidth
+    setLift(0)
     setAt({ x: flip ? r.left - 8 : r.right + 8, y: r.top + r.height / 2, flip })
   }
   const close = () => setAt(null)
+
+  /*
+   * A dot near the bottom of the panel centres a bubble that runs off the
+   * bottom of the window, which is the same "cut off mid-sentence" failure the
+   * portal fixes on the other axis. The height is only knowable once it has
+   * text in it, so it is measured and nudged before the browser paints.
+   */
+  useLayoutEffect(() => {
+    if (!at) return
+    const h = bubble.current?.offsetHeight ?? 0
+    const top = at.y - h / 2
+    const lowest = Math.max(EDGE, window.innerHeight - EDGE - h)
+    setLift(Math.min(Math.max(top, EDGE), lowest) - top)
+  }, [at])
 
   useEffect(() => {
     if (!at) return
@@ -157,19 +187,22 @@ export function InfoTip({ children, label = 'What is this?' }: { children: React
       >
         <Info size={13} strokeWidth={1.9} />
       </button>
-      {at && (
-        <div
-          role="tooltip"
-          style={{
-            left: at.x,
-            top: at.y,
-            transform: `translate(${at.flip ? '-100%' : '0'}, -50%)`,
-          }}
-          className="pointer-events-none fixed z-[60] max-w-[240px] rounded-md border border-(--line) bg-(--raised) px-2.5 py-2 t-caption leading-snug text-(--tx2) shadow-lg"
-        >
-          {children}
-        </div>
-      )}
+      {at &&
+        createPortal(
+          <div
+            ref={bubble}
+            role="tooltip"
+            style={{
+              left: at.x,
+              top: at.y,
+              transform: `translate(${at.flip ? '-100%' : '0'}, calc(-50% + ${lift}px))`,
+            }}
+            className="pointer-events-none fixed z-[60] max-w-[240px] rounded-md border border-(--line) bg-(--raised) px-2.5 py-2 t-caption leading-snug text-(--tx2) shadow-lg"
+          >
+            {children}
+          </div>,
+          document.body,
+        )}
     </>
   )
 }
@@ -292,15 +325,20 @@ export function SliderRow({
    * Figma-style relative scrub: drag anywhere on the field, ~180px covers the
    * full range; a click that never moved opens the value for typing instead.
    *
-   * Accumulated from `movementX` under pointer lock rather than from
-   * `clientX - startX`. Against absolute positions the drag was bounded by the
-   * screen: these rows sit in a 280px rail hard against the right edge of the
-   * window, so a scrub upward ran out of desk after a couple of hundred pixels
-   * and simply stopped, with the pointer pinned to the bezel and the number
-   * refusing to move. Under lock there is no cursor position to run out of, so
-   * one gesture covers the whole range however far it has to travel, and the
-   * pointer is put back where it started on release rather than stranded
-   * wherever the value happened to end.
+   * Accumulated from `movementX` rather than from `clientX - startX`, so the
+   * number tracks how far the hand has travelled rather than where it happens
+   * to be over the row.
+   *
+   * This used to take a pointer lock as well, which made the travel unbounded:
+   * with the cursor hidden there is no screen edge to run out of. The browser
+   * charges too much for that. Chrome and every Chromium relative put a banner
+   * across the top of the window on *every* lock, "press Esc to show your
+   * cursor", which is a modal-looking interruption over the artwork each time
+   * anybody nudges a slider, and there is no way for a page to decline it. A
+   * scrub that stops at the bezel is a much smaller problem: the gesture is
+   * relative, so letting go and dragging again picks up from the value you
+   * reached, and the arrow keys and the typed value are still there for the
+   * rest. So: no lock, and no banner.
    */
   const onPointerDown = (e: React.PointerEvent) => {
     if (editing || e.button !== 0) return
@@ -312,23 +350,6 @@ export function SliderRow({
     el.setPointerCapture(e.pointerId)
     scrubbing.current = true
 
-    /*
-     * Lock is requested, not required. It needs a user gesture and can be
-     * refused (an iframe without the right permission, a browser that has just
-     * exited lock, Safari asking first), and it returns a promise that rejects
-     * rather than throwing. Nothing below depends on it: `movementX` is
-     * populated either way, so a refusal costs the infinite range and keeps the
-     * scrub working exactly as it did before.
-     */
-    let released = false
-    const lock = el.requestPointerLock?.() as Promise<void> | undefined
-    // older engines return undefined here rather than a promise
-    lock?.then?.(() => {
-      // a very short drag can finish before the lock is granted; if it has, let
-      // go again immediately rather than leaving the pointer captured
-      if (released) document.exitPointerLock()
-    })?.catch?.(() => {})
-
     const onMove = (ev: PointerEvent) => {
       dx += ev.movementX
       if (Math.abs(dx) > 2) moved = true
@@ -336,8 +357,6 @@ export function SliderRow({
       onChange(clamp(startV + dx * perPx * (ev.shiftKey ? 0.2 : 1)))
     }
     const onUp = () => {
-      released = true
-      if (document.pointerLockElement === el) document.exitPointerLock()
       el.releasePointerCapture(e.pointerId)
       el.removeEventListener('pointermove', onMove)
       el.removeEventListener('pointerup', onUp)
@@ -362,7 +381,16 @@ export function SliderRow({
 
   return (
     <div className="flex items-center gap-1.5 py-0.5">
-      {target ? <KFDiamond target={target} /> : <span className="w-4 shrink-0" />}
+      {/*
+       * The diamond's gutter exists only when there is a timeline to put a key
+       * on. Reserving it either way indented every slider in the tools that
+       * have no keyframes at all, against colour rows that start at the panel
+       * edge. Nothing needs to line up across that boundary: the rows that
+       * animate are grouped together (the whole camera, a whole transform), so
+       * within any one group the gutter is either there for all of them or for
+       * none.
+       */}
+      {target && <KFDiamond target={target} />}
       <div
         role="slider"
         tabIndex={editing ? -1 : 0}
@@ -668,31 +696,44 @@ export function Disclosure({
   icon,
   open,
   onToggle,
+  actions,
   children,
 }: {
   label: string
   icon?: ReactNode
   open: boolean
   onToggle: (v: boolean) => void
+  /**
+   * Controls for the group, sat beside the fold rather than inside it.
+   *
+   * A sibling of the toggle and not a child of it, because a button inside a
+   * button is invalid markup that browsers resolve by dropping the inner one,
+   * and because an action that only appears once you have opened the fold is
+   * an action for people who already found what they wanted.
+   */
+  actions?: ReactNode
   children: ReactNode
 }) {
   return (
     <div className="mb-1">
       {/* the header is a SubHeading that grew a caret, so a foldable group and
           a plain one still read as the same rank in the panel */}
-      <button
-        onClick={() => onToggle(!open)}
-        aria-expanded={open}
-        className="mb-1.5 flex h-6 w-full items-center gap-1.5 t-caption text-(--tx2) hover:text-(--tx)"
-      >
-        <ChevronRight
-          size={11}
-          strokeWidth={2.2}
-          className={`shrink-0 text-(--tx3) transition-transform ${open ? 'rotate-90' : ''}`}
-        />
-        {icon}
-        {label}
-      </button>
+      <div className="mb-1.5 flex h-6 items-center gap-1">
+        <button
+          onClick={() => onToggle(!open)}
+          aria-expanded={open}
+          className="flex h-6 min-w-0 flex-1 items-center gap-1.5 t-caption text-(--tx2) hover:text-(--tx)"
+        >
+          <ChevronRight
+            size={11}
+            strokeWidth={2.2}
+            className={`shrink-0 text-(--tx3) transition-transform ${open ? 'rotate-90' : ''}`}
+          />
+          {icon}
+          {label}
+        </button>
+        {actions}
+      </div>
       {open && children}
     </div>
   )

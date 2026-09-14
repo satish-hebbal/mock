@@ -999,6 +999,22 @@ const harmonograph: FigureFn = (ctx, w, h, t, intensity, scale, ink, _motion, p)
  * The number of lobes is the big radius over the greatest common divisor, so
  * the shape is decided by a *ratio of integers* and jumps discontinuously as
  * you turn either radius, which is why this one rewards nudging over sweeping.
+ *
+ * That integer ratio is also why spinning it is not enough to make it move. The
+ * curve has as many-fold rotational symmetry as it has lobes, so turning it is
+ * the one motion it can perform without looking like anything happened: at the
+ * default radii a full lobe of rotation takes under five seconds and the frame
+ * still reads as a still. The pen offset is the only continuous control here,
+ * the one thing that can change without the lobe count jumping, so that is what
+ * breathes. It draws back towards the rolling circle's centre and returns,
+ * which shallows every lobe and deepens it again.
+ *
+ * It only ever shortens, never extends. The frame this is fitted to is measured
+ * off the radii alone and has never accounted for the pen, so a curve drawn at
+ * the offset the user set is as large as the picture is allowed to get. Letting
+ * the breath run outward from there would push wide settings off the canvas.
+ * Drawing back instead means a spirograph that fits at rest fits throughout,
+ * and `t = 0` is still exactly the curve the controls describe.
  */
 const spirograph: FigureFn = (ctx, w, h, t, intensity, scale, ink, _motion, p) => {
   ground(ctx, w, h, ink.bg)
@@ -1006,7 +1022,10 @@ const spirograph: FigureFn = (ctx, w, h, t, intensity, scale, ink, _motion, p) =
   const cy = h / 2
   const R = p.outer
   const r = p.inner
-  const d = p.pen
+  // a fraction of the offset rather than a distance, so the breath is the same
+  // gesture whatever the pen is set to, and a full sweep lands it exactly on
+  // the rolling circle's centre rather than turning the curve inside out
+  const d = p.pen * (1 - (1 - Math.cos(t * p.drift * 0.8)) * 0.5 * p.sweep)
   const unit = (Math.min(w, h) * 0.44 * scale) / 5 / Math.max(1, R)
   const amp = intensity / 50
   const layers = Math.max(1, Math.round(p.layers))
@@ -1200,6 +1219,8 @@ export const FIGURES: FigureSpec[] = [
       param('outer', 'Outer R', 3, 40, 1, 13),
       param('inner', 'Inner r', 1, 30, 1, 5),
       param('pen', 'Pen offset', 0.5, 20, 0.1, 6),
+      param('sweep', 'Sweep', 0, 1, 0.01, 0.4, 'How much of the pen offset draws back in, which is what makes the lobes breathe'),
+      param('drift', 'Drift', 0, 3, 0.01, 1, 'How fast it breathes'),
       param('turns', 'Turns', 2, 40, 1, 12),
       param('layers', 'Layers', 1, 12, 1, 3),
       param('fan', 'Fan', 0, 1, 0.01, 0.3, 'How far apart the layers are turned'),

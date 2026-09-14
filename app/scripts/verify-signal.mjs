@@ -262,10 +262,11 @@ for (const spec of FIGURES) {
  * Every figure has to actually put marks on the canvas.
  *
  * Fields are checked by reading the buffer they fill, and nothing was doing the
- * equivalent for figures, so `subdivide` shipped drawing one empty rectangle at
- * every setting: the root cell lost a coin flip that decided whether the whole
- * picture existed, and losing it is silent. A recording context is enough to
- * catch that class without a browser, and it costs one small stub.
+ * equivalent for figures, so one of them once shipped drawing a single empty
+ * rectangle at every setting: its root cell lost a coin flip that decided
+ * whether the picture existed at all, and losing it is silent. A recording
+ * context is enough to catch that class without a browser, and it costs one
+ * small stub.
  *
  * The bar is deliberately low. This is not asking whether a figure looks good,
  * only whether it drew anything beyond the background `ground()` lays down.
@@ -320,21 +321,6 @@ for (const spec of FIGURES) {
   check(`${spec.id} draws more than its background`, threw === null && r.marks >= 8, threw ?? `${r.marks} marks`)
 }
 
-/*
- * And specifically the one that was broken, across the range of the two
- * controls that decide how much layout there is. A single rectangle is the
- * failure signature: it means the recursion stopped at the root.
- */
-const sub = FIGURES.find((f) => f.id === 'subdivide')
-for (const split of [0.1, 0.5, 0.72, 1]) {
-  const r = recorder()
-  sub.fn(r.ctx, 512, 512, 0, 55, 4, FIG_INK, FIG_MOTION, {
-    ...resolveParams(sub.params, {}),
-    split,
-  })
-  check(`subdivide splits at least once at split ${split}`, r.marks >= 2, `${r.marks} marks`)
-}
-
 console.log('\n--- the helpers themselves are self-contained ---')
 for (const list of [FIELD_HELPERS, FIGURE_HELPERS]) {
   const names = new Set(list.map((f) => f.name))
@@ -349,7 +335,7 @@ for (const list of [FIELD_HELPERS, FIGURE_HELPERS]) {
 console.log('\n--- the catalogue ---')
 const ids = SOURCES.map((s) => `${s.kind}:${s.id}`)
 check('every generator id is unique', new Set(ids).size === ids.length)
-check('seventy-one generators', SOURCES.length === 71, `got ${SOURCES.length}`)
+check('sixty-eight generators', SOURCES.length === 68, `got ${SOURCES.length}`)
 check('every generator declares what it reads', SOURCES.every((s) => s.uses.length > 0))
 check('every generator has a hint', SOURCES.every((s) => s.hint.length > 8))
 check(

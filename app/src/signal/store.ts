@@ -26,7 +26,7 @@ import { track } from '../lib/analytics'
 import { ui } from '../lib/ui'
 import { applyPreset, PRESETS, type Preset } from './presets'
 import { PALETTE_BY_ID, PALETTES, type Palette } from './palettes'
-import { findSource } from './sources'
+import { findSource, firstOf } from './sources'
 import { defaultSignalDoc, migrateDoc, type SignalDoc } from './types'
 
 const DOC_KEY = 'signal-current'
@@ -111,7 +111,7 @@ function readSlots(): Slot[] {
     // a saved look carries a whole document, so it needs the same treatment
     return parsed
       .slice(0, MAX_SLOTS)
-      .map((s) => ({ ...s, doc: migrateDoc(s?.doc) }))
+      .map((s) => ({ ...s, doc: withKnownSource(migrateDoc(s?.doc)) }))
       .filter((s): s is Slot => s.doc !== null && typeof s.id === 'string')
   } catch {
     // a corrupt slot list is not worth a dialog: start clean
@@ -133,24 +133,24 @@ function writeSlots(slots: Slot[]) {
  * Two different things make this button feel repetitive, and only one of them
  * is repetition.
  *
- * The first is the arithmetic one. A fresh uniform draw over a hundred and
- * twelve looks hands you one you have already seen inside ten presses about a
- * third of the time, and excluding only the picture currently on screen fixes
- * the single case a user can prove and none of the ones they notice. Dealing a
- * lap of a shuffled list, rather than drawing with replacement, settles that
- * half: nothing comes back until the lap it belongs to is finished.
+ * The first is the arithmetic one. A fresh uniform draw over a hundred and five
+ * looks hands you one you have already seen inside ten presses about a third of
+ * the time, and excluding only the picture currently on screen fixes the single
+ * case a user can prove and none of the ones they notice. Dealing a lap of a
+ * shuffled list, rather than drawing with replacement, settles that half:
+ * nothing comes back until the lap it belongs to is finished.
  *
  * The second is the one that actually got noticed, and no amount of shuffling
- * ids would have fixed it. A hundred and twelve looks are built on seventy-one
- * generators: Truchet is three of them, Liquid is four. A plain permutation is
- * perfectly happy to deal two Truchets back to back, and while those are two
+ * ids would have fixed it. A hundred and five looks are built on sixty-eight
+ * generators: Chladni is three of them, Liquid is four. A plain permutation is
+ * perfectly happy to deal two Chladnis back to back, and while those are two
  * different documents by every field the code compares, to the eye they are one
  * picture in two colourways. The shape is what people remember. A shuffle that
  * only guarantees distinct ids guarantees nothing anybody can see.
  *
- * So a lap is one preset per generator, seventy-one of them, and no shape can
+ * So a lap is one preset per generator, sixty-eight of them, and no shape can
  * come back until every other shape has had its turn. A generator with several
- * presets sends a different one each lap, so all hundred and twelve looks still
+ * presets sends a different one each lap, so all hundred and five looks still
  * get seen, just spread over four laps instead of crammed into one.
  *
  * Within a lap the order is spread as well as shuffled. It is laid down one
@@ -370,7 +370,7 @@ function markDealt(id: string) {
  * comes back until the other forty-seven have had their turn.
  *
  * The spread scoring above is deliberately not reused here. It exists because a
- * hundred and twelve looks are built on seventy-one generators, so two
+ * hundred and five looks are built on sixty-eight generators, so two
  * different ids can be the same picture and distinct ids guarantee nothing
  * anybody can see. Two palettes are never the same palette. The id is the whole
  * of what is being shown, so a plain permutation is already the answer.
@@ -561,7 +561,7 @@ export const useSignal = create<SignalState>()(
      *
      * Never the one already on screen, never one seen recently, and never the
      * same shape twice in a row: the pick comes off the spread lap above, which
-     * is what stops a hundred and twelve looks from feeling like a dozen.
+     * is what stops a hundred and five looks from feeling like a dozen.
      */
     shuffle: () => {
       const pick: Preset = dealPreset(get().doc)
@@ -619,10 +619,10 @@ export const useSignal = create<SignalState>()(
       if (get().hydrated) return
       try {
         const slots = readSlots()
-        const doc = migrateDoc(await loadJSON<unknown>(DOC_KEY))
+        const doc = withKnownSource(migrateDoc(await loadJSON<unknown>(DOC_KEY)))
         set((s) => {
           s.slots = slots
-          if (doc && sourceExists(doc)) s.doc = doc
+          if (doc) s.doc = doc
         })
       } catch {
         /* an unreadable document is not a reason to refuse to open the tool */
@@ -633,13 +633,20 @@ export const useSignal = create<SignalState>()(
 )
 
 /**
- * True when the saved document names a generator this build still has.
+ * The saved document, pointed at a generator this build still has.
  *
- * A document that survives a release where an effect was removed would open on
- * a blank canvas with every control apparently doing nothing, which reads as
- * the tool being broken rather than as the document being stale. Better to
- * start fresh and lose one draft than to hand somebody a dead editor.
+ * A document that survives a release where a generator was removed would open
+ * on a blank canvas with every control apparently doing nothing, which reads as
+ * the tool being broken rather than as the document being stale. Throwing the
+ * document away instead was worse: it cost somebody their colours, their post
+ * chain and their canvas size along with the one part that had actually gone.
+ *
+ * So the source falls back to the first generator of its own family and the
+ * rest of the document survives. Its stored controls go with it, because they
+ * were keyed for a generator that no longer reads them.
  */
-function sourceExists(doc: SignalDoc) {
-  return findSource(doc.source.kind, doc.source.id) !== undefined
+function withKnownSource(doc: SignalDoc | null): SignalDoc | null {
+  if (!doc) return null
+  if (findSource(doc.source.kind, doc.source.id)) return doc
+  return { ...doc, source: { ...doc.source, id: firstOf(doc.source.kind), params: {} } }
 }

@@ -9,7 +9,7 @@
  *
  * Three rules govern what is in here.
  *
- * Every one of the seventy-one generators appears at least once. A generator no
+ * Every one of the sixty-eight generators appears at least once. A generator no
  * preset reaches is a generator nobody finds.
  *
  * A preset may set the generator's own controls, and the good ones do. The
@@ -65,7 +65,6 @@ export const PRESETS: Preset[] = [
   { id: 'h-quasi', name: 'Lattice', group: 'House', kind: 'field', source: 'quasicrystal', intensity: 62, scale: 3.6, speed: 0.4, ink: '#d0d6e0', paper: '#08090a', accent: '#5e6ad2', mix: 40, mask: 'bayer8', pixelSize: 2, params: { waves: 7, drift: 0.22, rate: 0.7 }, fx: fx(['bloom', 0.28], ['vignette', 0.34]) },
   { id: 'h-iso', name: 'Survey', group: 'House', kind: 'figure', source: 'isolines', intensity: 55, scale: 4, speed: 0.35, ink: '#d0d6e0', paper: '#08090a', accent: '#5e6ad2', mix: 0, params: { levels: 16, step: 9, octaves: 3, weight: 0.7, accent: 4 }, fx: fx(['grain', 0.16], ['vignette', 0.34]) },
   { id: 'h-phyllo', name: 'Seedhead', group: 'House', kind: 'figure', source: 'phyllotaxis', intensity: 55, scale: 3.2, speed: 0.4, ink: '#f7f8f8', paper: '#08090a', accent: '#5e6ad2', mix: 0, params: { angle: 137.507, seeds: 1200, taper: 1.4, accent: 7 }, fx: fx(['bloom', 0.24], ['vignette', 0.36]) },
-  { id: 'h-sub', name: 'Grid Study', group: 'House', kind: 'figure', source: 'subdivide', intensity: 52, scale: 4, speed: 0.5, ink: '#f7f8f8', paper: '#08090a', accent: '#5e6ad2', mix: 0, params: { depth: 6, split: 0.74, bias: 0.9, filled: 0.35, gap: 0.1 }, fx: fx(['grain', 0.14]) },
   { id: 'h-paper', name: 'House Paper', group: 'House', kind: 'field', source: 'liquid', intensity: 45, scale: 4, speed: 0.4, ink: '#0f1011', paper: '#f5f6f6', accent: '#5e6ad2', mix: 30, mask: 'halftone', pixelSize: 2, fx: fx(['grain', 0.15]) },
   { id: 'h-torus', name: 'House Torus', group: 'House', kind: 'figure', source: 'particle-ring', intensity: 55, scale: 4, speed: 0.7, ink: '#f7f8f8', paper: '#08090a', accent: '#5e6ad2', mix: 0, params: { points: 18, tube: 0.42 }, fx: fx(['bloom', 0.3], ['vignette', 0.4]) },
 
@@ -89,10 +88,6 @@ export const PRESETS: Preset[] = [
   { id: 'm-harm-5', name: 'Rosette', group: 'Mathematic', kind: 'figure', source: 'harmonograph', intensity: 60, scale: 5, speed: 0.5, ink: '#8affff', paper: '#020a12', accent: '#ff44aa', mix: 0, params: { ratio: 5, ratioY: 3, detune: 0.002, damping: 0.35, steps: 90, weight: 0.5 }, fx: fx(['bloom', 0.36]) },
   { id: 'm-spiro', name: 'Spirograph', group: 'Mathematic', kind: 'figure', source: 'spirograph', intensity: 58, scale: 4, speed: 0.45, ink: '#f7f8f8', paper: '#08090a', accent: '#5e6ad2', mix: 0, params: { outer: 13, inner: 5, pen: 6, turns: 14, layers: 4, fan: 0.25 }, fx: fx(['bloom', 0.28], ['vignette', 0.38]) },
   { id: 'm-spiro-2', name: 'Gear Train', group: 'Mathematic', kind: 'figure', source: 'spirograph', intensity: 52, scale: 5, speed: 0.3, ink: '#1a1a1a', paper: '#efeae0', accent: '#0055cc', mix: 0, params: { outer: 21, inner: 8, pen: 11, turns: 22, layers: 2, fan: 0.5, weight: 0.5 }, fx: fx(['grain', 0.18]) },
-  { id: 'm-attract', name: 'de Jong', group: 'Mathematic', kind: 'figure', source: 'attractor', intensity: 60, scale: 4, speed: 0.3, ink: '#c9d4ff', paper: '#03040a', accent: '#ff6ec7', mix: 0, params: { a: 1.641, b: 1.902, c: 0.316, d: 1.525, points: 120, gamma: 0.42 }, fx: fx(['bloom', 0.32], ['vignette', 0.42]) },
-  { id: 'm-attract-2', name: 'Phase Space', group: 'Mathematic', kind: 'figure', source: 'attractor', intensity: 55, scale: 4.6, speed: 0.2, ink: '#ffd24a', paper: '#0a0600', accent: '#ff3d00', mix: 0, params: { a: -2.24, b: -0.65, c: 0.43, d: -2.43, points: 160, grain: 1.2, gamma: 0.35 }, fx: fx(['bloom', 0.4], ['grain', 0.2]) },
-  { id: 'm-truchet', name: 'Truchet', group: 'Mathematic', kind: 'figure', source: 'truchet', intensity: 55, scale: 4, speed: 0.4, ink: '#111111', paper: '#f2efe6', accent: '#c8402c', mix: 0, params: { cells: 8, depth: 2, split: 0.4, weight: 0.17 }, fx: fx(['grain', 0.2]) },
-  { id: 'm-truchet-deep', name: 'Deep Truchet', group: 'Mathematic', kind: 'figure', source: 'truchet', intensity: 65, scale: 4, speed: 0.7, ink: '#00ffcc', paper: '#001210', accent: '#ff00aa', mix: 0, params: { cells: 5, depth: 4, split: 0.62, weight: 0.13, wave: 1.6 }, fx: fx(['bloom', 0.34], ['vignette', 0.36]) },
 
   // ----- Cyber -----
   { id: 'c-swirl', name: 'Neon Swirl', group: 'Cyber', kind: 'field', source: 'swirl', intensity: 60, scale: 5, speed: 1.2, ink: '#00ffcc', paper: '#0a001a', accent: '#ff00ff', mix: 40, mask: 'bayer4', spread: 60, pixelSize: 3, params: { arms: 1.4, twist: 6, falloff: 0.25 }, fx: fx(['bloom', 0.4], ['chromatic', 0.3]) },
@@ -126,7 +121,6 @@ export const PRESETS: Preset[] = [
   { id: 'p-sort', name: 'Sorted', group: 'Print', kind: 'figure', source: 'pixel-sort', intensity: 55, scale: 4, speed: 0.7, ink: '#111111', paper: '#f0efe9', accent: '#cc2222', mix: 0, fx: fx(['grain', 0.2]) },
   { id: 'p-bars', name: 'Broadcast', group: 'Print', kind: 'figure', source: 'wave-bars', intensity: 50, scale: 5, speed: 0.6, ink: '#f5f5f0', paper: '#101014', accent: '#ff6622', mix: 0, fx: fx(['grain', 0.2], ['vignette', 0.3]) },
   { id: 'p-morph', name: 'Contact Sheet', group: 'Print', kind: 'figure', source: 'morph-grid', intensity: 50, scale: 4, speed: 0.5, ink: '#141414', paper: '#f2f0ea', accent: '#888888', mix: 0, fx: fx(['grain', 0.2]) },
-  { id: 'p-sub', name: 'Mondrian', group: 'Print', kind: 'figure', source: 'subdivide', intensity: 50, scale: 4, speed: 0.35, ink: '#1a1a1a', paper: '#f4f1e6', accent: '#c8402c', mix: 0, params: { depth: 5, split: 0.68, filled: 0.28, gap: 0.14, min: 40 }, fx: fx(['grain', 0.16]) },
   { id: 'p-iso', name: 'Contour Map', group: 'Print', kind: 'figure', source: 'isolines', intensity: 52, scale: 3.4, speed: 0.25, ink: '#2c2c2c', paper: '#f2ede0', accent: '#a8531f', mix: 0, params: { levels: 20, step: 8, octaves: 3, weight: 0.6, accent: 5 }, fx: fx(['grain', 0.22]) },
 
   // ----- Warm -----
@@ -189,7 +183,6 @@ export const PRESETS: Preset[] = [
   { id: 'q-bloom', name: 'Slow Bloom', group: 'Quiet', kind: 'figure', source: 'dot-bloom', intensity: 40, scale: 4, speed: 0.35, ink: '#f7f8f8', paper: '#08090a', accent: '#828fff', mix: 0, fx: fx(['bloom', 0.3], ['vignette', 0.4]) },
   { id: 'q-horizon', name: 'Horizon', group: 'Quiet', kind: 'field', source: 'mirage', intensity: 40, scale: 3, speed: 0.3, ink: '#f0e0c0', paper: '#12100a', accent: '#d4a850', mix: 20, mask: 'lines', pixelSize: 2, fx: fx(['grain', 0.2], ['vignette', 0.4]) },
   { id: 'q-drift', name: 'Slow Curl', group: 'Quiet', kind: 'field', source: 'curl', intensity: 42, scale: 2.6, speed: 0.25, ink: '#c8cfda', paper: '#0a0b0d', accent: '#5e6ad2', mix: 18, mask: 'blue-noise', pixelSize: 2, params: { push: 0.22, stripes: 5 }, fx: fx(['vignette', 0.36]) },
-  { id: 'q-truchet', name: 'Quiet Maze', group: 'Quiet', kind: 'figure', source: 'truchet', intensity: 42, scale: 4, speed: 0.25, ink: '#d0d6e0', paper: '#0a0b0d', accent: '#5e6ad2', mix: 0, params: { cells: 10, depth: 1, split: 0.3, weight: 0.11, wave: 0.5 }, fx: fx(['vignette', 0.34]) },
 
   // ----- Type -----
   { id: 'y-ribbon', name: 'Ribbon', group: 'Type', kind: 'figure', source: 'text-wave', intensity: 55, scale: 5, speed: 0.8, ink: '#f7f8f8', paper: '#08090a', accent: '#5e6ad2', mix: 0, text: 'RIBBIT', fx: fx(['bloom', 0.25], ['vignette', 0.35]) },

@@ -36,7 +36,7 @@ function fmtTime(ms: number) {
 }
 
 const TRANSPORT_H = 44 // transport bar, always visible
-const RIBBON_H = 50 // the shot strip and its bottom gap
+const RIBBON_H = 36 // the shot strip and its bottom gap
 const RULER_H = 22
 const LANE_H = 22 // the bar itself
 const ROW_H = 30 // one track: the bar plus the air around it

@@ -17,7 +17,13 @@ import type { TransitionKind } from '../types'
  * encoder.
  */
 
-const CHIP_H = 44
+/*
+ * Chip height. Slim on purpose: the strip is a map of the film, not a contact
+ * sheet, and every pixel it takes is one the keyframe lanes under it give up.
+ * The backdrop and the name carry the identification at this height; the
+ * thumbnail is a silhouette confirming it rather than a picture to study.
+ */
+const CHIP_H = 30
 const EDGE = 8 // grab width of a chip's trailing edge
 
 /** Runs one pointer drag with the cursor held across the whole document. */
@@ -261,7 +267,7 @@ export function ShotRibbon() {
                 onPointerDown={(e) => startMove(e, shot.id, i)}
                 onDoubleClick={() => setRenaming(shot.id)}
                 title={`${shot.name} · ${secs(shot.durationMs)}`}
-                className={`group relative h-full cursor-grab overflow-hidden rounded-md border transition-colors active:cursor-grabbing ${
+                className={`group relative h-full cursor-grab overflow-hidden rounded-sm border transition-colors active:cursor-grabbing ${
                   active
                     ? 'border-(--accent) ring-1 ring-(--accent-soft)'
                     : 'border-(--line) hover:border-(--line2)'
@@ -278,9 +284,15 @@ export function ShotRibbon() {
                     className="absolute inset-0 h-full w-full object-contain object-center"
                   />
                 )}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
+                {/*
+                  A flat wash rather than a gradient from the foot of the chip.
+                  At a bar's height there is no room for a picture above and a
+                  caption below, so the name sits on the middle of the image and
+                  needs the same cover wherever it lands.
+                */}
+                <div className="absolute inset-0 bg-black/35" />
 
-                <div className="absolute inset-x-1 bottom-0.5 flex items-end gap-1 overflow-hidden">
+                <div className="absolute inset-x-1.5 inset-y-0 flex items-center gap-1 overflow-hidden">
                   {renaming === shot.id ? (
                     <input
                       autoFocus
@@ -297,8 +309,9 @@ export function ShotRibbon() {
                     />
                   ) : (
                     <>
-                      <span className="truncate t-caption text-white/90">{shot.name}</span>
-                      <span className="ml-auto shrink-0 t-caption text-white/60 tabular-nums">
+                      <span className="truncate t-caption text-white/95">{shot.name}</span>
+                      {/* the length steps aside for the actions that land on it */}
+                      <span className="ml-auto shrink-0 t-caption text-white/65 tabular-nums transition-opacity group-hover:opacity-0">
                         {secs(shot.durationMs)}
                       </span>
                     </>
@@ -306,7 +319,7 @@ export function ShotRibbon() {
                 </div>
 
                 {/* per-chip actions, out of the way until the chip is hovered */}
-                <div className="absolute top-0.5 right-0.5 flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                <div className="absolute top-1/2 right-0.5 flex -translate-y-1/2 gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
                   <button
                     title="Duplicate this shot"
                     onPointerDown={(e) => e.stopPropagation()}
@@ -378,18 +391,19 @@ export function ShotRibbon() {
         )}
       </div>
 
-      <div className="flex shrink-0 flex-col justify-center gap-1">
+      {/* side by side, so the pair is no taller than the strip they add to */}
+      <div className="flex shrink-0 items-stretch gap-1" style={{ height: CHIP_H }}>
         <button
           title="Add a shot after this one (copies it)"
           onClick={() => st().addShot()}
-          className="flex h-5 w-7 items-center justify-center rounded-xs border border-(--line) text-(--tx2) hover:border-(--line2) hover:text-(--tx)"
+          className="flex w-7 items-center justify-center rounded-xs border border-(--line) text-(--tx2) hover:border-(--line2) hover:text-(--tx)"
         >
           <Plus size={12} />
         </button>
         <button
           title="Add an empty shot"
           onClick={() => st().addShot({ blank: true })}
-          className="flex h-5 w-7 items-center justify-center rounded-xs border border-(--line) text-(--tx3) hover:border-(--line2) hover:text-(--tx)"
+          className="flex w-7 items-center justify-center rounded-xs border border-(--line) text-(--tx3) hover:border-(--line2) hover:text-(--tx)"
         >
           <Scissors size={11} />
         </button>

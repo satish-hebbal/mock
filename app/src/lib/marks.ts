@@ -24,5 +24,9 @@ export const KF_MARK = `${MARK} h-[9px] w-[9px] rounded-[2px]`
  * away, and at 9px that was a game of darts. The radius grows with it so the
  * corners stay the same fraction of the rhombus and it does not round off into
  * a dot at either size.
+ *
+ * It stops at 11 because a rhombus is as tall as its diagonal: turned 45°, an
+ * 11px square already stands 15.6px high, which is as much as an 18px lane can
+ * hold without the mark overhanging the bar it is pinned to.
  */
-export const KF_MARK_LANE = `${MARK} h-[13px] w-[13px] rounded-[3px]`
+export const KF_MARK_LANE = `${MARK} h-[11px] w-[11px] rounded-[2.5px]`

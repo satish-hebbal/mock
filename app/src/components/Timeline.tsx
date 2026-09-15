@@ -38,8 +38,8 @@ function fmtTime(ms: number) {
 const TRANSPORT_H = 44 // transport bar, always visible
 const RIBBON_H = 36 // the shot strip and its bottom gap
 const RULER_H = 22
-const LANE_H = 22 // the bar itself
-const ROW_H = 30 // one track: the bar plus the air around it
+const LANE_H = 18 // the bar itself
+const ROW_H = 26 // one track: the bar plus the air around it
 const MIN_H = TRANSPORT_H + RIBBON_H + RULER_H + ROW_H + 16
 const HEIGHT_KEY = 'ms-timeline-height'
 const LABEL_W = 144 // track-label gutter; the ribbon and ruler share it

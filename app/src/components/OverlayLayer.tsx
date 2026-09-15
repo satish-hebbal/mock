@@ -1,3 +1,4 @@
+import { activeShot } from '../lib/sequence'
 import { useRef } from 'react'
 import { useStudio } from '../store'
 import type { Overlay } from '../types'
@@ -7,7 +8,7 @@ import type { Overlay } from '../types'
  * frame coordinates so the export path reproduces them exactly.
  */
 export function OverlayLayer({ width, height }: { width: number; height: number }) {
-  const overlays = useStudio((s) => s.project.overlays)
+  const overlays = useStudio((s) => activeShot(s.project).overlays)
   const assets = useStudio((s) => s.assets)
   const selectedId = useStudio((s) => s.selectedOverlayId)
   const selectOverlay = useStudio((s) => s.selectOverlay)

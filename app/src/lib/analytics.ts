@@ -31,6 +31,8 @@ export type AnalyticsEvent =
   | 'project_created'
   | 'media_imported'
   | 'device_added'
+  | 'shot_added'
+  | 'sequence_exported'
   | 'template_applied'
   | 'animation_preset_applied'
   | 'studio_look_applied'

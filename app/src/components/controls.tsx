@@ -1,3 +1,4 @@
+import { activeShot } from '../lib/sequence'
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown, ChevronRight, Info } from 'lucide-react'
@@ -221,14 +222,14 @@ export function SubHeading({ children, icon }: { children: ReactNode; icon?: Rea
 
 export function KFDiamond({ target }: { target: string }) {
   const timeMs = useStudio((s) => s.timeMs)
-  const hasTrack = useStudio((s) => s.project.keyframes.some((k) => k.target === target))
+  const hasTrack = useStudio((s) => activeShot(s.project).keyframes.some((k) => k.target === target))
   const hasHere = useStudio((s) =>
-    s.project.keyframes.some((k) => k.target === target && Math.abs(k.timeMs - timeMs) <= 1),
+    activeShot(s.project).keyframes.some((k) => k.target === target && Math.abs(k.timeMs - timeMs) <= 1),
   )
   const toggleTrack = useStudio((s) => s.toggleTrack)
   const addKeyframeAt = useStudio((s) => s.addKeyframeAt)
   const removeKeyframes = useStudio((s) => s.removeKeyframes)
-  const kfs = useStudio((s) => s.project.keyframes)
+  const kfs = useStudio((s) => activeShot(s.project).keyframes)
 
   const onClick = () => {
     if (!hasTrack) {

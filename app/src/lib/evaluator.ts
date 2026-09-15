@@ -1,5 +1,5 @@
 import { EASINGS } from './easing'
-import type { Keyframe, SceneState } from '../types'
+import type { DeviceInstance, Keyframe, SceneState } from '../types'
 
 /**
  * Sample every keyframed target at `timeMs` (PRD §11.2).
@@ -106,12 +106,19 @@ const DEV_LABELS: Record<string, string> = {
   scroll: 'Scroll',
 }
 
-/** Human label for a target path, for timeline track rows. */
-export function targetLabel(target: string, scene: SceneState): string {
+/**
+ * Human label for a target path, for timeline track rows.
+ *
+ * Takes the cast rather than the whole scene, because that is all it reads and
+ * the difference is measurable: the labels are rebuilt whenever their input
+ * changes, and a scene changes on every frame of a camera drag while the list
+ * of devices in it does not.
+ */
+export function targetLabel(target: string, devices: DeviceInstance[]): string {
   const parts = target.split('.')
   if (parts[0] === 'camera') return `Camera · ${CAMERA_LABELS[parts[1]] ?? parts[1]}`
   if (parts[0] === 'dev') {
-    const idx = scene.devices.findIndex((d) => d.id === parts[1])
+    const idx = devices.findIndex((d) => d.id === parts[1])
     const name = idx >= 0 ? `Device ${idx + 1}` : 'Device'
     return `${name} · ${DEV_LABELS[parts[2]] ?? parts[2]}`
   }

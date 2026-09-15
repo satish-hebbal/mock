@@ -1,6 +1,6 @@
 import { DEFAULT_DEVICE_ID, isPickable } from './registry'
 import { clampCamera } from './camera'
-import type { CameraState, Keyframe, ProjectDoc } from '../types'
+import type { CameraState, Keyframe, Shot } from '../types'
 
 // ----- Social / platform export sizes (PRD §6.8) -----
 
@@ -433,7 +433,8 @@ export interface Template {
   swatch: string
   /** device models the layout needs: the template hides while any is missing */
   needs: string[]
-  apply: (p: ProjectDoc) => void
+  /** writes the take in place: its scene, its animation, its length */
+  apply: (shot: Shot) => void
 }
 
 const uid = () => crypto.randomUUID()

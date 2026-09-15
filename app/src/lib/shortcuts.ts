@@ -58,6 +58,8 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { keys: 'Shift+← / →', desc: 'Step ten frames' },
       { keys: 'Home / End', desc: 'Jump to start / end' },
       { keys: 'L', desc: 'Toggle loop' },
+      { keys: ', / .', desc: 'Previous / next shot' },
+      { keys: 'Alt+M', desc: 'Add a shot after this one' },
     ],
   },
   {

@@ -1,3 +1,4 @@
+import { activeShot } from '../lib/sequence'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useStudio } from '../store'
 import { endEditRun } from '../lib/history'
@@ -68,8 +69,8 @@ const poly = (pts: { x: number; y: number }[]) =>
   pts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
 
 export function CameraStage() {
-  const cam = useStudio((s) => s.project.scene.camera)
-  const devices = useStudio((s) => s.project.scene.devices)
+  const cam = useStudio((s) => activeShot(s.project).scene.camera)
+  const devices = useStudio((s) => activeShot(s.project).scene.devices)
   const selectedId = useStudio((s) => s.selectedDeviceId)
   const exportSize = useStudio((s) => s.project.exportSize)
 
@@ -194,7 +195,7 @@ export function CameraStage() {
     const onWheel = (e: WheelEvent) => {
       e.preventDefault()
       const st = useStudio.getState()
-      const zoom = clampCamera('zoom', st.project.scene.camera.zoom * Math.exp(-e.deltaY * 0.0012))
+      const zoom = clampCamera('zoom', activeShot(st.project).scene.camera.zoom * Math.exp(-e.deltaY * 0.0012))
       st.setAnimatable('camera.zoom', Number(zoom.toFixed(3)), 'gesture-zoom')
     }
     el.addEventListener('wheel', onWheel, { passive: false })

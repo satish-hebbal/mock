@@ -1,3 +1,4 @@
+import { activeShot } from '../lib/sequence'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   AppWindow,
@@ -183,7 +184,7 @@ function ListRow({
 // ----- sections -----
 
 function DevicesSection() {
-  const devices = useStudio((s) => s.project.scene.devices)
+  const devices = useStudio((s) => activeShot(s.project).scene.devices)
   const selectedId = useStudio((s) => s.selectedDeviceId)
   const [cat, setCat] = useState<'All' | (typeof DEVICE_CATEGORIES)[number]>('All')
   const st = useStudio.getState
@@ -345,7 +346,7 @@ function StudioPresetsTab() {
  * scroll past and never find.
  */
 function EnvironmentTab() {
-  const env = useStudio((s) => s.project.scene.environment)
+  const env = useStudio((s) => activeShot(s.project).scene.environment)
   const setEnvironment = useStudio((s) => s.setEnvironment)
   const current = env.mood ?? 'studio'
   return (
@@ -410,7 +411,7 @@ function atPreset(cam: CameraState, preset: CameraPreset): boolean {
 }
 
 function CameraSection() {
-  const cam = useStudio((s) => s.project.scene.camera)
+  const cam = useStudio((s) => activeShot(s.project).scene.camera)
   const st = useStudio.getState
   return (
     <>
@@ -531,12 +532,11 @@ function FramePreview({
 function FrameSection() {
   const size = useStudio((s) => s.project.exportSize)
   const setExportSize = useStudio((s) => s.setExportSize)
-  const background = useStudio((s) => s.project.scene.background)
-  const bgImageUrl = useStudio((s) =>
-    s.project.scene.background.imageAssetId
-      ? (s.assets[s.project.scene.background.imageAssetId]?.url ?? null)
-      : null,
-  )
+  const background = useStudio((s) => activeShot(s.project).scene.background)
+  const bgImageUrl = useStudio((s) => {
+    const id = activeShot(s.project).scene.background.imageAssetId
+    return id ? (s.assets[id]?.url ?? null) : null
+  })
   const [linked, setLinked] = useState(false)
   const ratio = size.width / size.height
 
@@ -661,12 +661,11 @@ function FrameSection() {
  * image, and no backdrop at all) lead as tiles.
  */
 function BackdropTab() {
-  const bg = useStudio((s) => s.project.scene.background)
-  const bgImageUrl = useStudio((s) =>
-    s.project.scene.background.imageAssetId
-      ? (s.assets[s.project.scene.background.imageAssetId]?.url ?? null)
-      : null,
-  )
+  const bg = useStudio((s) => activeShot(s.project).scene.background)
+  const bgImageUrl = useStudio((s) => {
+    const id = activeShot(s.project).scene.background.imageAssetId
+    return id ? (s.assets[id]?.url ?? null) : null
+  })
   const setBackground = useStudio((s) => s.setBackground)
   const st = useStudio.getState
 

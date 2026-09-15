@@ -1,3 +1,4 @@
+import { activeShot, fadeVeil, resolveSequence } from '../lib/sequence'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { ContactShadows, Environment, Lightformer } from '@react-three/drei'
 import {
@@ -13,7 +14,7 @@ import type { EffectComposer as EffectComposerImpl } from 'postprocessing'
 import { rt, applyAtTime } from '../lib/runtime'
 import { cssBackground } from '../lib/backgroundCss'
 import { gradeFilter } from '../lib/grade'
-import { useStudio } from '../store'
+import { globalTimeOf, useStudio } from '../store'
 import { ALPHA_CHECKER } from '../lib/checker'
 import { CaptureFlash } from './CaptureFlash'
 import { getMood, type EnvMood } from '../lib/moods'
@@ -182,9 +183,55 @@ function RuntimeBridge() {
     // state impossible.
     gl.autoClear = true
     const s = useStudio.getState()
-    applyAtTime(s.project, s.timeMs)
+    applyAtTime(activeShot(s.project), s.timeMs)
   })
   return null
+}
+
+/**
+ * The dip a fade puts over the frame, while the film is being played.
+ *
+ * Only the fades: they are two half-dips of one frame and cost a single
+ * coloured layer, so the preview can be exactly what the exporter writes. A
+ * dissolve needs both shots' pixels at once and only one set is mounted, so in
+ * Film it hands over at the midpoint and the real blend happens on export.
+ *
+ * Driven from a subscription rather than a selector, because it changes every
+ * frame during playback and re-rendering the whole viewport for it would cost
+ * more than the effect it is drawing.
+ */
+function TransitionVeil() {
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const paint = () => {
+      const el = ref.current
+      if (!el) return
+      const s = useStudio.getState()
+      if (s.scrubMode !== 'sequence' || s.project.shots.length < 2) {
+        el.style.opacity = '0'
+        return
+      }
+      const slice = resolveSequence(s.project, globalTimeOf(s))
+      const veil = fadeVeil(slice.kind, slice.mix)
+      if (!veil) {
+        el.style.opacity = '0'
+        return
+      }
+      el.style.background = veil.color
+      el.style.opacity = String(veil.alpha)
+    }
+    paint()
+    return useStudio.subscribe(paint)
+  }, [])
+
+  return (
+    <div
+      ref={ref}
+      className="pointer-events-none absolute inset-0 rounded-lg"
+      style={{ opacity: 0 }}
+    />
+  )
 }
 
 function SceneRoot({ children }: { children: React.ReactNode }) {
@@ -264,7 +311,7 @@ function MoodDome({ mood, amount }: { mood: EnvMood; amount: number }) {
 }
 
 function StudioRig() {
-  const env = useStudio((s) => s.project.scene.environment)
+  const env = useStudio((s) => activeShot(s.project).scene.environment)
   const rigRef = useRef<THREE.Group>(null)
 
   // the yaw itself is written by applyAtTime, the one driver both the preview
@@ -376,8 +423,8 @@ function StudioRig() {
  * as contact and becomes a grey cloud hanging in frame.
  */
 function GroundShadow() {
-  const ground = useStudio((s) => s.project.scene.ground)
-  const softness = useStudio((s) => s.project.scene.environment.softness)
+  const ground = useStudio((s) => activeShot(s.project).scene.ground)
+  const softness = useStudio((s) => activeShot(s.project).scene.environment.softness)
 
   if (!ground.shadow) return null
   return (
@@ -393,7 +440,7 @@ function GroundShadow() {
 }
 
 function EffectsStack() {
-  const effects = useStudio((s) => s.project.scene.effects)
+  const effects = useStudio((s) => activeShot(s.project).scene.effects)
   const composerRef = useRef<EffectComposerImpl>(null)
   const gl = useThree((s) => s.gl)
 
@@ -455,7 +502,7 @@ function useCameraGestures(container: React.RefObject<HTMLDivElement | null>) {
 
     const sampled = () => {
       const s = useStudio.getState()
-      const cam = s.project.scene.camera
+      const cam = activeShot(s.project).scene.camera
       return { tiltX: cam.tiltX, tiltY: cam.tiltY, panX: cam.panX, panY: cam.panY }
     }
 
@@ -491,7 +538,7 @@ function useCameraGestures(container: React.RefObject<HTMLDivElement | null>) {
         s.setAnimatable('camera.tiltY', clampCamera('tiltY', start.tiltY + dx * 0.35), 'gesture-orbit')
         s.setAnimatable('camera.tiltX', clampCamera('tiltX', start.tiltX - dy * 0.3), 'gesture-orbit')
       } else {
-        const zoom = Math.max(0.2, s.project.scene.camera.zoom)
+        const zoom = Math.max(0.2, activeShot(s.project).scene.camera.zoom)
         const k = (7 / zoom) * 0.0016
         s.setAnimatable('camera.panX', clampCamera('panX', start.panX - dx * k), 'gesture-pan')
         s.setAnimatable('camera.panY', clampCamera('panY', start.panY + dy * k), 'gesture-pan')
@@ -506,7 +553,7 @@ function useCameraGestures(container: React.RefObject<HTMLDivElement | null>) {
     const onWheel = (e: WheelEvent) => {
       e.preventDefault()
       const s = useStudio.getState()
-      const zoom = clampCamera('zoom', s.project.scene.camera.zoom * Math.exp(-e.deltaY * 0.0012))
+      const zoom = clampCamera('zoom', activeShot(s.project).scene.camera.zoom * Math.exp(-e.deltaY * 0.0012))
       s.setAnimatable('camera.zoom', Number(zoom.toFixed(3)), 'gesture-zoom')
     }
 
@@ -570,15 +617,14 @@ function useFitRect(
 // ----- main viewport -----
 
 export function Viewport() {
-  const background = useStudio((s) => s.project.scene.background)
-  const bgImageUrl = useStudio((s) =>
-    s.project.scene.background.imageAssetId
-      ? (s.assets[s.project.scene.background.imageAssetId]?.url ?? null)
-      : null,
-  )
-  const devices = useStudio((s) => s.project.scene.devices)
-  const grade = useStudio((s) => s.project.scene.effects.grade)
-  const savedPortrait = useStudio((s) => s.project.scene.effects.portrait)
+  const background = useStudio((s) => activeShot(s.project).scene.background)
+  const bgImageUrl = useStudio((s) => {
+    const id = activeShot(s.project).scene.background.imageAssetId
+    return id ? (s.assets[id]?.url ?? null) : null
+  })
+  const devices = useStudio((s) => activeShot(s.project).scene.devices)
+  const grade = useStudio((s) => activeShot(s.project).scene.effects.grade)
+  const savedPortrait = useStudio((s) => activeShot(s.project).scene.effects.portrait)
   const focusGuide = useStudio((s) => s.focusGuide)
   const exportSize = useStudio((s) => s.project.exportSize)
   const selectDevice = useStudio((s) => s.selectDevice)
@@ -739,6 +785,8 @@ export function Viewport() {
         {focused && focusGuide && <PortraitHandle g={geo} width={rect.width} height={rect.height} />}
 
         <OverlayLayer width={rect.width} height={rect.height} />
+        {/* last in, like the exporter's own veil: a fade takes the captions with it */}
+        <TransitionVeil />
         <CaptureFlash />
       </div>
 

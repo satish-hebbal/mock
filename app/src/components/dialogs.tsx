@@ -1,6 +1,14 @@
+import { activeShot } from '../lib/sequence'
 import { useState } from 'react'
 import { useStudio } from '../store'
-import { cancelExport, exportImage, exportImageBatch, exportVideo } from '../lib/export'
+import {
+  cancelExport,
+  exportImage,
+  exportImageBatch,
+  exportShotStills,
+  exportVideo,
+} from '../lib/export'
+import { sequenceDuration } from '../lib/sequence'
 import { SIZE_PRESETS } from '../lib/presets'
 import { TEMPLATES } from '../lib/presets'
 import { SHORTCUT_GROUPS } from '../lib/shortcuts'
@@ -18,7 +26,13 @@ export function ExportDialog() {
   const project = useStudio((s) => s.project)
   const st = useStudio.getState
 
-  const [mode, setMode] = useState<'image' | 'video' | 'batch'>('image')
+  const [mode, setMode] = useState<'image' | 'video' | 'batch' | 'stills'>('image')
+  /*
+   * A film of several shots renders as one piece by default. "This shot" is
+   * there for the times you are iterating on one take and do not want to sit
+   * through the other four to see it.
+   */
+  const [scope, setScope] = useState<'film' | 'shot'>('film')
   // -2 = the project's own frame, the shape you actually composed against
   const [sizeIdx, setSizeIdx] = useState(FRAME_IDX)
   const [customW, setCustomW] = useState(project.exportSize.width)
@@ -31,7 +45,14 @@ export function ExportDialog() {
   const [transparent, setTransparent] = useState(false)
   const [motionBlur, setMotionBlur] = useState(false)
   const [batchIdxs, setBatchIdxs] = useState<number[]>([0, 2, 3])
+  /** where through each shot a per-shot still is taken, 0..1 */
+  const [stillAt, setStillAt] = useState(0.5)
   const [error, setError] = useState<string | null>(null)
+
+  const shot = activeShot(project)
+  const multi = project.shots.length > 1
+  const filmMs = sequenceDuration(project)
+  const videoMs = scope === 'shot' || !multi ? shot.durationMs : filmMs
 
   const custom = sizeIdx === -1
   const frame = sizeIdx === FRAME_IDX
@@ -63,9 +84,11 @@ export function ExportDialog() {
       height: mode === 'batch' ? undefined : outH,
       sizes: mode === 'batch' ? batchIdxs.length : undefined,
       transparent,
-      devices: s.project.scene.devices.length,
-      overlays: s.project.overlays.length,
-      keyframes: s.project.keyframes.length,
+      shots: s.project.shots.length,
+      scope: mode === 'video' ? scope : undefined,
+      devices: activeShot(s.project).scene.devices.length,
+      overlays: activeShot(s.project).overlays.length,
+      keyframes: activeShot(s.project).keyframes.length,
     }
     const startedAt = performance.now()
     track('export_started', shape)
@@ -75,14 +98,24 @@ export function ExportDialog() {
         s.setExportProgress({ label: 'Rendering image…', done: 0, total: 1 })
         await exportImage(
           s.project,
+          activeShot(s.project),
           s.assets,
           { width: outW, height: outH, format, quality, transparent },
           s.timeMs,
+        )
+      } else if (mode === 'stills') {
+        await exportShotStills(
+          s.project,
+          s.assets,
+          { width: outW, height: outH, format, quality, transparent },
+          stillAt,
+          (done, total, label) => s.setExportProgress({ label, done, total }),
         )
       } else if (mode === 'batch') {
         const sizes = batchIdxs.map((i) => SIZE_PRESETS[i])
         await exportImageBatch(
           s.project,
+          activeShot(s.project),
           s.assets,
           sizes,
           format,
@@ -104,9 +137,16 @@ export function ExportDialog() {
             bitrate: bitrateMbps * 1_000_000,
             transparent,
             motionBlurSamples: motionBlur ? 6 : 1,
+            scope: multi ? scope : 'shot',
           },
-          (done, total) => s.setExportProgress({ label: 'Encoding video…', done, total }),
+          (done, total) =>
+            s.setExportProgress({
+              label: multi && scope === 'film' ? 'Compiling shots…' : 'Encoding video…',
+              done,
+              total,
+            }),
         )
+        if (multi && scope === 'film') track('sequence_exported', { shots: s.project.shots.length })
       }
       track('export_completed', {
         ...shape,
@@ -128,6 +168,8 @@ export function ExportDialog() {
           { id: 'image', label: 'Image' },
           { id: 'video', label: 'Video' },
           { id: 'batch', label: 'Batch' },
+          // only worth offering once there is more than one take to sheet out
+          ...(multi ? [{ id: 'stills' as const, label: 'Per shot' }] : []),
         ]}
         value={mode}
         onChange={setMode}
@@ -222,9 +264,38 @@ export function ExportDialog() {
           {format !== 'png' && (
             <SliderRow label="Quality" value={quality} min={0.5} max={1} onChange={setQuality} />
           )}
+          {mode === 'stills' && (
+            <>
+              <SliderRow
+                label="Frame at"
+                value={stillAt}
+                min={0}
+                max={1}
+                step={0.01}
+                onChange={setStillAt}
+              />
+              <p className="mb-2 t-caption text-(--tx3)">
+                {project.shots.length} files, one per shot, each taken{' '}
+                {Math.round(stillAt * 100)}% of the way through it.
+              </p>
+            </>
+          )}
         </>
       ) : (
         <>
+          {multi && (
+            <>
+              <label className="mb-2 block t-eyebrow text-(--tx3) uppercase">What to render</label>
+              <Segments
+                options={[
+                  { id: 'film', label: `Whole film · ${project.shots.length} shots` },
+                  { id: 'shot', label: shot.name },
+                ]}
+                value={scope}
+                onChange={setScope}
+              />
+            </>
+          )}
           <Segments
             options={[
               { id: 'mp4', label: 'MP4 · H.264' },
@@ -243,9 +314,10 @@ export function ExportDialog() {
             Motion blur (smoother fast moves)
           </label>
           <p className="mb-2 t-caption text-(--tx3)">
-            {(project.durationMs / 1000).toFixed(1)}s · {project.fps} fps ·{' '}
-            {Math.round((project.durationMs / 1000) * project.fps)} frames, rendered offline in your
-            browser.
+            {(videoMs / 1000).toFixed(1)}s · {project.fps} fps ·{' '}
+            {Math.round((videoMs / 1000) * project.fps)} frames
+            {multi && scope === 'film' ? ` across ${project.shots.length} shots` : ''}, rendered
+            offline in your browser.
           </p>
         </>
       )}
@@ -267,7 +339,13 @@ export function ExportDialog() {
         }}
         className="w-full rounded-md bg-(--accent-fill) py-2 t-button text-(--accent-tx) hover:bg-(--accent-fill-hover)"
       >
-        {mode === 'batch' ? `Export ${batchIdxs.length} images` : `Export ${mode} · ${outW}×${outH}`}
+        {mode === 'batch'
+          ? `Export ${batchIdxs.length} images`
+          : mode === 'stills'
+            ? `Export ${project.shots.length} stills · ${outW}×${outH}`
+            : mode === 'video' && multi && scope === 'film'
+              ? `Compile ${project.shots.length} shots · ${outW}×${outH}`
+              : `Export ${mode} · ${outW}×${outH}`}
       </button>
     </Dialog>
   )

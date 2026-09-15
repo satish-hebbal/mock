@@ -1,5 +1,6 @@
+import { activeShot, sequenceDuration } from './lib/sequence'
 import { useEffect, useRef } from 'react'
-import { exportProjectFile, importProjectFile, pickMediaFile, useStudio } from './store'
+import { exportProjectFile, globalTimeOf, importProjectFile, pickMediaFile, useStudio } from './store'
 import { useShots } from './shots/store'
 import { selectedShotsImage } from './shots/types'
 import { PALETTE_GROUP_SIZE } from './shots/palette'
@@ -33,7 +34,15 @@ import { SmallScreen } from './components/SmallScreen'
 import { UploadPrompt } from './components/UploadPrompt'
 import { useIsDesktop } from './lib/breakpoint'
 
-/** rAF playback driver (PRD §5.4). */
+/**
+ * rAF playback driver (PRD §5.4).
+ *
+ * Two clocks, one loop. In Shot it runs the take on screen and wraps at its
+ * end, which is what you want while animating one move. In Film it runs the
+ * compiled running time and hands the playhead from shot to shot as it crosses
+ * each cut, so play is a preview of the file the exporter would write, blends
+ * and all.
+ */
 function usePlayback() {
   const playing = useStudio((s) => s.playing)
   useEffect(() => {
@@ -44,16 +53,23 @@ function usePlayback() {
       const s = useStudio.getState()
       const dt = now - last
       last = now
-      let t = s.timeMs + dt
-      if (t >= s.project.durationMs) {
-        if (s.loop) t = t % s.project.durationMs
+
+      const sequence = s.scrubMode === 'sequence' && s.project.shots.length > 1
+      const span = sequence ? sequenceDuration(s.project) : activeShot(s.project).durationMs
+      const at = sequence ? globalTimeOf(s) : s.timeMs
+
+      let t = at + dt
+      if (t >= span) {
+        if (s.loop) t = span > 0 ? t % span : 0
         else {
-          s.setTime(s.project.durationMs)
+          if (sequence) s.setGlobalTime(span)
+          else s.setTime(span)
           s.setPlaying(false)
           return
         }
       }
-      s.setTime(t)
+      if (sequence) s.setGlobalTime(t)
+      else s.setTime(t)
       raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
@@ -420,7 +436,7 @@ function useGlobalShortcuts() {
         s.redo()
       } else if (mod && key === 'a') {
         e.preventDefault()
-        s.selectKeyframes(s.project.keyframes.map((k) => k.id))
+        s.selectKeyframes(activeShot(s.project).keyframes.map((k) => k.id))
       } else if (e.altKey && key === 'n') {
         // Ctrl+N would open a browser window instead
         e.preventDefault()
@@ -440,15 +456,31 @@ function useGlobalShortcuts() {
         e.preventDefault()
         s.setPlaying(!s.playing)
       } else if (e.key === 'Home') {
-        s.setTime(0)
+        // in Film, the top of the reel rather than the top of this take
+        if (s.scrubMode === 'sequence' && s.project.shots.length > 1) s.setGlobalTime(0)
+        else s.setTime(0)
       } else if (e.key === 'End') {
-        s.setTime(s.project.durationMs)
+        if (s.scrubMode === 'sequence' && s.project.shots.length > 1)
+          s.setGlobalTime(sequenceDuration(s.project))
+        else s.setTime(activeShot(s.project).durationMs)
+      } else if (key === ',' || key === '.') {
+        // step between takes without leaving the keyboard
+        e.preventDefault()
+        const i = s.project.shots.findIndex((x) => x.id === s.project.activeShotId)
+        const next = s.project.shots[i + (key === '.' ? 1 : -1)]
+        if (next) s.selectShot(next.id, 0)
+      } else if (e.altKey && key === 'm') {
+        // Alt+M: one more take, carrying this one's set over
+        e.preventDefault()
+        s.addShot()
       } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
         // with keyframes selected the Timeline nudges them instead
         if (hasKfSelection) return
         e.preventDefault()
         const d = (e.shiftKey ? 10 : 1) * frame * (e.key === 'ArrowRight' ? 1 : -1)
-        s.setTime(Math.min(s.project.durationMs, Math.max(0, s.timeMs + d)))
+        if (s.scrubMode === 'sequence' && s.project.shots.length > 1)
+          s.setGlobalTime(Math.max(0, globalTimeOf(s) + d))
+        else s.setTime(Math.min(activeShot(s.project).durationMs, Math.max(0, s.timeMs + d)))
       } else if (key === 'l') {
         s.setLoop(!s.loop)
       } else if (key === 'g' || key === 'r' || key === 's') {
@@ -463,7 +495,7 @@ function useGlobalShortcuts() {
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
         if (hasKfSelection) s.removeKeyframes(s.selectedKeyframeIds)
         else if (s.selectedOverlayId) s.removeOverlay(s.selectedOverlayId)
-        else if (s.selectedDeviceId && s.project.scene.devices.length > 1)
+        else if (s.selectedDeviceId && activeShot(s.project).scene.devices.length > 1)
           s.removeDevice(s.selectedDeviceId)
       } else if (key === 'e') {
         s.setDialog(s.dialog === 'export' ? null : 'export')
@@ -623,7 +655,7 @@ function useMediaDropPaste() {
 
 function StudioLayout() {
   const hydrated = useStudio((s) => s.hydrated)
-  const hasMedia = useStudio((s) => s.project.scene.devices.some((d) => d.screen.assetId))
+  const hasMedia = useStudio((s) => activeShot(s.project).scene.devices.some((d) => d.screen.assetId))
   return (
     <>
       <main className="flex min-h-0 flex-1 gap-2">

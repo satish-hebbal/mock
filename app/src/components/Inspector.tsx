@@ -1,3 +1,4 @@
+import { activeShot } from '../lib/sequence'
 import { useState, type ReactNode } from 'react'
 import { MAX_SCREEN_MEDIA, pickMediaFile, screenMedia, useStudio } from '../store'
 import { ColorRow, Disclosure, Dropdown, MiniButton, Section, Segments, SliderRow, SubHeading } from './controls'
@@ -121,9 +122,9 @@ function MediaSection() {
   const selectedDeviceId = useStudio((s) => s.selectedDeviceId)
   const device = useStudio(
     (s) =>
-      s.project.scene.devices.find((d) => d.id === s.selectedDeviceId) ?? s.project.scene.devices[0],
+      activeShot(s.project).scene.devices.find((d) => d.id === s.selectedDeviceId) ?? activeShot(s.project).scene.devices[0],
   )
-  const devices = useStudio((s) => s.project.scene.devices)
+  const devices = useStudio((s) => activeShot(s.project).scene.devices)
   // the whole list, not a filtered one: a selector that builds a new array
   // every call re-renders this panel on every frame the timeline plays
   const assets = useStudio((s) => s.project.assets)
@@ -243,7 +244,7 @@ function MediaSection() {
 // ----- Camera -----
 
 function CameraSection() {
-  const cam = useStudio((s) => s.project.scene.camera)
+  const cam = useStudio((s) => activeShot(s.project).scene.camera)
   const setAnimatable = useStudio((s) => s.setAnimatable)
 
   const row = (
@@ -295,9 +296,9 @@ function CameraSection() {
 // ----- Scene (background / environment / ground) -----
 
 function SceneSection() {
-  const bg = useStudio((s) => s.project.scene.background)
-  const env = useStudio((s) => s.project.scene.environment)
-  const ground = useStudio((s) => s.project.scene.ground)
+  const bg = useStudio((s) => activeShot(s.project).scene.background)
+  const env = useStudio((s) => activeShot(s.project).scene.environment)
+  const ground = useStudio((s) => activeShot(s.project).scene.ground)
   const setBackground = useStudio((s) => s.setBackground)
   const setSweep = useStudio((s) => s.setSweep)
   const setEnvironment = useStudio((s) => s.setEnvironment)
@@ -604,7 +605,7 @@ function PortraitSection() {
    * selector results by identity, so calling it inside would hand back a new
    * object every render and never settle.
    */
-  const saved = useStudio((s) => s.project.scene.effects.portrait)
+  const saved = useStudio((s) => activeShot(s.project).scene.effects.portrait)
   const portrait = portraitOf(saved)
   const guide = useStudio((s) => s.focusGuide)
   const setFocusGuide = useStudio((s) => s.setFocusGuide)
@@ -699,7 +700,7 @@ function PortraitSection() {
 }
 
 function EffectsSection() {
-  const fx = useStudio((s) => s.project.scene.effects)
+  const fx = useStudio((s) => activeShot(s.project).scene.effects)
   const setEffects = useStudio((s) => s.setEffects)
   const setGrade = useStudio((s) => s.setGrade)
   const g = fx.grade
@@ -733,7 +734,7 @@ function EffectsSection() {
 // ----- Devices -----
 
 function DevicesSection() {
-  const devices = useStudio((s) => s.project.scene.devices)
+  const devices = useStudio((s) => activeShot(s.project).scene.devices)
   const selectedId = useStudio((s) => s.selectedDeviceId)
   const st = useStudio.getState
 
@@ -839,7 +840,7 @@ function DevicesSection() {
 }
 
 function DeviceTransformRows({ deviceId }: { deviceId: string }) {
-  const dev = useStudio((s) => s.project.scene.devices.find((d) => d.id === deviceId))
+  const dev = useStudio((s) => activeShot(s.project).scene.devices.find((d) => d.id === deviceId))
   const setAnimatable = useStudio((s) => s.setAnimatable)
   if (!dev) return null
   const p = `dev.${deviceId}`
@@ -870,7 +871,7 @@ function DeviceTransformRows({ deviceId }: { deviceId: string }) {
 // ----- Overlays -----
 
 function OverlaysSection() {
-  const overlays = useStudio((s) => s.project.overlays)
+  const overlays = useStudio((s) => activeShot(s.project).overlays)
   const selectedId = useStudio((s) => s.selectedOverlayId)
   const st = useStudio.getState
   const selected = overlays.find((o) => o.id === selectedId)

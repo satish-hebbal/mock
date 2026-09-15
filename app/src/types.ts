@@ -270,7 +270,57 @@ export interface SceneState {
   effects: EffectsState
 }
 
+/**
+ * How one shot gives way to the next.
+ *
+ * A transition is an *overlap*: it eats `durationMs` off the end of the
+ * outgoing shot and the start of the incoming one, the way an editor's timeline
+ * does, so adding a dissolve shortens the film rather than padding it. A cut
+ * has no overlap at all, which is why its duration is ignored rather than zero.
+ */
+export type TransitionKind = 'cut' | 'dissolve' | 'fadeBlack' | 'fadeWhite'
+
+export interface Transition {
+  kind: TransitionKind
+  /** length of the blend in ms; meaningless for 'cut' */
+  durationMs: number
+}
+
+/**
+ * One take: a whole scene, its own animation, and its own length.
+ *
+ * Shots are independent sets. Two shots can hold different devices, a different
+ * backdrop and a different rig; what they share is the project's media pool,
+ * frame size and frame rate, because those belong to the film rather than to
+ * any one take.
+ */
+export interface Shot {
+  id: string
+  name: string
+  durationMs: number
+  scene: SceneState
+  overlays: Overlay[]
+  keyframes: Keyframe[]
+  /** how this shot enters from the one before it; unused on the first shot */
+  transition: Transition
+}
+
 export interface ProjectDoc {
+  version: 3
+  name: string
+  fps: number
+  exportSize: { width: number; height: number }
+  shots: Shot[]
+  /** the shot being edited; every scene edit lands on it */
+  activeShotId: string
+  assets: AssetMeta[]
+}
+
+/**
+ * A project from before shots existed: one scene, one timeline, one length.
+ * Only the migration reads this, and only to fold it into a single shot.
+ */
+export interface ProjectDocV2 {
   version: 2
   name: string
   durationMs: number

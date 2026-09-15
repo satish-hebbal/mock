@@ -3,12 +3,17 @@ import { useStudio } from '../store'
 import { targetLabel } from '../lib/evaluator'
 import { EASING_NAMES } from '../lib/easing'
 import { ANIMATION_PRESETS } from '../lib/presets'
+import { activeShot, sequenceDuration, sequenceLayout, shotStart } from '../lib/sequence'
 import { Dropdown, MiniButton } from './controls'
-import { KF_MARK } from '../lib/marks'
+import { ShotRibbon } from './ShotRibbon'
+import { KF_MARK_LANE } from '../lib/marks'
 import { EasingGlyph } from './EasingGlyph'
 import { ui } from '../lib/ui'
 import {
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Film,
   Infinity as InfinityIcon,
   PanelBottomClose,
   PanelBottomOpen,
@@ -18,6 +23,7 @@ import {
   Repeat,
   SkipBack,
   SkipForward,
+  Square,
   Trash2,
   Wand2,
 } from 'lucide-react'
@@ -30,10 +36,13 @@ function fmtTime(ms: number) {
 }
 
 const TRANSPORT_H = 44 // transport bar, always visible
+const RIBBON_H = 50 // the shot strip and its bottom gap
 const RULER_H = 22
-const ROW_H = 22 // one track lane
-const MIN_H = TRANSPORT_H + RULER_H + ROW_H + 16
+const LANE_H = 22 // the bar itself
+const ROW_H = 30 // one track: the bar plus the air around it
+const MIN_H = TRANSPORT_H + RIBBON_H + RULER_H + ROW_H + 16
 const HEIGHT_KEY = 'ms-timeline-height'
+const LABEL_W = 144 // track-label gutter; the ribbon and ruler share it
 const SNAP_PX = 6 // magnet radius while dragging keyframes
 
 /** Marquee rectangle in client coordinates. */
@@ -79,11 +88,64 @@ function beginDrag(
   el.addEventListener('pointercancel', end)
 }
 
+/*
+ * The playhead and the clock are the only things here that move at sixty frames
+ * a second, and both are one number wide. Subscribing to the store from inside
+ * them, and writing the result straight to the DOM, keeps a scrub from
+ * re-rendering every lane and every keyframe on every tick: the timeline is now
+ * the one panel that is guaranteed to be on screen while something is playing,
+ * so that re-render was the most expensive thing in the app.
+ */
+
+function Playhead({ originMs, spanMs }: { originMs: number; spanMs: number }) {
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const paint = (timeMs: number) => {
+      if (ref.current) ref.current.style.left = `${((originMs + timeMs) / spanMs) * 100}%`
+    }
+    paint(useStudio.getState().timeMs)
+    return useStudio.subscribe((s) => paint(s.timeMs))
+  }, [originMs, spanMs])
+
+  return (
+    <div className="pointer-events-none absolute inset-y-0 right-0 z-10" style={{ left: LABEL_W }}>
+      <div ref={ref} className="absolute inset-y-0 w-px bg-(--accent)">
+        <span className="absolute top-0 -left-[4px] h-0 w-0 border-x-[4px] border-t-[6px] border-x-transparent border-t-(--accent)" />
+      </div>
+    </div>
+  )
+}
+
+function TimeReadout({ sequence }: { sequence: boolean }) {
+  const ref = useRef<HTMLSpanElement>(null)
+
+  useEffect(() => {
+    const paint = () => {
+      const s = useStudio.getState()
+      const shot = activeShot(s.project)
+      const at = sequence ? shotStart(s.project, shot.id) + s.timeMs : s.timeMs
+      const of = sequence ? sequenceDuration(s.project) : shot.durationMs
+      if (ref.current) ref.current.textContent = `${fmtTime(at)} / ${fmtTime(of)}`
+    }
+    paint()
+    return useStudio.subscribe(paint)
+  }, [sequence])
+
+  return (
+    <span
+      ref={ref}
+      className="rounded-xs bg-(--panel2) px-2 py-1 t-body-sm text-(--tx) tabular-nums"
+      title={sequence ? 'Position in the whole film' : 'Position in this shot'}
+    />
+  )
+}
+
 export function Timeline() {
   const project = useStudio((s) => s.project)
-  const timeMs = useStudio((s) => s.timeMs)
   const playing = useStudio((s) => s.playing)
   const loop = useStudio((s) => s.loop)
+  const scrubMode = useStudio((s) => s.scrubMode)
   const selectedKfIds = useStudio((s) => s.selectedKeyframeIds)
   const st = useStudio.getState
 
@@ -94,7 +156,7 @@ export function Timeline() {
   const [presetsOpen, setPresetsOpen] = useState(false)
   const [height, setHeight] = useState(() => {
     const saved = Number(localStorage.getItem(HEIGHT_KEY))
-    return Number.isFinite(saved) && saved >= MIN_H ? saved : 210
+    return Number.isFinite(saved) && saved >= MIN_H ? saved : 280
   })
   const [marquee, setMarquee] = useState<Marquee | null>(null)
   const [dragTime, setDragTime] = useState<number | null>(null)
@@ -102,24 +164,54 @@ export function Timeline() {
   const laneRef = useRef<HTMLDivElement>(null)
   const tracksRef = useRef<HTMLDivElement>(null)
 
-  const duration = project.durationMs
+  const shot = activeShot(project)
+  const sequence = scrubMode === 'sequence' && project.shots.length > 1
   const frameMs = 1000 / project.fps
 
+  /*
+   * One coordinate space for the ruler, the lanes and the playhead.
+   *
+   * In Shot the space is this take, from its own zero. In Film it is the whole
+   * compiled running time, and the take being edited occupies a window inside
+   * it. Everything below converts through this pair rather than dividing by a
+   * duration itself, which is what lets the same lane code draw both.
+   */
+  const filmMs = useMemo(() => Math.max(1, sequenceDuration(project)), [project])
+  const originMs = sequence ? shotStart(project, shot.id) : 0
+  const spanMs = sequence ? filmMs : shot.durationMs
+
+  const fracOfLocal = useCallback(
+    (localMs: number) => (originMs + localMs) / spanMs,
+    [originMs, spanMs],
+  )
+  const pctOf = (localMs: number) => `${fracOfLocal(localMs) * 100}%`
+
   const tracks = useMemo(() => {
-    const byTarget = new Map<string, typeof project.keyframes>()
-    for (const k of project.keyframes) {
+    const byTarget = new Map<string, typeof shot.keyframes>()
+    for (const k of shot.keyframes) {
       const arr = byTarget.get(k.target) ?? []
       arr.push(k)
       byTarget.set(k.target, arr)
     }
     return [...byTarget.entries()]
-      .map(([target, kfs]) => ({
-        target,
-        label: targetLabel(target, project.scene),
-        kfs: [...kfs].sort((a, b) => a.timeMs - b.timeMs),
-      }))
+      .map(([target, kfs]) => {
+        const sorted = [...kfs].sort((a, b) => a.timeMs - b.timeMs)
+        /*
+         * Shortening a shot leaves its later keyframes past the out point
+         * rather than destroying their timing, so the lane draws what is
+         * inside the take and counts the rest. They come back the moment the
+         * shot is lengthened again.
+         */
+        const inside = sorted.filter((k) => k.timeMs <= shot.durationMs + 1)
+        return {
+          target,
+          label: targetLabel(target, shot.scene.devices),
+          kfs: inside,
+          beyond: sorted.length - inside.length,
+        }
+      })
       .sort((a, b) => a.label.localeCompare(b.label))
-  }, [project.keyframes, project.scene])
+  }, [shot.keyframes, shot.scene.devices, shot.durationMs])
 
   useEffect(() => {
     localStorage.setItem(HEIGHT_KEY, String(height))
@@ -141,21 +233,32 @@ export function Timeline() {
 
   // ----- time <-> pixels -----
 
-  const msFromClientX = useCallback(
+  /** Where a pointer is, in the coordinate space the ruler is drawn in. */
+  const spanMsFromClientX = useCallback(
     (clientX: number) => {
       const el = laneRef.current
       if (!el) return 0
       const r = el.getBoundingClientRect()
-      return Math.min(1, Math.max(0, (clientX - r.left) / r.width)) * duration
+      return Math.min(1, Math.max(0, (clientX - r.left) / r.width)) * spanMs
     },
-    [duration],
+    [spanMs],
   )
 
-  const msPerPx = () => duration / Math.max(1, laneRef.current?.getBoundingClientRect().width ?? 1)
+  /** The same position, expressed as a time inside the shot being edited. */
+  const localFromClientX = useCallback(
+    (clientX: number) =>
+      Math.min(shot.durationMs, Math.max(0, spanMsFromClientX(clientX) - originMs)),
+    [spanMsFromClientX, originMs, shot.durationMs],
+  )
+
+  const msPerPx = () => spanMs / Math.max(1, laneRef.current?.getBoundingClientRect().width ?? 1)
 
   const scrubFrom = (clientX: number) => {
     st().setPlaying(false)
-    st().setTime(msFromClientX(clientX))
+    // In Film a scrub can cross into another take, which is the point of it:
+    // the store hands the playhead to whichever shot owns that moment.
+    if (sequence) st().setGlobalTime(spanMsFromClientX(clientX))
+    else st().setTime(spanMsFromClientX(clientX))
   }
 
   const startScrub = (e: React.PointerEvent) => {
@@ -176,13 +279,13 @@ export function Timeline() {
     else if (!selectedKfIds.includes(kfId)) ids = [kfId]
     st().selectKeyframes(ids)
 
-    const grabbed = project.keyframes.find((k) => k.id === kfId)
+    const grabbed = shot.keyframes.find((k) => k.id === kfId)
     if (!grabbed) return
     const startX = e.clientX
     const startTime = grabbed.timeMs
     // snap candidates: every other keyframe, the playhead, and both ends
-    const others = project.keyframes.filter((k) => !ids.includes(k.id)).map((k) => k.timeMs)
-    const stops = [...others, timeMs, 0, duration]
+    const others = shot.keyframes.filter((k) => !ids.includes(k.id)).map((k) => k.timeMs)
+    const stops = [...others, st().timeMs, 0, shot.durationMs]
 
     let last = startTime
 
@@ -197,7 +300,7 @@ export function Timeline() {
           const snap = stops.find((s) => Math.abs(s - target) < SNAP_PX * perPx)
           target = snap ?? Math.round(target / frameMs) * frameMs
         }
-        target = Math.min(duration, Math.max(0, target))
+        target = Math.min(shot.durationMs, Math.max(0, target))
         const delta = target - last
         if (Math.abs(delta) < 0.5) return
         st().moveKeyframesBy(ids, delta)
@@ -269,12 +372,25 @@ export function Timeline() {
   }, [])
 
   const easingOfSelection = (): EasingName => {
-    const sel = project.keyframes.filter((k) => selectedKfIds.includes(k.id))
+    const sel = shot.keyframes.filter((k) => selectedKfIds.includes(k.id))
     return sel[0]?.easing ?? 'smooth'
   }
 
-  const pctOf = (ms: number) => `${(ms / duration) * 100}%`
-  const secs = Math.floor(duration / 1000)
+  /*
+   * Ruler marks across whatever is currently being measured.
+   *
+   * A second apiece is right for one take; a film of twenty is minutes long,
+   * and a line every second there is a grey band with no numbers in it. The
+   * step opens up until the marks are readable again.
+   */
+  const tickStep = ([1, 2, 5, 10, 15, 30, 60] as const).find((s) => spanMs / (s * 1000) <= 14) ?? 120
+  const ticks = Math.floor(spanMs / (tickStep * 1000))
+
+  /** Where each shot begins, for the seams drawn across the lanes in Film. */
+  const seams = useMemo(
+    () => (sequence ? sequenceLayout(project).slice(1).map((p) => p.start / filmMs) : []),
+    [sequence, project, filmMs],
+  )
 
   return (
     <footer
@@ -284,7 +400,7 @@ export function Timeline() {
       {/* resize grip: sits on the top edge, canvas above gives up the space */}
       <div
         onPointerDown={onResizeStart}
-        onDoubleClick={() => setHeight(210)}
+        onDoubleClick={() => setHeight(280)}
         title="Drag to resize the timeline"
         className="group absolute -top-1 right-0 left-0 z-20 flex h-2 cursor-ns-resize items-center justify-center"
       >
@@ -292,13 +408,14 @@ export function Timeline() {
       </div>
 
       {/* transport bar */}
-      <div className="flex h-11 shrink-0 items-center gap-2 px-3">
-        <span className="rounded-xs bg-(--panel2) px-2 py-1 t-body-sm text-(--tx) tabular-nums">
-          {fmtTime(timeMs)} / {fmtTime(duration)}
-        </span>
+      <div className="flex h-11 shrink-0 items-center gap-2 overflow-x-auto px-3">
+        <TimeReadout sequence={sequence} />
 
-        <div className="flex items-center gap-1">
-          <MiniButton title="Step back one frame" onClick={() => st().setTime(Math.max(0, timeMs - frameMs))}>
+        <div className="flex shrink-0 items-center gap-1">
+          <MiniButton
+            title="Step back one frame"
+            onClick={() => st().setTime(Math.max(0, st().timeMs - frameMs))}
+          >
             <SkipBack size={13} />
           </MiniButton>
           <button
@@ -308,7 +425,10 @@ export function Timeline() {
           >
             {playing ? <Pause size={13} fill="currentColor" /> : <Play size={13} fill="currentColor" />}
           </button>
-          <MiniButton title="Step forward one frame" onClick={() => st().setTime(Math.min(duration, timeMs + frameMs))}>
+          <MiniButton
+            title="Step forward one frame"
+            onClick={() => st().setTime(Math.min(shot.durationMs, st().timeMs + frameMs))}
+          >
             <SkipForward size={13} />
           </MiniButton>
           <MiniButton title="Loop playback" active={loop} onClick={() => st().setLoop(!loop)}>
@@ -316,14 +436,75 @@ export function Timeline() {
           </MiniButton>
         </div>
 
-        <label className="ml-2 flex items-center gap-1 t-caption text-(--tx3)">
+        {/*
+          The strip lives in the expanded timeline, which is collapsed by
+          default. Collapsed, the bar stands in for it: which take you are on
+          and how to step between them. Expanded, the ribbon says all of that
+          better, so only the way to start another take stays.
+        */}
+        <div className="ml-1 flex items-center gap-1">
+          {collapsed && project.shots.length > 1 && (
+            <>
+              <MiniButton
+                title="Previous shot (,)"
+                onClick={() => {
+                  const i = project.shots.findIndex((x) => x.id === project.activeShotId)
+                  if (i > 0) st().selectShot(project.shots[i - 1].id, 0)
+                }}
+              >
+                <ChevronLeft size={12} />
+              </MiniButton>
+              <span
+                className="rounded-xs bg-(--panel2) px-1.5 py-1 t-caption text-(--tx2) tabular-nums"
+                title={shot.name}
+              >
+                {project.shots.findIndex((x) => x.id === project.activeShotId) + 1}/
+                {project.shots.length}
+              </span>
+              <MiniButton
+                title="Next shot (.)"
+                onClick={() => {
+                  const i = project.shots.findIndex((x) => x.id === project.activeShotId)
+                  const next = project.shots[i + 1]
+                  if (next) st().selectShot(next.id, 0)
+                }}
+              >
+                <ChevronRight size={12} />
+              </MiniButton>
+            </>
+          )}
+          <MiniButton title="Add a shot after this one (Alt+M)" onClick={() => st().addShot()}>
+            <Plus size={12} />
+          </MiniButton>
+        </div>
+
+        {project.shots.length > 1 && (
+          <div className="flex items-center gap-0.5 rounded-xs bg-(--panel2) p-0.5">
+            <MiniButton
+              title="Play and scrub this shot on its own"
+              active={!sequence}
+              onClick={() => st().setScrubMode('shot')}
+            >
+              <Square size={11} /> Shot
+            </MiniButton>
+            <MiniButton
+              title="Play and scrub the whole film, transitions included"
+              active={sequence}
+              onClick={() => st().setScrubMode('sequence')}
+            >
+              <Film size={11} /> Film
+            </MiniButton>
+          </div>
+        )}
+
+        <label className="ml-2 flex items-center gap-1 t-caption text-(--tx3)" title={`Length of ${shot.name}`}>
           DUR
           <input
             type="number"
             min={0.5}
             max={30}
             step={0.5}
-            value={duration / 1000}
+            value={Number((shot.durationMs / 1000).toFixed(2))}
             onChange={(e) => st().setDuration(Number(e.target.value) * 1000)}
             onKeyDown={(e) => {
               // hand focus back, or the isTyping guard swallows every shortcut
@@ -349,7 +530,7 @@ export function Timeline() {
           </span>
         )}
 
-        <div className="ml-auto flex items-center gap-1">
+        <div className="ml-auto flex shrink-0 items-center gap-1">
           <div className="relative">
             <MiniButton onClick={() => setPresetsOpen(!presetsOpen)} active={presetsOpen}>
               <Wand2 size={12} />
@@ -380,7 +561,7 @@ export function Timeline() {
             title="Easing for selected keyframes"
             value={easingOfSelection()}
             onChange={(v) => {
-              const ids = selectedKfIds.length > 0 ? selectedKfIds : project.keyframes.map((k) => k.id)
+              const ids = selectedKfIds.length > 0 ? selectedKfIds : shot.keyframes.map((k) => k.id)
               st().setKeyframeEasing(ids, v as EasingName)
             }}
             options={EASING_NAMES.map((e) => ({
@@ -403,12 +584,12 @@ export function Timeline() {
             <InfinityIcon size={12} /> Loopify
           </MiniButton>
           <MiniButton
-            title="Clear all keyframes"
+            title="Clear this shot's keyframes"
             onClick={() => {
               void ui
                 .confirm({
-                  title: 'Clear all keyframes?',
-                  body: 'Every keyframe on every track goes. Ctrl+Z brings them back.',
+                  title: `Clear keyframes in ${shot.name}?`,
+                  body: 'Every keyframe on every track of this shot goes. Ctrl+Z brings them back.',
                   confirmLabel: 'Clear all',
                   danger: true,
                 })
@@ -430,39 +611,58 @@ export function Timeline() {
 
       {!collapsed && (
         <div className="flex min-h-0 flex-1 flex-col px-3 pb-2 select-none">
+          <ShotRibbon />
+
           {/* ruler + lanes share one horizontal coordinate space */}
           <div className="relative flex min-h-0 flex-1 flex-col">
             <div className="flex shrink-0 items-stretch">
-              <div className="w-36 shrink-0" />
+              <div className="shrink-0" style={{ width: LABEL_W }} />
               <div
                 ref={laneRef}
                 onPointerDown={startScrub}
                 style={{ height: RULER_H }}
                 className="relative flex-1 cursor-grab rounded-t bg-(--panel2) active:cursor-grabbing"
               >
-                {Array.from({ length: secs + 1 }, (_, i) => {
+                {Array.from({ length: ticks + 1 }, (_, i) => {
                   // A tick sitting on (or nearly on) 100% has no room to its
                   // right, so its label hangs to the left of the line instead of
                   // starting where the ruler ends. Judged on position, not
                   // index: at a 3.5s duration the last tick is only 86% across
                   // and reads better numbered the normal way, after its line.
-                  const last = (i * 1000) / duration > 0.96
+                  const secs = i * tickStep
+                  const at = (secs * 1000) / spanMs
+                  const last = at > 0.96
                   return (
                     <span
                       key={i}
                       className="absolute top-0 h-full border-l border-(--line)"
-                      style={{ left: pctOf(i * 1000) }}
+                      style={{ left: `${at * 100}%` }}
                     >
                       <span
                         className={`absolute top-0 t-caption whitespace-nowrap text-(--tx3) ${
                           last ? 'right-0 pr-1' : 'left-0 pl-1'
                         }`}
                       >
-                        {i}s
+                        {secs}s
                       </span>
                     </span>
                   )
                 })}
+                {/*
+                  In Film, the stretch of the ruler this take occupies. Without
+                  it the lanes below would look like they were drawn against the
+                  whole film, and a keyframe two thirds of the way through a
+                  three-second shot would appear to sit at an arbitrary place.
+                */}
+                {sequence && (
+                  <span
+                    className="pointer-events-none absolute inset-y-0 border-x border-(--accent)/60 bg-(--accent-soft)"
+                    style={{
+                      left: `${(originMs / spanMs) * 100}%`,
+                      width: `${(shot.durationMs / spanMs) * 100}%`,
+                    }}
+                  />
+                )}
               </div>
             </div>
 
@@ -470,38 +670,97 @@ export function Timeline() {
             <div ref={tracksRef} className="relative flex min-h-0 flex-1 flex-col overflow-y-auto">
               {tracks.length === 0 && (
                 <p className="py-3 text-center t-caption text-(--tx3)">
-                  No keyframes yet. Toggle a ◆ next to any property, or apply an animation preset.
+                  No keyframes in {shot.name} yet. Toggle a ◆ next to any property, or apply an
+                  animation preset.
                 </p>
               )}
-              {tracks.map((track, ti) => (
+              {tracks.map((track) => (
                 <div
                   key={track.target}
-                  className={`flex shrink-0 items-center ${ti % 2 ? 'bg-white/[0.015]' : ''}`}
+                  className="flex shrink-0 items-center"
                   style={{ height: ROW_H }}
                 >
                   <button
-                    className="group flex w-36 shrink-0 items-center gap-1 truncate px-1 text-left t-caption text-(--tx2) hover:text-(--tx)"
+                    className="group flex shrink-0 items-center gap-1 truncate px-1 text-left t-caption text-(--tx2) hover:text-(--tx)"
+                    style={{ width: LABEL_W }}
                     title="Remove this track (bakes the current value)"
                     onClick={() => st().toggleTrack(track.target)}
                   >
                     <Trash2 size={10} className="shrink-0 opacity-0 group-hover:opacity-100" />
                     <span className="truncate">{track.label}</span>
                   </button>
+                  {/*
+                    The lane is a trough with a bar in it, the way an editor
+                    draws a layer: the row it sits in carries the spacing, so
+                    lanes read as separate objects without needing stripes
+                    behind them to tell them apart.
+
+                    The gestures live on the full-height row rather than on the
+                    trough, so the air between lanes is somewhere a marquee can
+                    start instead of a dead strip.
+                  */}
                   <div
                     onPointerDown={startMarquee}
-                    onDoubleClick={(e) => st().addKeyframeAt(track.target, msFromClientX(e.clientX))}
+                    onDoubleClick={(e) => st().addKeyframeAt(track.target, localFromClientX(e.clientX))}
                     title="Drag to box-select · double-click to add a keyframe"
-                    className="relative h-full flex-1 bg-(--panel2)"
+                    className="relative h-full flex-1"
                   >
-                    {/* connector between the first and last key on the lane */}
-                    {track.kfs.length > 1 && (
+                    {/*
+                      The trough, and inside it the stretch this property is
+                      actually animating over, drawn as a solid bar rather than
+                      a hairline. The bar is the part of the row that means
+                      something, it is what the keys are pinned to, and at a
+                      bar's width it is also something you can aim at.
+
+                      Clipped, so the bar's ends and the film's seams stop at
+                      the trough's rounded corners. The keys are deliberately
+                      outside it: one sitting on zero would lose its left half
+                      to that same clip.
+                    */}
+                    <div
+                      className="absolute inset-x-0 top-1/2 -translate-y-1/2 overflow-hidden rounded-xs bg-(--panel2)"
+                      style={{ height: LANE_H }}
+                    >
+                      {/* the take's own window, when the lane is measuring the film */}
+                      {sequence && (
+                        <span
+                          className="pointer-events-none absolute inset-y-0 bg-(--raised)"
+                          style={{
+                            left: `${(originMs / spanMs) * 100}%`,
+                            width: `${(shot.durationMs / spanMs) * 100}%`,
+                          }}
+                        />
+                      )}
+                      {seams.map((x, i) => (
+                        <span
+                          key={i}
+                          className="pointer-events-none absolute inset-y-0 w-px bg-(--line)"
+                          style={{ left: `${x * 100}%` }}
+                        />
+                      ))}
+                      {track.kfs.length > 1 && (
+                        <span
+                          className="pointer-events-none absolute inset-y-0 rounded-xs border border-(--line2) bg-(--panel3)"
+                          style={{
+                            left: pctOf(track.kfs[0].timeMs),
+                            right: `${100 - fracOfLocal(track.kfs[track.kfs.length - 1].timeMs) * 100}%`,
+                          }}
+                        />
+                      )}
+                    </div>
+
+                    {track.beyond > 0 && (
                       <span
-                        className="pointer-events-none absolute top-1/2 h-px -translate-y-1/2 bg-(--line2)"
-                        style={{
-                          left: pctOf(track.kfs[0].timeMs),
-                          right: `${100 - (track.kfs[track.kfs.length - 1].timeMs / duration) * 100}%`,
-                        }}
-                      />
+                        title={`${track.beyond} keyframe${
+                          track.beyond === 1 ? '' : 's'
+                        } past the end of ${shot.name}. Lengthen the shot to reach ${
+                          track.beyond === 1 ? 'it' : 'them'
+                        } again.`}
+                        className="pointer-events-auto absolute top-1/2 z-10 -translate-y-1/2 rounded-xs bg-(--panel3) px-1 t-caption text-(--tx3)"
+                        style={{ left: `calc(${pctOf(shot.durationMs)} + 6px)` }}
+                      >
+                        +{track.beyond}
+                      </span>
                     )}
                     {track.kfs.map((k) => {
                       const active = selectedKfIds.includes(k.id)
@@ -515,12 +774,14 @@ export function Timeline() {
                             e.stopPropagation()
                             st().removeKeyframes([k.id])
                           }}
-                          // generous invisible hit area around a small diamond
-                          className="absolute top-1/2 flex h-[22px] w-[22px] -translate-x-1/2 -translate-y-1/2 cursor-grab items-center justify-center active:cursor-grabbing"
-                          style={{ left: pctOf(k.timeMs) }}
+                          // the hit area runs the full height of the lane, so a
+                          // grab that lands anywhere in the row still takes the
+                          // key nearest it rather than nothing at all
+                          className="absolute top-1/2 flex w-[26px] -translate-x-1/2 -translate-y-1/2 cursor-grab items-center justify-center active:cursor-grabbing"
+                          style={{ left: pctOf(k.timeMs), height: LANE_H }}
                         >
                           <span
-                            className={`${KF_MARK} ${
+                            className={`${KF_MARK_LANE} ${
                               active
                                 ? 'bg-(--accent) ring-2 ring-(--accent-soft)'
                                 : 'bg-(--tx2) hover:bg-(--tx)'
@@ -535,11 +796,7 @@ export function Timeline() {
             </div>
 
             {/* playhead spans the ruler and every lane below it */}
-            <div className="pointer-events-none absolute inset-y-0 right-0 left-36 z-10">
-              <div className="absolute inset-y-0 w-px bg-(--accent)" style={{ left: pctOf(timeMs) }}>
-                <span className="absolute top-0 -left-[4px] h-0 w-0 border-x-[4px] border-t-[6px] border-x-transparent border-t-(--accent)" />
-              </div>
-            </div>
+            <Playhead originMs={originMs} spanMs={spanMs} />
           </div>
         </div>
       )}

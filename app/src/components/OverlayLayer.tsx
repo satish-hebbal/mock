@@ -29,6 +29,56 @@ const SNAP_PX = 6
 /** The lines an overlay snaps to: the middle, and a margin in from each edge. */
 const GUIDES = [0.5, 0.08, 0.92]
 
+/** Angles a rotation lands on while shift is held. */
+const ANGLE_STEP = 15
+
+/*
+ * The transform box.
+ *
+ * Sizing something by watching a number go up is working blind: a caption is
+ * the right size when it looks right against the device beside it, and that
+ * judgement is made on the canvas, not in a panel. The sliders stay for typing
+ * an exact value, but the handles are how a size is actually chosen.
+ *
+ * Corners scale from the centre, which is where an overlay is anchored, so
+ * what is under the pointer keeps its relation to the middle of the box
+ * instead of the whole thing crawling sideways as it grows. The sides are for
+ * shapes only, which are the one kind with two independent dimensions.
+ */
+
+/** Where a handle sits on the box, as a fraction of its half-width and half-height. */
+const CORNERS = [
+  { id: 'nw', x: 0, y: 0, cursor: 'nwse-resize' },
+  { id: 'ne', x: 1, y: 0, cursor: 'nesw-resize' },
+  { id: 'se', x: 1, y: 1, cursor: 'nwse-resize' },
+  { id: 'sw', x: 0, y: 1, cursor: 'nesw-resize' },
+] as const
+
+const EDGES = [
+  { id: 'n', x: 0.5, y: 0, axis: 'y', cursor: 'ns-resize' },
+  { id: 'e', x: 1, y: 0.5, axis: 'x', cursor: 'ew-resize' },
+  { id: 's', x: 0.5, y: 1, axis: 'y', cursor: 'ns-resize' },
+  { id: 'w', x: 0, y: 0.5, axis: 'x', cursor: 'ew-resize' },
+] as const
+
+/** The size a corner drag is scaling, per kind of layer. */
+function sizeOf(o: Overlay): { size?: number; width?: number; height?: number } {
+  if (o.type === 'text') return { size: o.size }
+  if (o.type === 'image') return { width: o.width }
+  return { width: o.width, height: o.height }
+}
+
+/** That size multiplied, clamped to what each kind can usefully be. */
+function scaledSize(o: Overlay, start: ReturnType<typeof sizeOf>, k: number): Partial<Overlay> {
+  const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
+  if (o.type === 'text') return { size: clamp((start.size ?? 0.05) * k, 0.008, 0.5) }
+  if (o.type === 'image') return { width: clamp((start.width ?? 0.12) * k, 0.02, 2) }
+  return {
+    width: clamp((start.width ?? 0.2) * k, 0.01, 2),
+    height: clamp((start.height ?? 0.1) * k, 0.01, 2),
+  }
+}
+
 function TextBody({ o, height }: { o: TextOverlay; height: number }) {
   const px = o.size * height
   const kind = revealOf(o)
@@ -101,10 +151,96 @@ export function OverlayLayer({ width, height }: { width: number; height: number 
   const selectOverlay = useStudio((s) => s.selectOverlay)
   const setAnimatable = useStudio((s) => s.setAnimatable)
 
+  const updateOverlay = useStudio((s) => s.updateOverlay)
+
   const [guides, setGuides] = useState<{ x: number | null; y: number | null }>({ x: null, y: null })
   const drag = useRef<{ id: string; startX: number; startY: number; ox: number; oy: number } | null>(null)
+  const frameRef = useRef<HTMLDivElement>(null)
 
   const overlays = resolveOverlays(items, keyframes, timeMs)
+
+  /** An overlay's anchor point in client coordinates, which is its centre. */
+  const centreOf = (o: Overlay) => {
+    const r = frameRef.current?.getBoundingClientRect()
+    return { cx: (r?.left ?? 0) + o.x * width, cy: (r?.top ?? 0) + o.y * height }
+  }
+
+  /**
+   * Run a handle drag: capture the pointer, keep the camera out of it, and feed
+   * every move to `onMove` until it is let go.
+   */
+  const handleDrag = (
+    e: React.PointerEvent,
+    o: Overlay,
+    onMove: (ev: PointerEvent, ctx: { cx: number; cy: number }) => void,
+  ) => {
+    e.stopPropagation()
+    e.preventDefault()
+    selectOverlay(o.id)
+    const el = e.currentTarget as HTMLElement
+    el.setPointerCapture(e.pointerId)
+    const ctx = centreOf(o)
+    const move = (ev: PointerEvent) => onMove(ev, ctx)
+    const end = () => {
+      el.removeEventListener('pointermove', move)
+      el.removeEventListener('pointerup', end)
+      el.removeEventListener('pointercancel', end)
+      endEditRun()
+    }
+    el.addEventListener('pointermove', move)
+    el.addEventListener('pointerup', end)
+    el.addEventListener('pointercancel', end)
+  }
+
+  /** Corner: scale from the centre by how much further out the pointer went. */
+  const startCornerResize = (e: React.PointerEvent, o: Overlay) => {
+    const start = sizeOf(o)
+    const { cx, cy } = centreOf(o)
+    /*
+     * Measured as a distance from the centre rather than along an axis, which
+     * is what makes this hold up on a rotated layer: the distance does not care
+     * which way the box is turned, so a corner still grows the box under the
+     * pointer at 30° exactly as it does at 0°.
+     */
+    const d0 = Math.max(1, Math.hypot(e.clientX - cx, e.clientY - cy))
+    handleDrag(e, o, (ev, c) => {
+      const k = Math.hypot(ev.clientX - c.cx, ev.clientY - c.cy) / d0
+      updateOverlay(o.id, scaledSize(o, start, k))
+    })
+  }
+
+  /** Side: one axis of a shape, measured along the box's own direction. */
+  const startEdgeResize = (e: React.PointerEvent, o: Overlay, axis: 'x' | 'y') => {
+    if (o.type !== 'shape') return
+    const startW = o.width
+    const startH = o.height
+    const sx = e.clientX
+    const sy = e.clientY
+    const rad = (-o.rotation * Math.PI) / 180
+    handleDrag(e, o, (ev) => {
+      const dx = ev.clientX - sx
+      const dy = ev.clientY - sy
+      // into the box's own frame, so a rotated shape widens along its own side
+      const localX = dx * Math.cos(rad) - dy * Math.sin(rad)
+      const localY = dx * Math.sin(rad) + dy * Math.cos(rad)
+      // doubled: the box grows from its centre, so an edge moves half of it
+      const next =
+        axis === 'x'
+          ? { width: Math.min(2, Math.max(0.01, startW + (2 * localX) / width)) }
+          : { height: Math.min(2, Math.max(0.01, startH + (2 * localY) / height)) }
+      updateOverlay(o.id, next)
+    })
+  }
+
+  /** The knob above the box: turn the layer about its own centre. */
+  const startRotate = (e: React.PointerEvent, o: Overlay) => {
+    handleDrag(e, o, (ev, c) => {
+      const deg = (Math.atan2(ev.clientY - c.cy, ev.clientX - c.cx) * 180) / Math.PI + 90
+      const snapped = ev.shiftKey ? Math.round(deg / ANGLE_STEP) * ANGLE_STEP : Math.round(deg)
+      const wrapped = ((snapped + 180) % 360) - 180
+      setAnimatable(`ov.${o.id}.rotation`, wrapped, 'overlay-rotate')
+    })
+  }
 
   const onPointerDown = (e: React.PointerEvent, o: Overlay) => {
     if (e.button !== 0) return
@@ -171,7 +307,7 @@ export function OverlayLayer({ width, height }: { width: number; height: number 
   if (overlays.length === 0) return null
 
   return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden">
+    <div ref={frameRef} className="pointer-events-none absolute inset-0 overflow-hidden">
       {overlays.map((o) => {
         const selected = o.id === selectedId
         const scale = scaleOf(o)
@@ -253,6 +389,57 @@ export function OverlayLayer({ width, height }: { width: number; height: number 
                   </div>
                 ))}
             </div>
+
+            {/*
+              The handles, drawn on the box rather than beside it, so they
+              travel with a rotated or scaled layer without a second set of
+              maths to keep them in step. Each one counter-scales, or a layer
+              at 3× would be wearing handles three times the size.
+            */}
+            {selected && !playing && (
+              <>
+                {CORNERS.map((h) => (
+                  <span
+                    key={h.id}
+                    onPointerDown={(e) => startCornerResize(e, o)}
+                    title="Drag to resize"
+                    style={{
+                      left: `${h.x * 100}%`,
+                      top: `${h.y * 100}%`,
+                      cursor: h.cursor,
+                      transform: `translate(-50%, -50%) scale(${1 / scale})`,
+                    }}
+                    className="pointer-events-auto absolute h-2.5 w-2.5 rounded-[2px] border border-black/60 bg-white"
+                  />
+                ))}
+                {o.type === 'shape' &&
+                  EDGES.map((h) => (
+                    <span
+                      key={h.id}
+                      onPointerDown={(e) => startEdgeResize(e, o, h.axis)}
+                      title={h.axis === 'x' ? 'Drag to set the width' : 'Drag to set the height'}
+                      style={{
+                        left: `${h.x * 100}%`,
+                        top: `${h.y * 100}%`,
+                        cursor: h.cursor,
+                        transform: `translate(-50%, -50%) scale(${1 / scale})`,
+                      }}
+                      className="pointer-events-auto absolute h-2 w-2 rounded-[2px] border border-black/60 bg-white/85"
+                    />
+                  ))}
+                <span
+                  onPointerDown={(e) => startRotate(e, o)}
+                  title="Drag to rotate · shift for 15° steps"
+                  style={{
+                    left: '50%',
+                    top: 0,
+                    cursor: 'grab',
+                    transform: `translate(-50%, -22px) scale(${1 / scale})`,
+                  }}
+                  className="pointer-events-auto absolute h-2.5 w-2.5 rounded-full border border-black/60 bg-white"
+                />
+              </>
+            )}
           </div>
         )
       })}

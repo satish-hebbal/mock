@@ -10,7 +10,8 @@
     "verify:ascii": "node scripts/verify-ascii-engine.mjs && node scripts/verify-ascii-svg.mjs",
     "verify:signal": "node scripts/verify-signal.mjs && node scripts/verify-signal-embed.mjs",
     "verify:sequence": "node scripts/verify-sequence.mjs",
-    "verify": "npm run verify:ascii && npm run verify:signal && npm run verify:sequence",
+    "verify:overlays": "node scripts/verify-overlays.mjs",
+    "verify": "npm run verify:ascii && npm run verify:signal && npm run verify:sequence && npm run verify:overlays",
     "preview": "vite preview"
   },
   "dependencies": {

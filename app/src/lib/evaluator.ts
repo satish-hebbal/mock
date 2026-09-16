@@ -1,5 +1,6 @@
 import { EASINGS } from './easing'
-import type { DeviceInstance, Keyframe, SceneState } from '../types'
+import { OVERLAY_PROP_LABELS, progressOf, scaleOf, type OverlayProp } from './overlays'
+import type { DeviceInstance, Keyframe, Overlay, Shot } from '../types'
 
 /**
  * Sample every keyframed target at `timeMs` (PRD §11.2).
@@ -37,11 +38,26 @@ function sampleTrack(sorted: Keyframe[], t: number): number {
   return last.value
 }
 
-/** Read the base (un-animated) value of an animatable target from the scene. */
-export function getTargetValue(scene: SceneState, target: string): number {
+/**
+ * Read the base (un-animated) value of an animatable target from a shot.
+ *
+ * Takes the whole shot rather than its scene because overlays are animatable
+ * too and they do not live in the scene: a caption is stuck to the front of the
+ * frame, not standing in it.
+ */
+export function getTargetValue(shot: Shot, target: string): number {
+  const scene = shot.scene
   const parts = target.split('.')
   if (parts[0] === 'camera') {
     return scene.camera[parts[1] as keyof typeof scene.camera]
+  }
+  if (parts[0] === 'ov') {
+    const o = shot.overlays.find((x) => x.id === parts[1])
+    if (!o) return 0
+    if (parts[2] === 'scale') return scaleOf(o)
+    if (parts[2] === 'progress') return o.type === 'text' ? progressOf(o) : 1
+    const v = (o as unknown as Record<string, unknown>)[parts[2]]
+    return typeof v === 'number' ? v : 0
   }
   if (parts[0] === 'dev') {
     const dev = scene.devices.find((d) => d.id === parts[1])
@@ -60,11 +76,17 @@ export function getTargetValue(scene: SceneState, target: string): number {
   return 0
 }
 
-/** Write the base value of an animatable target into the scene (mutates draft). */
-export function setTargetValue(scene: SceneState, target: string, value: number): void {
+/** Write the base value of an animatable target into a shot (mutates draft). */
+export function setTargetValue(shot: Shot, target: string, value: number): void {
+  const scene = shot.scene
   const parts = target.split('.')
   if (parts[0] === 'camera') {
     ;(scene.camera as unknown as Record<string, number>)[parts[1]] = value
+    return
+  }
+  if (parts[0] === 'ov') {
+    const o = shot.overlays.find((x) => x.id === parts[1])
+    if (o) (o as unknown as Record<string, number>)[parts[2]] = value
     return
   }
   if (parts[0] === 'dev') {
@@ -114,7 +136,11 @@ const DEV_LABELS: Record<string, string> = {
  * changes, and a scene changes on every frame of a camera drag while the list
  * of devices in it does not.
  */
-export function targetLabel(target: string, devices: DeviceInstance[]): string {
+export function targetLabel(
+  target: string,
+  devices: DeviceInstance[],
+  overlays: Overlay[] = [],
+): string {
   const parts = target.split('.')
   if (parts[0] === 'camera') return `Camera · ${CAMERA_LABELS[parts[1]] ?? parts[1]}`
   if (parts[0] === 'dev') {
@@ -122,5 +148,20 @@ export function targetLabel(target: string, devices: DeviceInstance[]): string {
     const name = idx >= 0 ? `Device ${idx + 1}` : 'Device'
     return `${name} · ${DEV_LABELS[parts[2]] ?? parts[2]}`
   }
+  if (parts[0] === 'ov') {
+    const o = overlays.find((x) => x.id === parts[1])
+    const prop = OVERLAY_PROP_LABELS[parts[2] as OverlayProp] ?? parts[2]
+    return `${overlayName(o)} · ${prop}`
+  }
   return target
+}
+
+/** What a layer is called in a track row: its own words where it has any. */
+export function overlayName(o: Overlay | undefined): string {
+  if (!o) return 'Layer'
+  if (o.type === 'text') {
+    const line = o.text.split('\n')[0].trim()
+    return line ? `“${line.length > 14 ? `${line.slice(0, 14)}…` : line}”` : 'Text'
+  }
+  return o.type === 'image' ? 'Logo' : o.shape === 'ellipse' ? 'Ellipse' : 'Shape'
 }

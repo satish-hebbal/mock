@@ -203,7 +203,27 @@ interface OverlayBase {
   opacity: number
   /** degrees */
   rotation: number
+  /**
+   * Uniform multiplier on whatever size the overlay already has.
+   *
+   * Every kind of overlay measures itself differently: text in ems of the
+   * frame, a logo in frame widths, a shape in both. One multiplier on top of
+   * all of them gives "grow" and "shrink" a single animatable handle, so a pop
+   * or a settle is one track rather than one per type. Optional because
+   * overlays saved before it carry none; every reader falls back to 1.
+   */
+  scale?: number
 }
+
+/**
+ * How a line of text arrives on screen.
+ *
+ * The kinds all run off one 0..1 driver, `reveal`, which is what carries
+ * keyframes. That keeps the animation in the same evaluator as everything else
+ * (so it scrubs, eases and exports like a camera move) and leaves this field
+ * describing only the *shape* of the arrival.
+ */
+export type TextRevealKind = 'none' | 'letters' | 'words' | 'rise' | 'fade'
 
 export interface TextOverlay extends OverlayBase {
   type: 'text'
@@ -216,6 +236,13 @@ export interface TextOverlay extends OverlayBase {
   align: 'left' | 'center' | 'right'
   /** pill background color or null */
   bg: string | null
+  /** how the text arrives; absent means it is simply there */
+  reveal?: TextRevealKind
+  /**
+   * How far through that arrival, 0..1. Animate this, not the kind. Absent
+   * means fully arrived, so a text overlay with no animation still draws.
+   */
+  progress?: number
 }
 
 export interface ImageOverlay extends OverlayBase {

@@ -522,6 +522,16 @@ function useCameraGestures(container: React.RefObject<HTMLDivElement | null>) {
        * that happens early enough.
        */
       if ((e.target as Element | null)?.closest?.('[data-focus-handle]')) return
+      /*
+       * Nor under a caption, a logo or a shape, for exactly the same reason.
+       *
+       * Those layers are stuck to the front of the frame and have nothing to do
+       * with where the camera is standing, but they sit inside it, so every
+       * press meant to nudge one was also starting an orbit underneath: the
+       * logo moved, and the whole set swung around behind it. A press that
+       * lands on an overlay belongs to the overlay, full stop.
+       */
+      if ((e.target as Element | null)?.closest?.('[data-overlay]')) return
       mode = e.button === 0 ? 'orbit' : 'pan'
       startX = e.clientX
       startY = e.clientY

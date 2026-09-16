@@ -7,6 +7,16 @@ import { getPresetPhoto } from './presetPhotos'
 import { gradeFilter } from './grade'
 import { rgba } from './color'
 import { activeShot, planFrames, sequenceLayout } from './sequence'
+import {
+  blockAlpha,
+  glyphsAt,
+  needsGlyphs,
+  progressOf,
+  resolveOverlays,
+  revealOf,
+  RISE_DISTANCE,
+  scaleOf,
+} from './overlays'
 import { useStudio } from '../store'
 import type { AssetRuntime, BackgroundState, Overlay, ProjectDoc, Shot, SweepSpec } from '../types'
 
@@ -184,6 +194,8 @@ async function drawOverlays(
     ctx.globalAlpha = o.opacity
     ctx.translate(o.x * w, o.y * h)
     ctx.rotate((o.rotation * Math.PI) / 180)
+    const scale = scaleOf(o)
+    if (scale !== 1) ctx.scale(scale, scale)
     if (o.type === 'text') {
       const px = o.size * h
       ctx.font = `${o.weight} ${px}px "${o.font}", system-ui, sans-serif`
@@ -193,6 +205,12 @@ async function drawOverlays(
       const lineH = px * 1.25
       const startY = -((lines.length - 1) * lineH) / 2
       if (o.bg) {
+        /*
+         * Measured from the whole line, not from what has arrived so far, so a
+         * pill under a reveal is the size it will end up at from the first
+         * frame. A background that grew with the text would read as the pill
+         * being animated, which is not what was asked for.
+         */
         let maxW = 0
         for (const line of lines) maxW = Math.max(maxW, ctx.measureText(line).width)
         const padX = px * 0.6
@@ -205,7 +223,42 @@ async function drawOverlays(
         ctx.fill()
       }
       ctx.fillStyle = o.color
-      lines.forEach((line, i) => ctx.fillText(line, 0, startY + i * lineH))
+      const kind = revealOf(o)
+      const blockA = blockAlpha(kind, progressOf(o))
+
+      if (!needsGlyphs(o)) {
+        ctx.globalAlpha = o.opacity * blockA
+        lines.forEach((line, i) => ctx.fillText(line, 0, startY + i * lineH))
+      } else {
+        /*
+         * Mid-reveal, character by character, laid out the way the preview
+         * lays it out: each glyph advances by its own measured width from a
+         * line origin decided by the alignment. Canvas has no way to ask for
+         * "the first n characters, faded", and drawing a growing substring
+         * instead would slide a centred line sideways as it arrived.
+         */
+        const glyphs = glyphsAt(o.text, kind, progressOf(o))
+        ctx.textAlign = 'left'
+        let g = 0
+        lines.forEach((line, li) => {
+          const chars = [...line]
+          const widths = chars.map((c) => ctx.measureText(c).width)
+          const lineW = widths.reduce((a, b) => a + b, 0)
+          let x = o.align === 'left' ? 0 : o.align === 'right' ? -lineW : -lineW / 2
+          const y = startY + li * lineH
+          chars.forEach((c, ci) => {
+            const glyph = glyphs[g + ci]
+            if (glyph && glyph.alpha > 0.001) {
+              ctx.globalAlpha = o.opacity * blockA * glyph.alpha
+              ctx.fillText(c, x, y + glyph.rise * RISE_DISTANCE * px)
+            }
+            x += widths[ci]
+          })
+          // +1 for the newline that split the lines apart
+          g += chars.length + 1
+        })
+        ctx.globalAlpha = o.opacity
+      }
     } else if (o.type === 'shape') {
       const sw = o.width * w
       const sh = o.height * h
@@ -367,6 +420,7 @@ async function composeFrame(
   width: number,
   height: number,
   transparent: boolean,
+  timeMs: number,
 ) {
   b.sctx.clearRect(0, 0, width, height)
   await paintBackground(b.sctx, width, height, shot.scene.background, assets, transparent)
@@ -379,7 +433,7 @@ async function composeFrame(
   b.ctx.filter = 'none'
 
   applyPortrait(b.out, shot.scene.effects.portrait)
-  await drawOverlays(b.ctx, shot.overlays, assets, width, height)
+  await drawOverlays(b.ctx, resolveOverlays(shot.overlays, shot.keyframes, timeMs), assets, width, height)
 }
 
 /**
@@ -444,7 +498,7 @@ export async function exportImage(
   try {
     await renderShotAt(shot, timeMs, null)
     const b = makeBufs(opts.width, opts.height)
-    await composeFrame(b, shot, assets, opts.width, opts.height, opts.transparent)
+    await composeFrame(b, shot, assets, opts.width, opts.height, opts.transparent, timeMs)
 
     const mime = opts.format === 'png' ? 'image/png' : opts.format === 'jpg' ? 'image/jpeg' : 'image/webp'
     const blob = await new Promise<Blob | null>((res) => b.out.toBlob(res, mime, opts.quality))
@@ -644,9 +698,15 @@ export async function exportVideo(
           b.ctx.drawImage(b.stage, 0, 0)
           b.ctx.filter = 'none'
           applyPortrait(b.out, shot.scene.effects.portrait)
-          await drawOverlays(b.ctx, shot.overlays, assets, width, height)
+          await drawOverlays(
+            b.ctx,
+            resolveOverlays(shot.overlays, shot.keyframes, localMs),
+            assets,
+            width,
+            height,
+          )
         } else {
-          await composeFrame(b, shot, assets, width, height, transparent)
+          await composeFrame(b, shot, assets, width, height, transparent, localMs)
         }
 
         const isOwner = plan[f]?.owner === placed.index

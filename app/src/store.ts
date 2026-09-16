@@ -5,7 +5,7 @@ import { ui } from './lib/ui'
 import { track } from './lib/analytics'
 import { getTargetValue, sampleKeyframes, setTargetValue } from './lib/evaluator'
 import { getDevice } from './lib/registry'
-import { ANIMATION_PRESETS, TEMPLATES } from './lib/presets'
+import { ANIMATION_PRESETS, TEMPLATES, TEXT_ANIMATIONS } from './lib/presets'
 import { getLook } from './lib/studio'
 import { NEUTRAL_GRADE } from './lib/grade'
 import { coalesces, endEditRun, patchLabel } from './lib/history'
@@ -197,6 +197,10 @@ interface StudioState {
   updateOverlay: (id: string, patch: Partial<Overlay>) => void
   removeOverlay: (id: string) => void
   selectOverlay: (id: string | null) => void
+  /** lay a ready-made text move onto an overlay, starting at the playhead */
+  applyTextAnimation: (overlayId: string, presetId: string) => void
+  /** drop every keyframe belonging to one overlay */
+  clearOverlayAnimation: (overlayId: string) => void
 
   // keyframes
   toggleTrack: (target: string) => void
@@ -458,7 +462,7 @@ export const useStudio = create<StudioState>()(
         // Always write the live scene value too, a keyframe just landed exactly
         // at the current time, so this matches what re-sampling would produce,
         // and it keeps the slider/viewport from freezing on tracked properties.
-        setTargetValue(cur(s.project).scene, target, value)
+        setTargetValue(cur(s.project), target, value)
       })
     },
 
@@ -756,12 +760,68 @@ export const useStudio = create<StudioState>()(
     removeOverlay: (id) => {
       get().commit('remove-overlay')
       set((s) => {
-        cur(s.project).overlays = cur(s.project).overlays.filter((o) => o.id !== id)
+        const shot = cur(s.project)
+        shot.overlays = shot.overlays.filter((o) => o.id !== id)
+        // its tracks go with it, or the timeline keeps lanes for a layer that
+        // is no longer there and nothing on screen explains them
+        shot.keyframes = shot.keyframes.filter((k) => !k.target.startsWith(`ov.${id}.`))
+        s.selectedKeyframeIds = s.selectedKeyframeIds.filter((kid) =>
+          shot.keyframes.some((k) => k.id === kid),
+        )
         if (s.selectedOverlayId === id) s.selectedOverlayId = null
       })
     },
 
     selectOverlay: (id) => set((s) => void (s.selectedOverlayId = id)),
+
+    applyTextAnimation: (overlayId, presetId) => {
+      const preset = TEXT_ANIMATIONS.find((p) => p.id === presetId)
+      if (!preset) return
+      track('animation_preset_applied', { preset_id: `text-${presetId}` })
+      get().commit('text-animation')
+      set((s) => {
+        const shot = cur(s.project)
+        const o = shot.overlays.find((x) => x.id === overlayId)
+        if (!o || o.type !== 'text') return
+
+        const built = preset.build(o, s.timeMs, shot.durationMs)
+        /*
+         * A preset replaces its own tracks and leaves the rest alone, so
+         * stacking "rise by letter" and "fade out" gives a line that arrives
+         * and then leaves, rather than the second one wiping the first.
+         */
+        const targets = new Set(built.map((k) => k.target))
+        shot.keyframes = shot.keyframes.filter((k) => !targets.has(k.target))
+        for (const k of built) shot.keyframes.push({ ...k, id: `kf_${uid()}` })
+
+        // the arrival shape the preset needs, and a starting point for the
+        // driver so the line is not left invisible when the playhead is at zero
+        if (preset.reveal) o.reveal = preset.reveal
+        if (targets.has(`ov.${o.id}.progress`)) o.progress = 1
+        s.selectedKeyframeIds = []
+      })
+    },
+
+    clearOverlayAnimation: (overlayId) => {
+      get().commit('clear-overlay-animation')
+      set((s) => {
+        const shot = cur(s.project)
+        const prefix = `ov.${overlayId}.`
+        /*
+         * Bake first, then drop. Whatever the layer looks like at the playhead
+         * is what the person is looking at, and having it jump somewhere else
+         * the moment the animation comes off would read as losing the work
+         * rather than as removing the movement.
+         */
+        const sampled = sampleKeyframes(
+          shot.keyframes.filter((k) => k.target.startsWith(prefix)),
+          s.timeMs,
+        )
+        for (const [target, value] of sampled) setTargetValue(shot, target, value)
+        shot.keyframes = shot.keyframes.filter((k) => !k.target.startsWith(prefix))
+        s.selectedKeyframeIds = []
+      })
+    },
 
     toggleTrack: (target) => {
       get().commit('toggle-track')
@@ -770,7 +830,7 @@ export const useStudio = create<StudioState>()(
         if (kfs.length > 0) {
           // bake evaluated value at playhead into base, then remove the track
           const sampled = sampleKeyframes(kfs, s.timeMs).get(target)
-          if (sampled !== undefined) setTargetValue(cur(s.project).scene, target, sampled)
+          if (sampled !== undefined) setTargetValue(cur(s.project), target, sampled)
           cur(s.project).keyframes = cur(s.project).keyframes.filter((k) => k.target !== target)
           s.selectedKeyframeIds = s.selectedKeyframeIds.filter((id) =>
             cur(s.project).keyframes.some((k) => k.id === id),
@@ -780,7 +840,7 @@ export const useStudio = create<StudioState>()(
             id: `kf_${uid()}`,
             target,
             timeMs: s.timeMs,
-            value: getTargetValue(cur(s.project).scene, target),
+            value: getTargetValue(cur(s.project), target),
             easing: 'smooth',
           })
         }
@@ -794,8 +854,8 @@ export const useStudio = create<StudioState>()(
         const kfs = cur(s.project).keyframes.filter((k) => k.target === target)
         const value =
           kfs.length > 0
-            ? (sampleKeyframes(kfs, t).get(target) ?? getTargetValue(cur(s.project).scene, target))
-            : getTargetValue(cur(s.project).scene, target)
+            ? (sampleKeyframes(kfs, t).get(target) ?? getTargetValue(cur(s.project), target))
+            : getTargetValue(cur(s.project), target)
         const existing = kfs.find((k) => Math.abs(k.timeMs - t) <= 1)
         if (existing) existing.value = value
         else cur(s.project).keyframes.push({ id: `kf_${uid()}`, target, timeMs: t, value, easing: 'smooth' })

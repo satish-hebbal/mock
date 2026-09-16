@@ -205,13 +205,13 @@ export function Timeline() {
         const inside = sorted.filter((k) => k.timeMs <= shot.durationMs + 1)
         return {
           target,
-          label: targetLabel(target, shot.scene.devices),
+          label: targetLabel(target, shot.scene.devices, shot.overlays),
           kfs: inside,
           beyond: sorted.length - inside.length,
         }
       })
       .sort((a, b) => a.label.localeCompare(b.label))
-  }, [shot.keyframes, shot.scene.devices, shot.durationMs])
+  }, [shot.keyframes, shot.scene.devices, shot.overlays, shot.durationMs])
 
   useEffect(() => {
     localStorage.setItem(HEIGHT_KEY, String(height))

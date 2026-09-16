@@ -43,9 +43,12 @@ export function addTextOverlay() {
     size: 0.055,
     weight: 700,
     color: '#ffffff',
-    font: 'system-ui',
+    font: 'Inter',
     align: 'center',
     bg: null,
+    scale: 1,
+    reveal: 'none',
+    progress: 1,
   }
   useStudio.getState().addOverlay(o)
 }
@@ -59,6 +62,7 @@ export function addShapeOverlay() {
     y: 0.85,
     opacity: 0.9,
     rotation: 0,
+    scale: 1,
     width: 0.22,
     height: 0.08,
     color: '#111827',
@@ -78,6 +82,7 @@ export function addLogoOverlay() {
       y: 0.1,
       opacity: 1,
       rotation: 0,
+      scale: 1,
       width: 0.12,
     } as Overlay)
   }, false)

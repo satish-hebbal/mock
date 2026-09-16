@@ -19,6 +19,7 @@ export function Section({
   title,
   children,
   defaultOpen = true,
+  openWhen,
   badge,
   icon,
   actions,
@@ -26,6 +27,20 @@ export function Section({
   title: string
   children: ReactNode
   defaultOpen?: boolean
+  /**
+   * Something that, whenever it changes to a value at all, opens this section
+   * and brings it into view.
+   *
+   * For sections that are shut by default but hold the controls for a thing
+   * you can pick up out on the canvas. Selecting a caption and then hunting
+   * down the panel for the fold it lives behind is a step nobody means to
+   * take: the selection already said which controls were wanted.
+   *
+   * Deliberately not a controlled `open`, so the section can still be
+   * collapsed by hand afterwards and will stay that way until the next
+   * selection.
+   */
+  openWhen?: string | number | null
   badge?: string
   /** small glyph shown before the section title */
   icon?: ReactNode
@@ -33,8 +48,25 @@ export function Section({
   actions?: ReactNode
 }) {
   const [open, setOpen] = useState(defaultOpen)
+  const ref = useRef<HTMLElement>(null)
+
+  useEffect(() => {
+    if (!openWhen) return
+    setOpen(true)
+    /*
+     * After the open, not with it. The body grows over 200ms, so a scroll
+     * measured now would be measuring a section that is still 0px tall and
+     * would stop short of showing anything inside it.
+     */
+    const t = setTimeout(
+      () => ref.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }),
+      220,
+    )
+    return () => clearTimeout(t)
+  }, [openWhen])
+
   return (
-    <section className="border-b border-(--line)">
+    <section ref={ref} className="border-b border-(--line)">
       <div className="flex items-center gap-1 pr-2 pl-3">
         <button
           onClick={() => setOpen(!open)}

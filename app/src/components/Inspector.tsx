@@ -888,7 +888,14 @@ function OverlaysSection() {
   const selected = overlays.find((o) => o.id === selectedId)
 
   return (
-    <Section title="Text · Logo · Shapes" icon={<Type {...secIcon} />} defaultOpen={false}>
+    <Section
+      title="Text · Logo · Shapes"
+      icon={<Type {...secIcon} />}
+      defaultOpen={false}
+      // picking a layer on the canvas is the request for these controls
+      openWhen={selectedId}
+      badge={overlays.length > 0 ? String(overlays.length) : undefined}
+    >
       {overlays.length === 0 && (
         <p className="t-caption text-(--tx3)">
           Add text, a shape or a logo from the toolbar above. They'll show up here to edit.

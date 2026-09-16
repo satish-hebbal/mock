@@ -96,6 +96,8 @@ export function OverlayLayer({ width, height }: { width: number; height: number 
   )
   const assets = useStudio((s) => s.assets)
   const selectedId = useStudio((s) => s.selectedOverlayId)
+  const playing = useStudio((s) => s.playing)
+  const [hoverId, setHoverId] = useState<string | null>(null)
   const selectOverlay = useStudio((s) => s.selectOverlay)
   const setAnimatable = useStudio((s) => s.setAnimatable)
 
@@ -180,9 +182,25 @@ export function OverlayLayer({ width, height }: { width: number; height: number 
           transform: `translate(-50%, -50%) rotate(${o.rotation}deg)${
             scale === 1 ? '' : ` scale(${scale})`
           }`,
-          opacity: o.opacity,
           cursor: 'move',
         }
+        /*
+         * The box shows while you are working on the layer and at no other
+         * time. It is scaffolding for placing something, so during playback it
+         * is just a rectangle drawn over the picture, and a caption that has
+         * not arrived yet used to leave nothing on screen *but* the rectangle.
+         *
+         * A hover ring as well, fainter, because a layer animated from nothing
+         * is invisible at the head of its own shot and you still have to be
+         * able to find the thing you are about to drag.
+         */
+        const ring = playing
+          ? ''
+          : selected
+            ? 'outline-1 outline-offset-2 outline-white/80'
+            : hoverId === o.id
+              ? 'outline-1 outline-offset-2 outline-white/25'
+              : ''
         return (
           <div
             key={o.id}
@@ -195,36 +213,46 @@ export function OverlayLayer({ width, height }: { width: number; height: number 
              */
             data-overlay=""
             style={base}
-            className={`pointer-events-auto touch-none select-none ${
-              selected ? 'outline-1 outline-offset-2 outline-white/70' : ''
-            }`}
+            className={`pointer-events-auto touch-none select-none ${ring}`}
             onPointerDown={(e) => onPointerDown(e, o)}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
             onPointerCancel={onPointerUp}
+            onPointerEnter={() => setHoverId(o.id)}
+            onPointerLeave={() => setHoverId((id) => (id === o.id ? null : id))}
           >
-            {o.type === 'text' && <TextBody o={o} height={height} />}
-            {o.type === 'shape' && (
-              <div
-                style={{
-                  width: o.width * width,
-                  height: o.height * height,
-                  background: o.color,
-                  borderRadius: o.shape === 'ellipse' ? '50%' : o.radius * height,
-                }}
-              />
-            )}
-            {o.type === 'image' &&
-              (assets[o.assetId] ? (
-                <img
-                  src={assets[o.assetId].url}
-                  alt=""
-                  draggable={false}
-                  style={{ width: o.width * width, display: 'block' }}
+            {/*
+              The layer's own alpha lives on the content, not on the box around
+              it, so a caption animated up from nothing can still be found and
+              aligned while it is invisible: the outline stays solid even when
+              what it is holding is not.
+            */}
+            <div style={{ opacity: o.opacity }}>
+              {o.type === 'text' && <TextBody o={o} height={height} />}
+              {o.type === 'shape' && (
+                <div
+                  style={{
+                    width: o.width * width,
+                    height: o.height * height,
+                    background: o.color,
+                    borderRadius: o.shape === 'ellipse' ? '50%' : o.radius * height,
+                  }}
                 />
-              ) : (
-                <div className="rounded-xs bg-black/40 px-2 py-1 t-caption text-white">missing image</div>
-              ))}
+              )}
+              {o.type === 'image' &&
+                (assets[o.assetId] ? (
+                  <img
+                    src={assets[o.assetId].url}
+                    alt=""
+                    draggable={false}
+                    style={{ width: o.width * width, display: 'block' }}
+                  />
+                ) : (
+                  <div className="rounded-xs bg-black/40 px-2 py-1 t-caption text-white">
+                    missing image
+                  </div>
+                ))}
+            </div>
           </div>
         )
       })}

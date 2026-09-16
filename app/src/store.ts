@@ -10,6 +10,7 @@ import { getLook } from './lib/studio'
 import { NEUTRAL_GRADE } from './lib/grade'
 import { coalesces, endEditRun, patchLabel } from './lib/history'
 import { framingForDevices, rt } from './lib/runtime'
+import { modeFromLocation, writeMode } from './lib/routes'
 import { defaultPortrait, type Portrait } from './lib/portrait'
 import {
   defaultProject,
@@ -333,7 +334,9 @@ export const useStudio = create<StudioState>()(
   immer((set, get) => ({
     hydrated: false,
     theme: 'dark',
-    mode: 'studio',
+    // a deep link is known before `hydrate` gets to run, and reading it here
+    // means /draw paints Draw rather than a frame of whatever was last open
+    mode: modeFromLocation() ?? 'studio',
     toolPanelOpen: localStorage.getItem('ms-tool-panel') !== 'closed',
     // 'studio' was its own section before the looks moved in beside the backdrop
     toolSection: ((v) => (v === 'studio' ? 'background' : v) ?? 'devices')(
@@ -1207,6 +1210,7 @@ export const useStudio = create<StudioState>()(
     setMode: (m) => {
       if (m !== get().mode) track('mode_changed', { mode: m, from: get().mode })
       localStorage.setItem('ms-mode', m)
+      writeMode(m)
       set((s) => void (s.mode = m))
     },
     setToolPanelOpen: (v) => {
@@ -1258,7 +1262,7 @@ export const useStudio = create<StudioState>()(
       try {
         const theme = localStorage.getItem('ms-theme') === 'light' ? 'light' : 'dark'
         const savedMode = localStorage.getItem('ms-mode')
-        const mode: AppMode =
+        const savedTool: AppMode =
           savedMode === 'shots' ||
           savedMode === 'studio' ||
           savedMode === 'draw' ||
@@ -1266,6 +1270,17 @@ export const useStudio = create<StudioState>()(
           savedMode === 'signal'
             ? savedMode
             : 'home'
+        /*
+         * A link beats the last session, and only a link to a tool counts as
+         * one. The root is the address you get by typing the domain, so it
+         * still means "carry on where I was", which for a first visit or for
+         * someone whose last stop was the launcher is the launcher anyway.
+         * Whatever wins, the URL is corrected to match in place, so a refresh
+         * from here lands on the same screen.
+         */
+        const linked = modeFromLocation()
+        const mode: AppMode = linked && linked !== 'home' ? linked : savedTool
+        writeMode(mode, true)
         set((s) => {
           s.theme = theme
           s.mode = mode

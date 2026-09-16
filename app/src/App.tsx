@@ -33,6 +33,7 @@ import { UILayer } from './components/ui'
 import { SmallScreen } from './components/SmallScreen'
 import { UploadPrompt } from './components/UploadPrompt'
 import { useIsDesktop } from './lib/breakpoint'
+import { modeFromLocation } from './lib/routes'
 
 /**
  * rAF playback driver (PRD §5.4).
@@ -653,6 +654,23 @@ function useMediaDropPaste() {
   }, [])
 }
 
+/**
+ * Back and Forward, now that a tool is an address (see `lib/routes`).
+ *
+ * `setMode` is what puts an entry in the history, so all that is left here is
+ * the other direction: when the browser moves through those entries, read the
+ * URL it landed on and follow it. `writeMode` sees the address bar already
+ * says what it is about to say and pushes nothing, so the two stay in step
+ * instead of feeding each other.
+ */
+function useRouting() {
+  useEffect(() => {
+    const onPop = () => useStudio.getState().setMode(modeFromLocation() ?? 'home')
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
+}
+
 function StudioLayout() {
   const hydrated = useStudio((s) => s.hydrated)
   const hasMedia = useStudio((s) => activeShot(s.project).scene.devices.some((d) => d.screen.assetId))
@@ -746,6 +764,7 @@ function Editor() {
   usePlayback()
   useGlobalShortcuts()
   useMediaDropPaste()
+  useRouting()
 
   return (
     <div ref={rootRef} tabIndex={-1} className="flex h-full bg-(--panel2) text-(--tx) outline-none">

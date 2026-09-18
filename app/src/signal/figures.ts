@@ -943,128 +943,6 @@ const phyllotaxis: FigureFn = (ctx, w, h, t, intensity, scale, ink, _motion, p) 
 }
 
 /**
- * Truchet tiles, subdivided.
- *
- * Cyril Truchet's 1704 idea: fill a grid with one tile in random orientations
- * and let the edges join up. With a quarter-circle tile every arc meets its
- * neighbour tangentially, so the result is an unbroken maze of curves that no
- * one drew. Christopher Carlson's multi-scale version subdivides some cells
- * again, which breaks the regularity of the grid without breaking the joins.
- *
- * Every orientation and every subdivision comes from a hash of the cell, so the
- * maze is the same maze in the export as it was in the preview.
- */
-const truchet: FigureFn = (ctx, w, h, t, intensity, _scale, ink, _motion, p) => {
-  ground(ctx, w, h, ink.bg)
-  const base = Math.max(2, Math.round(p.cells))
-  const depth = Math.max(0, Math.round(p.depth))
-  const cell = Math.max(w, h) / base
-  const amp = intensity / 50
-  ctx.lineCap = 'round'
-
-  const tile = (x: number, y: number, s: number, level: number, seed: number) => {
-    // a cell splits when its own hash says so, which keeps the subdivision
-    // stable while still varying across the frame
-    if (level < depth && thash(seed * 1.7 + level * 31.3) < p.split) {
-      const half = s / 2
-      for (let j = 0; j < 2; j++)
-        for (let i = 0; i < 2; i++)
-          tile(x + i * half, y + j * half, half, level + 1, seed * 4 + j * 2 + i + 1)
-      return
-    }
-
-    const roll = thash(seed * 2.9)
-    const turn = Math.floor(roll * 4)
-    const drift = Math.sin(t * p.wave + seed * 0.7) * 0.5 + 0.5
-    ctx.lineWidth = Math.max(0.6, s * p.weight * (0.6 + drift * 0.8 * amp))
-    ctx.strokeStyle = roll > 0.92 ? rgba(ink.accent, 0.95) : rgba(ink.fg, 0.35 + drift * 0.55)
-
-    // two quarter circles on opposite corners: the classic Truchet arc tile
-    const r = s / 2
-    const corners: [number, number, number][] = [
-      [x, y, 0],
-      [x + s, y, Math.PI / 2],
-      [x + s, y + s, Math.PI],
-      [x, y + s, -Math.PI / 2],
-    ]
-    const a = corners[turn % 4]
-    const b = corners[(turn + 2) % 4]
-    ctx.beginPath()
-    ctx.arc(a[0], a[1], r, a[2], a[2] + Math.PI / 2)
-    ctx.stroke()
-    ctx.beginPath()
-    ctx.arc(b[0], b[1], r, b[2], b[2] + Math.PI / 2)
-    ctx.stroke()
-  }
-
-  const cols = Math.ceil(w / cell)
-  const rows = Math.ceil(h / cell)
-  for (let r = 0; r < rows; r++)
-    for (let c = 0; c < cols; c++) tile(c * cell, r * cell, cell, 0, c * 131 + r * 977 + 3)
-}
-
-/**
- * A de Jong strange attractor, plotted as a density cloud.
- *
- * Four coefficients and two lines of iteration. The orbit never repeats and
- * never escapes, so it traces out a shape that is nowhere continuous but is
- * clearly a shape, and moving any coefficient a tenth reorganises the whole
- * thing into something unrecognisable.
- *
- * Plotted by accumulating hits into a coarse grid and then drawing that grid,
- * rather than by stroking a hundred thousand dots. Overdraw is the whole
- * picture here: the shape is defined by *where the orbit spends its time*, and
- * alpha stacking gets that for a fraction of the fill cost.
- */
-const attractor: FigureFn = (ctx, w, h, t, intensity, scale, ink, _motion, p) => {
-  ground(ctx, w, h, ink.bg)
-  const pts = Math.max(2000, Math.round(p.points) * 1000)
-  const amp = intensity / 50
-  // the coefficients drift, which walks the attractor through its family
-  const wobble = Math.sin(t * 0.2) * p.drift
-  const a = p.a + wobble
-  const b = p.b - wobble * 0.6
-  const c = p.c
-  const d = p.d + Math.cos(t * 0.17) * p.drift * 0.5
-
-  const bins = Math.max(60, Math.round(240 / Math.max(1, p.grain)))
-  const grid = new Float32Array(bins * bins)
-  let x = 0.1
-  let y = 0.1
-  let peak = 1
-
-  for (let i = 0; i < pts; i++) {
-    const nx = Math.sin(a * y) - Math.cos(b * x)
-    y = Math.sin(c * x) - Math.cos(d * y)
-    x = nx
-    // the attractor lives inside about -2..2 on both axes
-    const gx = ((x + 2) / 4) * bins
-    const gy = ((y + 2) / 4) * bins
-    if (gx < 0 || gy < 0 || gx >= bins || gy >= bins) continue
-    const idx = (gy | 0) * bins + (gx | 0)
-    grid[idx]++
-    if (grid[idx] > peak) peak = grid[idx]
-  }
-
-  const box = (Math.min(w, h) * 0.92 * scale) / 4
-  const step = box / bins
-  const ox = (w - box) / 2
-  const oy = (h - box) / 2
-  const gamma = p.gamma
-
-  for (let j = 0; j < bins; j++) {
-    for (let i = 0; i < bins; i++) {
-      const v = grid[j * bins + i]
-      if (v === 0) continue
-      const k = Math.pow(v / peak, gamma) * amp
-      if (k < 0.02) continue
-      ctx.fillStyle = k > 0.75 ? rgba(ink.accent, Math.min(1, k)) : rgba(ink.fg, Math.min(1, k))
-      ctx.fillRect(ox + i * step, oy + j * step, step + 0.6, step + 0.6)
-    }
-  }
-}
-
-/**
  * A harmonograph: two damped pendulums, one per axis.
  *
  * Victorian drawing machines. Each axis is a sum of two decaying sinusoids, and
@@ -1121,6 +999,22 @@ const harmonograph: FigureFn = (ctx, w, h, t, intensity, scale, ink, _motion, p)
  * The number of lobes is the big radius over the greatest common divisor, so
  * the shape is decided by a *ratio of integers* and jumps discontinuously as
  * you turn either radius, which is why this one rewards nudging over sweeping.
+ *
+ * That integer ratio is also why spinning it is not enough to make it move. The
+ * curve has as many-fold rotational symmetry as it has lobes, so turning it is
+ * the one motion it can perform without looking like anything happened: at the
+ * default radii a full lobe of rotation takes under five seconds and the frame
+ * still reads as a still. The pen offset is the only continuous control here,
+ * the one thing that can change without the lobe count jumping, so that is what
+ * breathes. It draws back towards the rolling circle's centre and returns,
+ * which shallows every lobe and deepens it again.
+ *
+ * It only ever shortens, never extends. The frame this is fitted to is measured
+ * off the radii alone and has never accounted for the pen, so a curve drawn at
+ * the offset the user set is as large as the picture is allowed to get. Letting
+ * the breath run outward from there would push wide settings off the canvas.
+ * Drawing back instead means a spirograph that fits at rest fits throughout,
+ * and `t = 0` is still exactly the curve the controls describe.
  */
 const spirograph: FigureFn = (ctx, w, h, t, intensity, scale, ink, _motion, p) => {
   ground(ctx, w, h, ink.bg)
@@ -1128,7 +1022,10 @@ const spirograph: FigureFn = (ctx, w, h, t, intensity, scale, ink, _motion, p) =
   const cy = h / 2
   const R = p.outer
   const r = p.inner
-  const d = p.pen
+  // a fraction of the offset rather than a distance, so the breath is the same
+  // gesture whatever the pen is set to, and a full sweep lands it exactly on
+  // the rolling circle's centre rather than turning the curve inside out
+  const d = p.pen * (1 - (1 - Math.cos(t * p.drift * 0.8)) * 0.5 * p.sweep)
   const unit = (Math.min(w, h) * 0.44 * scale) / 5 / Math.max(1, R)
   const amp = intensity / 50
   const layers = Math.max(1, Math.round(p.layers))
@@ -1190,74 +1087,6 @@ const stringArt: FigureFn = (ctx, w, h, t, intensity, scale, ink, _motion, p) =>
     ctx.arc(cx, cy, r, 0, Math.PI * 2)
     ctx.stroke()
   }
-}
-
-/**
- * Recursive subdivision: a rectangle split until it stops.
- *
- * The oldest generative layout there is, and still the one that reads as
- * designed rather than as generated, because every edge lines up with another
- * edge by construction. Which way a cell splits and whether it splits at all
- * both come from its own hash, so the layout is stable and the animation lives
- * in the fill rather than in the geometry.
- *
- * The first cuts are not up for a vote, though. Every other decision here is a
- * coin flip against `split`, and when the root lost its flip the picture ended
- * before it began: one rectangle, drawn as an outline, filling the canvas. The
- * root's seed is fixed, so that was not an unlucky draw you could shuffle past
- * but the only thing this generator ever drew at any split chance below 0.92.
- * Two guaranteed levels mean there is always a layout to look at, and the
- * chance still decides everything underneath them.
- */
-const subdivide: FigureFn = (ctx, w, h, t, intensity, scale, ink, _motion, p) => {
-  ground(ctx, w, h, ink.bg)
-  const depth = Math.max(1, Math.round(p.depth))
-  const forced = Math.min(2, depth)
-  const gap = p.gap
-  const amp = intensity / 50
-  const bias = p.bias
-
-  const cell = (x: number, y: number, cw: number, ch: number, level: number, seed: number) => {
-    const roll = thash(seed)
-    const splits = level < forced || roll < p.split
-    if (level < depth && splits && Math.min(cw, ch) > p.min) {
-      // split across the long axis unless the bias says otherwise, which is
-      // what keeps the cells from degenerating into slivers
-      const vertical = cw > ch ? bias > thash(seed * 3.1) : bias < thash(seed * 3.1)
-      const cut = 0.3 + thash(seed * 5.7) * 0.4
-      if (vertical) {
-        cell(x, y, cw * cut, ch, level + 1, seed * 2 + 1)
-        cell(x + cw * cut, y, cw * (1 - cut), ch, level + 1, seed * 2 + 2)
-      } else {
-        cell(x, y, cw, ch * cut, level + 1, seed * 2 + 1)
-        cell(x, y + ch * cut, cw, ch * (1 - cut), level + 1, seed * 2 + 2)
-      }
-      return
-    }
-
-    const pulse = Math.sin(t * p.rate + seed * 0.9) * 0.5 + 0.5
-    const k = pulse * amp
-    const inset = gap * Math.min(cw, ch) * 0.5
-    const fx = x + inset
-    const fy = y + inset
-    const fw = Math.max(0, cw - inset * 2)
-    const fh = Math.max(0, ch - inset * 2)
-
-    if (roll > 0.93) {
-      ctx.fillStyle = rgba(ink.accent, 0.35 + k * 0.65)
-      ctx.fillRect(fx, fy, fw, fh)
-    } else if (thash(seed * 7.3) < p.filled) {
-      ctx.fillStyle = rgba(ink.fg, 0.15 + k * 0.7)
-      ctx.fillRect(fx, fy, fw, fh)
-    } else {
-      ctx.strokeStyle = rgba(ink.fg, 0.2 + k * 0.5)
-      ctx.lineWidth = Math.max(0.5, scale * 0.2)
-      ctx.strokeRect(fx, fy, fw, fh)
-    }
-  }
-
-  const pad = Math.min(w, h) * 0.04
-  cell(pad, pad, w - pad * 2, h - pad * 2, 0, 7)
 }
 
 /**
@@ -1364,39 +1193,6 @@ export const FIGURES: FigureSpec[] = [
     fn: phyllotaxis,
   },
   {
-    id: 'truchet',
-    label: 'Truchet',
-    group: 'Constructed',
-    hint: 'Quarter-circle tiles that always join. A maze nobody drew.',
-    uses: BASE,
-    params: [
-      param('cells', 'Cells', 2, 24, 1, 7),
-      param('depth', 'Subdivide', 0, 4, 1, 2, 'How many times a cell may split again'),
-      param('split', 'Split chance', 0, 1, 0.01, 0.45),
-      param('weight', 'Weight', 0.02, 0.5, 0.005, 0.16),
-      param('wave', 'Wave', 0, 4, 0.01, 1, 'How fast the line weight breathes'),
-    ],
-    fn: truchet,
-  },
-  {
-    id: 'attractor',
-    label: 'Attractor',
-    group: 'Constructed',
-    hint: 'A de Jong orbit, plotted by where it spends its time.',
-    uses: BASE,
-    params: [
-      param('a', 'A', -3, 3, 0.001, 1.641),
-      param('b', 'B', -3, 3, 0.001, 1.902),
-      param('c', 'C', -3, 3, 0.001, 0.316),
-      param('d', 'D', -3, 3, 0.001, 1.525),
-      param('drift', 'Drift', 0, 0.6, 0.005, 0.12, 'How far the coefficients wander'),
-      param('points', 'Points ×1000', 5, 300, 5, 90),
-      param('grain', 'Grain', 1, 6, 0.1, 1.6, 'Bin size. Coarser is faster and blockier.'),
-      param('gamma', 'Gamma', 0.15, 1.5, 0.01, 0.42, 'How hard the density is compressed'),
-    ],
-    fn: attractor,
-  },
-  {
     id: 'harmonograph',
     label: 'Harmonograph',
     group: 'Constructed',
@@ -1423,6 +1219,8 @@ export const FIGURES: FigureSpec[] = [
       param('outer', 'Outer R', 3, 40, 1, 13),
       param('inner', 'Inner r', 1, 30, 1, 5),
       param('pen', 'Pen offset', 0.5, 20, 0.1, 6),
+      param('sweep', 'Sweep', 0, 1, 0.01, 0.4, 'How much of the pen offset draws back in, which is what makes the lobes breathe'),
+      param('drift', 'Drift', 0, 3, 0.01, 1, 'How fast it breathes'),
       param('turns', 'Turns', 2, 40, 1, 12),
       param('layers', 'Layers', 1, 12, 1, 3),
       param('fan', 'Fan', 0, 1, 0.01, 0.3, 'How far apart the layers are turned'),
@@ -1448,23 +1246,6 @@ export const FIGURES: FigureSpec[] = [
       param('rim', 'Rim', 0, 1, 1, 1, 'Draw the circle the chords sit on'),
     ],
     fn: stringArt,
-  },
-  {
-    id: 'subdivide',
-    label: 'Subdivide',
-    group: 'Constructed',
-    hint: 'A rectangle split until it stops. Every edge lines up.',
-    uses: BASE,
-    params: [
-      param('depth', 'Depth', 1, 9, 1, 5),
-      param('split', 'Split chance', 0.1, 1, 0.01, 0.72),
-      param('bias', 'Bias', 0, 1, 0.01, 0.85, 'How strongly a cell prefers to cut its long axis'),
-      param('min', 'Min size', 4, 200, 1, 26),
-      param('gap', 'Gap', 0, 0.5, 0.005, 0.08),
-      param('filled', 'Filled', 0, 1, 0.01, 0.45, 'How many cells are solid rather than outlined'),
-      param('rate', 'Rate', 0, 6, 0.01, 1.2),
-    ],
-    fn: subdivide,
   },
   {
     id: 'isolines',

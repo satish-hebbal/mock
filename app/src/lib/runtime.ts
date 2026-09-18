@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { sampleKeyframes } from './evaluator'
-import type { ProjectDoc } from '../types'
+import type { Shot } from '../types'
 
 export interface ScreenHandle {
   texture: THREE.Texture
@@ -89,10 +89,10 @@ export function framingForDevices(fovDeg: number): { panX: number; panY: number;
 const tmpTarget = new THREE.Vector3()
 const { degToRad, clamp } = THREE.MathUtils
 
-export function applyAtTime(project: ProjectDoc, timeMs: number) {
-  const kf = sampleKeyframes(project.keyframes, timeMs)
+export function applyAtTime(shot: Shot, timeMs: number) {
+  const kf = sampleKeyframes(shot.keyframes, timeMs)
   const v = (target: string, base: number) => kf.get(target) ?? base
-  const c = project.scene.camera
+  const c = shot.scene.camera
 
   const cam = rt.camera
   if (cam) {
@@ -137,7 +137,7 @@ export function applyAtTime(project: ProjectDoc, timeMs: number) {
     )
   }
 
-  for (const dev of project.scene.devices) {
+  for (const dev of shot.scene.devices) {
     const g = rt.deviceGroups.get(dev.id)
     if (!g) continue
     const t = dev.transform

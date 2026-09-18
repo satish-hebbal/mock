@@ -6,7 +6,19 @@ import { getWallpaper } from './wallpapers'
 import { getPresetPhoto } from './presetPhotos'
 import { gradeFilter } from './grade'
 import { rgba } from './color'
-import type { AssetRuntime, BackgroundState, Overlay, ProjectDoc, SweepSpec } from '../types'
+import { activeShot, planFrames, sequenceLayout } from './sequence'
+import {
+  blockAlpha,
+  glyphsAt,
+  needsGlyphs,
+  progressOf,
+  resolveOverlays,
+  revealOf,
+  RISE_DISTANCE,
+  scaleOf,
+} from './overlays'
+import { useStudio } from '../store'
+import type { AssetRuntime, BackgroundState, Overlay, ProjectDoc, Shot, SweepSpec } from '../types'
 
 // ----- Background compositing (preview CSS ⇄ export canvas parity) -----
 
@@ -182,6 +194,8 @@ async function drawOverlays(
     ctx.globalAlpha = o.opacity
     ctx.translate(o.x * w, o.y * h)
     ctx.rotate((o.rotation * Math.PI) / 180)
+    const scale = scaleOf(o)
+    if (scale !== 1) ctx.scale(scale, scale)
     if (o.type === 'text') {
       const px = o.size * h
       ctx.font = `${o.weight} ${px}px "${o.font}", system-ui, sans-serif`
@@ -191,6 +205,12 @@ async function drawOverlays(
       const lineH = px * 1.25
       const startY = -((lines.length - 1) * lineH) / 2
       if (o.bg) {
+        /*
+         * Measured from the whole line, not from what has arrived so far, so a
+         * pill under a reveal is the size it will end up at from the first
+         * frame. A background that grew with the text would read as the pill
+         * being animated, which is not what was asked for.
+         */
         let maxW = 0
         for (const line of lines) maxW = Math.max(maxW, ctx.measureText(line).width)
         const padX = px * 0.6
@@ -203,7 +223,42 @@ async function drawOverlays(
         ctx.fill()
       }
       ctx.fillStyle = o.color
-      lines.forEach((line, i) => ctx.fillText(line, 0, startY + i * lineH))
+      const kind = revealOf(o)
+      const blockA = blockAlpha(kind, progressOf(o))
+
+      if (!needsGlyphs(o)) {
+        ctx.globalAlpha = o.opacity * blockA
+        lines.forEach((line, i) => ctx.fillText(line, 0, startY + i * lineH))
+      } else {
+        /*
+         * Mid-reveal, character by character, laid out the way the preview
+         * lays it out: each glyph advances by its own measured width from a
+         * line origin decided by the alignment. Canvas has no way to ask for
+         * "the first n characters, faded", and drawing a growing substring
+         * instead would slide a centred line sideways as it arrived.
+         */
+        const glyphs = glyphsAt(o.text, kind, progressOf(o))
+        ctx.textAlign = 'left'
+        let g = 0
+        lines.forEach((line, li) => {
+          const chars = [...line]
+          const widths = chars.map((c) => ctx.measureText(c).width)
+          const lineW = widths.reduce((a, b) => a + b, 0)
+          let x = o.align === 'left' ? 0 : o.align === 'right' ? -lineW : -lineW / 2
+          const y = startY + li * lineH
+          chars.forEach((c, ci) => {
+            const glyph = glyphs[g + ci]
+            if (glyph && glyph.alpha > 0.001) {
+              ctx.globalAlpha = o.opacity * blockA * glyph.alpha
+              ctx.fillText(c, x, y + glyph.rise * RISE_DISTANCE * px)
+            }
+            x += widths[ci]
+          })
+          // +1 for the newline that split the lines apart
+          g += chars.length + 1
+        })
+        ctx.globalAlpha = o.opacity
+      }
     } else if (o.type === 'shape') {
       const sw = o.width * w
       const sh = o.height * h
@@ -317,6 +372,104 @@ function resumeVideos() {
   for (const v of rt.videos.values()) void v.play().catch(() => {})
 }
 
+// ----- One composed frame -----
+
+/**
+ * The canvases a frame is built on, allocated once per export.
+ *
+ * `stage` holds the backdrop with the 3D render on top, which is the unit the
+ * colour grade applies to; `out` is what gets encoded, and is where the lens
+ * and the overlays land. Two canvases rather than one because the grade has to
+ * apply to the backdrop and the devices *together*, the way the preview stacks
+ * them, and a filter cannot be un-applied once something is drawn under it.
+ */
+interface FrameBufs {
+  out: HTMLCanvasElement
+  ctx: CanvasRenderingContext2D
+  stage: HTMLCanvasElement
+  sctx: CanvasRenderingContext2D
+}
+
+function makeBufs(width: number, height: number): FrameBufs {
+  const out = document.createElement('canvas')
+  out.width = width
+  out.height = height
+  const stage = document.createElement('canvas')
+  stage.width = width
+  stage.height = height
+  return {
+    out,
+    ctx: out.getContext('2d')!,
+    stage,
+    sctx: stage.getContext('2d')!,
+  }
+}
+
+/**
+ * Composite whatever the renderer last drew into a finished frame of `shot`.
+ *
+ * The order is the preview's order, and it is the reason a still and a frame of
+ * the video of the same moment come out identical: backdrop, 3D, grade over
+ * both, then the lens, then the overlays, which are stuck to the front of the
+ * frame rather than being in the picture.
+ */
+async function composeFrame(
+  b: FrameBufs,
+  shot: Shot,
+  assets: Record<string, AssetRuntime>,
+  width: number,
+  height: number,
+  transparent: boolean,
+  timeMs: number,
+) {
+  b.sctx.clearRect(0, 0, width, height)
+  await paintBackground(b.sctx, width, height, shot.scene.background, assets, transparent)
+  if (rt.gl) b.sctx.drawImage(rt.gl.domElement, 0, 0, width, height)
+
+  b.ctx.clearRect(0, 0, width, height)
+  const gf = gradeFilter(shot.scene.effects.grade)
+  if (gf) b.ctx.filter = gf
+  b.ctx.drawImage(b.stage, 0, 0)
+  b.ctx.filter = 'none'
+
+  applyPortrait(b.out, shot.scene.effects.portrait)
+  await drawOverlays(b.ctx, resolveOverlays(shot.overlays, shot.keyframes, timeMs), assets, width, height)
+}
+
+/**
+ * Drive the 3D renderer to one moment of one shot.
+ *
+ * With more than one motion-blur sample this renders the shot several times
+ * across the open-shutter window and averages them with a running mean, which
+ * is what turns a fast whip-pan from a stack of sharp stills into something
+ * that reads as movement.
+ */
+async function renderShotAt(
+  shot: Shot,
+  localMs: number,
+  mb: { samples: number; frameMs: number; acc: HTMLCanvasElement; accCtx: CanvasRenderingContext2D } | null,
+) {
+  if (mb && mb.samples > 1) {
+    const shutter = 0.6 // fraction of the frame interval the "shutter" is open
+    mb.accCtx.clearRect(0, 0, mb.acc.width, mb.acc.height)
+    for (let k = 0; k < mb.samples; k++) {
+      const frac = k / (mb.samples - 1) - 0.5
+      const t = localMs + shutter * mb.frameMs * frac
+      applyAtTime(shot, t)
+      await seekVideos(t)
+      renderFrame()
+      mb.accCtx.globalAlpha = 1 / (k + 1)
+      if (rt.gl) mb.accCtx.drawImage(rt.gl.domElement, 0, 0, mb.acc.width, mb.acc.height)
+    }
+    mb.accCtx.globalAlpha = 1
+    return mb.acc
+  }
+  applyAtTime(shot, localMs)
+  await seekVideos(localMs)
+  renderFrame()
+  return null
+}
+
 // ----- Image export (PRD §11.4) -----
 
 export interface ImageExportOptions {
@@ -329,58 +482,26 @@ export interface ImageExportOptions {
 
 export async function exportImage(
   project: ProjectDoc,
+  shot: Shot,
   assets: Record<string, AssetRuntime>,
   opts: ImageExportOptions,
   timeMs: number,
   filename?: string,
 ) {
   if (!rt.gl || !rt.camera) throw new Error('Renderer not ready')
-  await preloadOverlayFonts(project.overlays)
+  await preloadOverlayFonts(shot.overlays)
   rt.setFrameloop?.('never')
   // the gizmo lives in this scene; it must not reach the picture
   setEditorObjectsVisible(false)
   await pauseVideos()
   const backup = resizeRenderer(opts.width, opts.height)
   try {
-    applyAtTime(project, timeMs)
-    await seekVideos(timeMs)
-    renderFrame()
-
-    const out = document.createElement('canvas')
-    out.width = opts.width
-    out.height = opts.height
-    const ctx = out.getContext('2d')!
-
-    // Stage: background + 3D, composited then color-graded as one unit so the
-    // grade matches the preview wrapper (overlays/watermark stay ungraded).
-    const stage = document.createElement('canvas')
-    stage.width = opts.width
-    stage.height = opts.height
-    const sctx = stage.getContext('2d')!
-    await paintBackground(sctx, opts.width, opts.height, project.scene.background, assets, opts.transparent)
-    sctx.drawImage(rt.gl.domElement, 0, 0, opts.width, opts.height)
-
-    const gf = gradeFilter(project.scene.effects.grade)
-    if (gf) ctx.filter = gf
-    ctx.drawImage(stage, 0, 0)
-    ctx.filter = 'none'
-
-    /*
-     * After the graded stage and before the overlays, which is exactly where
-     * the preview stacks its own layers.
-     *
-     * The lens does not know which parts of a scene were drawn separately, so
-     * it takes the background, the devices and their shadows together. It stops
-     * short of the overlays because those are not in the picture: a caption or
-     * a logo is stuck to the front of the frame, and defocusing it would read as
-     * a mistake rather than as depth.
-     */
-    applyPortrait(out, project.scene.effects.portrait)
-
-    await drawOverlays(ctx, project.overlays, assets, opts.width, opts.height)
+    await renderShotAt(shot, timeMs, null)
+    const b = makeBufs(opts.width, opts.height)
+    await composeFrame(b, shot, assets, opts.width, opts.height, opts.transparent, timeMs)
 
     const mime = opts.format === 'png' ? 'image/png' : opts.format === 'jpg' ? 'image/jpeg' : 'image/webp'
-    const blob = await new Promise<Blob | null>((res) => out.toBlob(res, mime, opts.quality))
+    const blob = await new Promise<Blob | null>((res) => b.out.toBlob(res, mime, opts.quality))
     if (!blob) throw new Error('Encoding failed')
     downloadBlob(blob, `${filename ?? safeName(project.name)}.${opts.format}`)
   } finally {
@@ -403,8 +524,63 @@ export interface VideoExportOptions {
   transparent: boolean
   /** temporal samples per frame for motion blur (1 = off) */
   motionBlurSamples?: number
+  /** render the whole film, or only the shot being edited */
+  scope?: 'film' | 'shot'
 }
 
+/** Wait for the browser to paint, so a React commit has somewhere to land. */
+const nextFrame = () => new Promise<void>((r) => requestAnimationFrame(() => r()))
+
+/**
+ * Put a shot on screen and wait until it is actually there.
+ *
+ * Shots are mounted by React from the active shot on the store, so rendering a
+ * different one means committing that change and letting the scene rebuild.
+ * Two frames covers the commit; the poll after it covers the part React cannot
+ * promise, a device model still downloading or a screenshot still decoding.
+ * Without the wait the first frames of a shot export as an empty set, which is
+ * the kind of bug that only shows up on someone else's slower machine.
+ */
+async function mountShot(shot: Shot, timeoutMs = 6000) {
+  const st = useStudio.getState()
+  if (st.project.activeShotId !== shot.id) st.activateForRender(shot.id)
+  await nextFrame()
+  await nextFrame()
+
+  const deadline = performance.now() + timeoutMs
+  for (;;) {
+    const meshes = shot.scene.devices.every((d) => {
+      const g = rt.deviceGroups.get(d.id)
+      return !!g && g.children.length > 0
+    })
+    const screens = shot.scene.devices.every((d) => !d.screen.assetId || rt.screens.has(d.id))
+    if ((meshes && screens) || performance.now() > deadline) return
+    await nextFrame()
+  }
+}
+
+/**
+ * How many outgoing frames a dissolve may hold in memory at full resolution.
+ *
+ * A dissolve is the one transition that needs both shots' pixels at the same
+ * instant, and only one shot is mounted at a time, so the outgoing side has to
+ * be kept. Frames are bitmaps, so the cost scales with the export size: a
+ * budget in bytes rather than a fixed count is what keeps a 4K export from
+ * asking the browser for two gigabytes. Past the cap the held frames are
+ * sampled rather than dropped, which shows up as a slightly stepped fade on a
+ * layer that is on its way out anyway.
+ */
+const DISSOLVE_BUDGET_BYTES = 384 * 1024 * 1024
+
+/**
+ * Render the film, or one shot of it, straight to a video file.
+ *
+ * Shots are rendered in order and their frames encoded in order, so the encoder
+ * never sees a frame twice or out of sequence. The only thing that complicates
+ * that is a dissolve, where two shots are on screen at once: the outgoing
+ * shot's overlapping frames are composed during its own pass and held, then
+ * blended under the incoming shot's frames when its turn comes.
+ */
 export async function exportVideo(
   project: ProjectDoc,
   assets: Record<string, AssetRuntime>,
@@ -415,40 +591,73 @@ export async function exportVideo(
   if (typeof VideoEncoder === 'undefined')
     throw new Error('WebCodecs is not supported in this browser. Try Chrome or Edge.')
 
-  await preloadOverlayFonts(project.overlays)
+  const film: ProjectDoc =
+    opts.scope === 'shot' ? { ...project, shots: [activeShot(project)] } : project
+
+  for (const shot of film.shots) await preloadOverlayFonts(shot.overlays)
 
   const { Output, BufferTarget, Mp4OutputFormat, WebMOutputFormat, CanvasSource } = await import(
     'mediabunny'
   )
 
   const transparent = opts.transparent && opts.format === 'webm'
-  const canvas = document.createElement('canvas')
-  canvas.width = opts.width
-  canvas.height = opts.height
-  const ctx = canvas.getContext('2d')!
+  const { width, height, fps } = opts
+  const frameMs = 1000 / fps
+  const b = makeBufs(width, height)
 
-  // Stage (background + graded 3D) and, for motion blur, a GL accumulation buffer.
-  const stage = document.createElement('canvas')
-  stage.width = opts.width
-  stage.height = opts.height
-  const sctx = stage.getContext('2d')!
-  const gf = gradeFilter(project.scene.effects.grade)
   const mbSamples = Math.max(1, Math.round(opts.motionBlurSamples ?? 1))
-  const acc = mbSamples > 1 ? document.createElement('canvas') : null
-  const accCtx = acc ? (() => { acc.width = opts.width; acc.height = opts.height; return acc.getContext('2d')! })() : null
-  const frameMs = 1000 / opts.fps
-  const shutter = 0.6 // fraction of the frame interval the "shutter" is open
+  const mb =
+    mbSamples > 1
+      ? (() => {
+          const acc = document.createElement('canvas')
+          acc.width = width
+          acc.height = height
+          return { samples: mbSamples, frameMs, acc, accCtx: acc.getContext('2d')! }
+        })()
+      : null
+
+  const layout = sequenceLayout(film)
+  // who renders each frame, decided up front, so the loop below stays a
+  // straight walk through the shots with every frame already spoken for
+  const plan = planFrames(film, fps)
+  const total = plan.length
+
+  // frames each shot has to render: the ones it owns, plus the ones a dissolve
+  // will need from it after it has left the screen
+  const owned: number[][] = layout.map(() => [])
+  const held: number[][] = layout.map(() => [])
+  plan.forEach((p, f) => {
+    owned[p.owner].push(f)
+    if (p.under !== null) held[p.under].push(f)
+  })
+
+  /*
+   * Which held frame each overlapping frame actually uses.
+   *
+   * With a big enough export and a long enough dissolve, holding every
+   * outgoing frame would be too much memory, so several frames share one. The
+   * mapping is built from each shot's own list rather than from arithmetic on
+   * the frame index, so a shared frame is always one that really was held and
+   * never one that belongs to the shot before it.
+   */
+  const maxHeld = Math.max(2, Math.floor(DISSOLVE_BUDGET_BYTES / (width * height * 4)))
+  const longestHold = held.reduce((m, list) => Math.max(m, list.length), 0)
+  const holdStride = longestHold > maxHeld ? Math.ceil(longestHold / maxHeld) : 1
+  const holdKey = new Map<number, number>()
+  for (const list of held)
+    list.forEach((f, i) => holdKey.set(f, list[Math.floor(i / holdStride) * holdStride]))
+  const stash = new Map<number, ImageBitmap>()
 
   const output = new Output({
     format: opts.format === 'mp4' ? new Mp4OutputFormat({ fastStart: 'in-memory' }) : new WebMOutputFormat(),
     target: new BufferTarget(),
   })
-  const source = new CanvasSource(canvas, {
+  const source = new CanvasSource(b.out, {
     codec: opts.format === 'mp4' ? 'avc' : 'vp9',
     bitrate: opts.bitrate,
     ...(transparent ? { alpha: 'keep' as const } : {}),
   })
-  output.addVideoTrack(source, { frameRate: opts.fps })
+  output.addVideoTrack(source, { frameRate: fps })
   await output.start()
 
   rt.exportCancelled = false
@@ -456,52 +665,90 @@ export async function exportVideo(
   // the gizmo lives in this scene; it must not reach the picture
   setEditorObjectsVisible(false)
   await pauseVideos()
-  const backup = resizeRenderer(opts.width, opts.height)
-  const total = Math.max(1, Math.round((project.durationMs / 1000) * opts.fps))
+  const backup = resizeRenderer(width, height)
+  const restoreShotId = project.activeShotId
+  let done = 0
 
   try {
-    for (let i = 0; i < total; i++) {
+    for (const placed of layout) {
       if (rt.exportCancelled) break
-      const t = (i * 1000) / opts.fps
+      const shot = placed.shot
+      await mountShot(shot)
+      // a fresh mount resizes the canvas back to the viewport's size
+      resizeRenderer(width, height)
 
-      // Compose background + 3D into the stage (grade is applied on blit below).
-      sctx.clearRect(0, 0, opts.width, opts.height)
-      await paintBackground(sctx, opts.width, opts.height, project.scene.background, assets, transparent)
+      // ascending, so the encoder is fed in order and a held frame is always
+      // composed before the frame that blends it
+      const work = [
+        ...new Set([...owned[placed.index], ...held[placed.index].map((f) => holdKey.get(f) ?? f)]),
+      ].sort((x, y) => x - y)
 
-      if (accCtx && acc) {
-        // Motion blur: average `mbSamples` renders across the open-shutter window
-        // via a running mean (alpha = 1/(k+1)) into the accumulation buffer.
-        accCtx.clearRect(0, 0, opts.width, opts.height)
-        for (let k = 0; k < mbSamples; k++) {
-          const frac = mbSamples === 1 ? 0 : k / (mbSamples - 1) - 0.5
-          const st = t + shutter * frameMs * frac
-          applyAtTime(project, st)
-          await seekVideos(st)
-          renderFrame()
-          accCtx.globalAlpha = 1 / (k + 1)
-          accCtx.drawImage(rt.gl.domElement, 0, 0, opts.width, opts.height)
+      for (const f of work) {
+        if (rt.exportCancelled) break
+        const localMs = Math.min(shot.durationMs, Math.max(0, f * frameMs - placed.start))
+        const accumulated = await renderShotAt(shot, localMs, mb)
+        if (accumulated) {
+          // motion blur composited its own average; hand it over as the render
+          b.sctx.clearRect(0, 0, width, height)
+          await paintBackground(b.sctx, width, height, shot.scene.background, assets, transparent)
+          b.sctx.drawImage(accumulated, 0, 0)
+          const gf = gradeFilter(shot.scene.effects.grade)
+          b.ctx.clearRect(0, 0, width, height)
+          if (gf) b.ctx.filter = gf
+          b.ctx.drawImage(b.stage, 0, 0)
+          b.ctx.filter = 'none'
+          applyPortrait(b.out, shot.scene.effects.portrait)
+          await drawOverlays(
+            b.ctx,
+            resolveOverlays(shot.overlays, shot.keyframes, localMs),
+            assets,
+            width,
+            height,
+          )
+        } else {
+          await composeFrame(b, shot, assets, width, height, transparent, localMs)
         }
-        accCtx.globalAlpha = 1
-        sctx.drawImage(acc, 0, 0)
-      } else {
-        applyAtTime(project, t)
-        await seekVideos(t)
-        renderFrame()
-        sctx.drawImage(rt.gl.domElement, 0, 0, opts.width, opts.height)
+
+        const isOwner = plan[f]?.owner === placed.index
+        if (!isOwner) {
+          // this shot is only here to be kept for the dissolve ahead of it
+          stash.set(f, await createImageBitmap(b.out))
+          continue
+        }
+
+        const p = plan[f]
+        if (p.under !== null) {
+          const under = stash.get(holdKey.get(f) ?? f)
+          if (under) {
+            // out = mix·incoming + (1 − mix)·outgoing
+            b.ctx.save()
+            b.ctx.globalAlpha = 1 - p.mix
+            b.ctx.drawImage(under, 0, 0, width, height)
+            b.ctx.restore()
+          }
+        }
+        if (p.veil && p.veil.alpha > 0) {
+          b.ctx.save()
+          b.ctx.globalAlpha = p.veil.alpha
+          b.ctx.fillStyle = p.veil.color
+          b.ctx.fillRect(0, 0, width, height)
+          b.ctx.restore()
+        }
+
+        await source.add(f / fps, 1 / fps)
+        done++
+        onProgress(done, total)
+        if (done % 8 === 0) await new Promise((r) => setTimeout(r, 0))
       }
 
-      ctx.clearRect(0, 0, opts.width, opts.height)
-      if (gf) ctx.filter = gf
-      ctx.drawImage(stage, 0, 0)
-      ctx.filter = 'none'
-      // same place in the chain as the still export, so a frame of the video
-      // and a snapshot of the same moment come out identical
-      applyPortrait(canvas, project.scene.effects.portrait)
-      await drawOverlays(ctx, project.overlays, assets, opts.width, opts.height)
-
-      await source.add(i / opts.fps, 1 / opts.fps)
-      onProgress(i + 1, total)
-      if (i % 8 === 0) await new Promise((r) => setTimeout(r, 0))
+      // nothing after this shot can blend with it any more
+      if (placed.index > 0) {
+        for (const f of held[placed.index - 1]) {
+          const key = holdKey.get(f) ?? f
+          stash.get(key)?.close()
+          stash.delete(key)
+        }
+      }
     }
 
     if (rt.exportCancelled) {
@@ -515,10 +762,15 @@ export async function exportVideo(
     const mime = opts.format === 'mp4' ? 'video/mp4' : 'video/webm'
     downloadBlob(new Blob([buffer], { type: mime }), `${safeName(project.name)}.${opts.format}`)
   } finally {
+    for (const bmp of stash.values()) bmp.close()
+    stash.clear()
     setEditorObjectsVisible(true)
     if (backup) restoreRenderer(backup)
     resumeVideos()
     rt.setFrameloop?.('always')
+    // put the editor back on the shot the user was working on
+    if (useStudio.getState().project.activeShotId !== restoreShotId)
+      useStudio.getState().activateForRender(restoreShotId)
   }
 }
 
@@ -534,9 +786,10 @@ export interface BatchSize {
   height: number
 }
 
-/** Render the current scene across several output sizes, one file each. */
+/** Render the current shot across several output sizes, one file each. */
 export async function exportImageBatch(
   project: ProjectDoc,
+  shot: Shot,
   assets: Record<string, AssetRuntime>,
   sizes: BatchSize[],
   format: 'png' | 'jpg' | 'webp',
@@ -552,6 +805,7 @@ export async function exportImageBatch(
     onProgress(i, sizes.length, `Exporting ${size.name}…`)
     await exportImage(
       project,
+      shot,
       assets,
       { width: size.width, height: size.height, format, quality, transparent },
       timeMs,
@@ -563,18 +817,59 @@ export async function exportImageBatch(
   }
 }
 
+/**
+ * One still per shot, taken at the same point through each.
+ *
+ * The obvious thing to want once a project holds several takes: a contact
+ * sheet of the film as separate files, rather than a video of it.
+ */
+export async function exportShotStills(
+  project: ProjectDoc,
+  assets: Record<string, AssetRuntime>,
+  opts: ImageExportOptions,
+  /** 0..1 through each shot */
+  at: number,
+  onProgress: (done: number, total: number, label: string) => void,
+) {
+  rt.exportCancelled = false
+  const restoreShotId = project.activeShotId
+  try {
+    for (let i = 0; i < project.shots.length; i++) {
+      if (rt.exportCancelled) break
+      const shot = project.shots[i]
+      onProgress(i, project.shots.length, `Rendering ${shot.name}…`)
+      await mountShot(shot)
+      await exportImage(
+        project,
+        shot,
+        assets,
+        opts,
+        shot.durationMs * Math.min(1, Math.max(0, at)),
+        safeName(`${project.name}_${shot.name}`),
+      )
+      onProgress(i + 1, project.shots.length, `Rendering ${shot.name}…`)
+      await new Promise((r) => setTimeout(r, 350))
+    }
+  } finally {
+    if (useStudio.getState().project.activeShotId !== restoreShotId)
+      useStudio.getState().activateForRender(restoreShotId)
+  }
+}
+
 // ----- Quick capture at viewport state -----
 
 export async function quickCapture(project: ProjectDoc, assets: Record<string, AssetRuntime>, timeMs: number) {
+  const shot = activeShot(project)
   await exportImage(
     project,
+    shot,
     assets,
     {
       width: project.exportSize.width,
       height: project.exportSize.height,
       format: 'png',
       quality: 1,
-      transparent: project.scene.background.type === 'transparent',
+      transparent: shot.scene.background.type === 'transparent',
     },
     timeMs,
   )

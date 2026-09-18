@@ -4,15 +4,31 @@ import { loadAsset, loadProjectJSON, saveAsset, saveProjectJSON } from './lib/db
 import { ui } from './lib/ui'
 import { track } from './lib/analytics'
 import { getTargetValue, sampleKeyframes, setTargetValue } from './lib/evaluator'
-import { DEFAULT_DEVICE_ID, getDevice } from './lib/registry'
-import { ANIMATION_PRESETS, TEMPLATES } from './lib/presets'
-import { DEFAULT_LOOK, getLook } from './lib/studio'
+import { getDevice } from './lib/registry'
+import { ANIMATION_PRESETS, TEMPLATES, TEXT_ANIMATIONS } from './lib/presets'
+import { getLook } from './lib/studio'
 import { NEUTRAL_GRADE } from './lib/grade'
 import { coalesces, endEditRun, patchLabel } from './lib/history'
-import { framingForDevices } from './lib/runtime'
-import { WALLPAPERS } from './lib/wallpapers'
+import { framingForDevices, rt } from './lib/runtime'
+import { modeFromLocation, writeMode } from './lib/routes'
 import { defaultPortrait, type Portrait } from './lib/portrait'
-import { PRESET_PHOTOS } from './lib/presetPhotos'
+import {
+  defaultProject,
+  defaultScene,
+  makeShot,
+  migrateProject,
+  repairShots,
+} from './lib/project'
+import {
+  activeShot,
+  defaultTransition,
+  MAX_SHOTS,
+  MAX_TRANSITION_MS,
+  MIN_SHOT_MS,
+  resolveSequence,
+  sequenceDuration,
+  shotStart,
+} from './lib/sequence'
 import type {
   AssetMeta,
   AssetRuntime,
@@ -27,11 +43,24 @@ import type {
   Keyframe,
   Overlay,
   ProjectDoc,
+  ProjectDocV2,
+  Shot,
   SweepSpec,
+  Transition,
   Vec3,
 } from './types'
 
 const uid = () => crypto.randomUUID()
+
+/**
+ * The shot every scene edit lands on.
+ *
+ * Scene state used to live on the document, so the whole store wrote to
+ * `project.scene`. It now lives on the active shot and this is the one hop
+ * that gets it: every setter goes through here rather than reaching for a shot
+ * by index, so "which take am I editing" has exactly one answer.
+ */
+const cur = activeShot
 
 /** How many files the media tray holds. */
 export const MAX_SCREEN_MEDIA = 5
@@ -51,59 +80,6 @@ export interface ExportProgress {
   total: number
 }
 
-function defaultDevice(): DeviceInstance {
-  const spec = getDevice(DEFAULT_DEVICE_ID)
-  return {
-    id: `dev_${uid()}`,
-    modelId: spec.id,
-    colorVariant: spec.colors[0]?.id ?? 'stock',
-    orientation: 'portrait',
-    transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: 1 },
-    screen: { assetId: null, fit: 'cover', scroll: 0 },
-  }
-}
-
-export function defaultProject(): ProjectDoc {
-  // A new project opens on a lit set rather than a flat gradient: the
-  // three-point rig, its sweep, and the framing that setup was built around.
-  const look = DEFAULT_LOOK
-  return {
-    version: 2,
-    name: 'Untitled Mockup',
-    durationMs: 3000,
-    fps: 30,
-    exportSize: { width: 1920, height: 1080 },
-    scene: {
-      devices: [defaultDevice()],
-      camera: { ...look.camera, panX: 0, panY: 0, rotateX: 0, rotateY: 0 },
-      background: {
-        type: 'studio',
-        color: '#b8c4e8',
-        gradient: { kind: 'linear', angle: 135, from: '#c7b9f0', to: '#9fc4ee' },
-        mesh: { seed: 7, colors: ['#a18cd1', '#fbc2eb', '#8ec5fc', '#e0c3fc'] },
-        sweep: { ...look.sweep },
-        imageAssetId: null,
-        blur: 0,
-        brightness: 1,
-        wallpaperId: WALLPAPERS[0].id,
-        photoId: PRESET_PHOTOS[0].id,
-      },
-      environment: { ...look.env },
-      ground: { ...look.ground },
-      effects: {
-        bloom: 0,
-        noise: 0,
-        vignette: 0,
-        chromatic: 0,
-        grade: { exposure: 1, contrast: 1, saturation: 1, temperature: 0 },
-      },
-    },
-    overlays: [],
-    keyframes: [],
-    assets: [],
-  }
-}
-
 export type AppMode = 'home' | 'studio' | 'shots' | 'draw' | 'ascii' | 'signal'
 
 /** Sections of the left tool rail in Studio; each one opens the panel beside it. */
@@ -114,6 +90,9 @@ export type ShotsSection = 'mockup' | 'frame'
 
 /** Transform-gizmo mode, mirroring Blender's move/rotate/scale tools. */
 export type GizmoMode = 'off' | 'translate' | 'rotate' | 'scale'
+
+/** Whether the transport runs one shot or the whole compiled film. */
+export type ScrubMode = 'shot' | 'sequence'
 
 interface StudioState {
   hydrated: boolean
@@ -140,9 +119,22 @@ interface StudioState {
   focusGuide: boolean
   selectedOverlayId: string | null
   selectedKeyframeIds: string[]
+  /** playhead *within the active shot*; the film's own clock is derived */
   timeMs: number
   playing: boolean
   loop: boolean
+  /**
+   * What the transport moves through: one shot, or the whole compiled film.
+   * Editor state, never saved, because it is a way of looking rather than
+   * anything about the project.
+   */
+  scrubMode: ScrubMode
+  /**
+   * Last frame seen of each shot, as a small data URL, keyed by shot id.
+   * Runtime only: these are re-taken as you work, and baking them into the
+   * document would multiply its size for something a render gives back free.
+   */
+  shotThumbs: Record<string, string>
   dialog: DialogKind
   exportProgress: ExportProgress | null
   past: ProjectDoc[]
@@ -206,6 +198,10 @@ interface StudioState {
   updateOverlay: (id: string, patch: Partial<Overlay>) => void
   removeOverlay: (id: string) => void
   selectOverlay: (id: string | null) => void
+  /** lay a ready-made text move onto an overlay, starting at the playhead */
+  applyTextAnimation: (overlayId: string, presetId: string) => void
+  /** drop every keyframe belonging to one overlay */
+  clearOverlayAnimation: (overlayId: string) => void
 
   // keyframes
   toggleTrack: (target: string) => void
@@ -223,8 +219,28 @@ interface StudioState {
   // templates
   applyTemplate: (templateId: string) => void
 
+  // shots
+  /** add a shot after the active one; copies it unless `blank` */
+  addShot: (opts?: { blank?: boolean }) => void
+  duplicateShot: (id: string) => void
+  removeShot: (id: string) => void
+  renameShot: (id: string, name: string) => void
+  /** move a shot to another slot in the film */
+  moveShot: (id: string, toIndex: number) => void
+  /** make a shot the one being edited, parking the playhead at `atMs` into it */
+  selectShot: (id: string, atMs?: number) => void
+  setShotDuration: (id: string, ms: number) => void
+  setTransition: (id: string, patch: Partial<Transition>) => void
+  /** take a still of the live viewport for the ribbon; no-op without a renderer */
+  captureShotThumb: (id?: string) => void
+  /** switch shots for a render pass: no history, no playhead reset */
+  activateForRender: (id: string) => void
+
   // playback
   setTime: (ms: number) => void
+  /** scrub the film: picks the shot showing at `ms` and seeks inside it */
+  setGlobalTime: (ms: number) => void
+  setScrubMode: (m: ScrubMode) => void
   setPlaying: (playing: boolean) => void
   setLoop: (loop: boolean) => void
 
@@ -250,6 +266,34 @@ interface StudioState {
 }
 
 const clone = (p: ProjectDoc): ProjectDoc => JSON.parse(JSON.stringify(p)) as ProjectDoc
+
+/** Widest a ribbon thumbnail gets drawn; its height follows the frame's aspect. */
+const THUMB_W = 192
+
+/**
+ * A still of whatever the viewport last drew, small enough to keep in memory.
+ *
+ * Only the 3D canvas, which is transparent where the backdrop shows through.
+ * The ribbon paints each shot's own background behind the image with the same
+ * CSS the viewport uses, so a chip stays truthful about the backdrop without
+ * this having to re-run the exporter's compositing every time you change shots.
+ */
+function captureViewportThumb(): string | null {
+  const src = rt.gl?.domElement
+  if (!src || src.width === 0 || src.height === 0) return null
+  try {
+    const c = document.createElement('canvas')
+    c.width = THUMB_W
+    c.height = Math.max(1, Math.round((THUMB_W * src.height) / src.width))
+    const ctx = c.getContext('2d')
+    if (!ctx) return null
+    ctx.drawImage(src, 0, 0, c.width, c.height)
+    return c.toDataURL('image/png')
+  } catch {
+    // a tainted or lost context is not worth failing a shot switch over
+    return null
+  }
+}
 
 async function metaForBlob(blob: Blob, mime: string): Promise<Pick<AssetMeta, 'kind' | 'w' | 'h'>> {
   if (mime.startsWith('video/')) {
@@ -290,7 +334,9 @@ export const useStudio = create<StudioState>()(
   immer((set, get) => ({
     hydrated: false,
     theme: 'dark',
-    mode: 'studio',
+    // a deep link is known before `hydrate` gets to run, and reading it here
+    // means /draw paints Draw rather than a frame of whatever was last open
+    mode: modeFromLocation() ?? 'studio',
     toolPanelOpen: localStorage.getItem('ms-tool-panel') !== 'closed',
     // 'studio' was its own section before the looks moved in beside the backdrop
     toolSection: ((v) => (v === 'studio' ? 'background' : v) ?? 'devices')(
@@ -310,6 +356,8 @@ export const useStudio = create<StudioState>()(
     timeMs: 0,
     playing: false,
     loop: true,
+    scrubMode: 'shot',
+    shotThumbs: {},
     dialog: null,
     exportProgress: null,
     past: [],
@@ -333,10 +381,12 @@ export const useStudio = create<StudioState>()(
         s.future.push(clone(s.project))
         s.project = prev
         s.selectedKeyframeIds = []
-        if (s.selectedDeviceId && !prev.scene.devices.some((d) => d.id === s.selectedDeviceId))
-          s.selectedDeviceId = prev.scene.devices[0]?.id ?? null
-        if (s.selectedOverlayId && !prev.overlays.some((o) => o.id === s.selectedOverlayId))
+        const shot = cur(prev)
+        if (s.selectedDeviceId && !shot.scene.devices.some((d) => d.id === s.selectedDeviceId))
+          s.selectedDeviceId = shot.scene.devices[0]?.id ?? null
+        if (s.selectedOverlayId && !shot.overlays.some((o) => o.id === s.selectedOverlayId))
           s.selectedOverlayId = null
+        if (s.timeMs > shot.durationMs) s.timeMs = shot.durationMs
       })
     },
 
@@ -353,13 +403,8 @@ export const useStudio = create<StudioState>()(
 
     setProjectName: (name) => set((s) => void (s.project.name = name)),
 
-    setDuration: (ms) => {
-      get().commit('duration')
-      set((s) => {
-        s.project.durationMs = Math.min(30000, Math.max(500, Math.round(ms)))
-        if (s.timeMs > s.project.durationMs) s.timeMs = s.project.durationMs
-      })
-    },
+    /** Length of the shot on screen. The film's length is the sum of these. */
+    setDuration: (ms) => get().setShotDuration(get().project.activeShotId, ms),
 
     setFps: (fps) => set((s) => void (s.project.fps = fps)),
 
@@ -378,7 +423,7 @@ export const useStudio = create<StudioState>()(
       get().commit('new-project')
       set((s) => {
         s.project = defaultProject()
-        s.selectedDeviceId = s.project.scene.devices[0]?.id ?? null
+        s.selectedDeviceId = cur(s.project).scene.devices[0]?.id ?? null
         s.selectedOverlayId = null
         s.selectedKeyframeIds = []
         s.timeMs = 0
@@ -391,7 +436,8 @@ export const useStudio = create<StudioState>()(
       set((s) => {
         s.project = doc
         s.assets = { ...s.assets, ...assets }
-        s.selectedDeviceId = doc.scene.devices[0]?.id ?? null
+        s.shotThumbs = {}
+        s.selectedDeviceId = cur(doc).scene.devices[0]?.id ?? null
         s.selectedOverlayId = null
         s.selectedKeyframeIds = []
         s.timeMs = 0
@@ -402,13 +448,13 @@ export const useStudio = create<StudioState>()(
     setAnimatable: (target, value, label = target) => {
       get().commit(label)
       set((s) => {
-        const kfs = s.project.keyframes.filter((k) => k.target === target)
+        const kfs = cur(s.project).keyframes.filter((k) => k.target === target)
         if (kfs.length > 0) {
           const t = s.timeMs
           const existing = kfs.find((k) => Math.abs(k.timeMs - t) <= 1)
           if (existing) existing.value = value
           else
-            s.project.keyframes.push({
+            cur(s.project).keyframes.push({
               id: `kf_${uid()}`,
               target,
               timeMs: t,
@@ -419,26 +465,26 @@ export const useStudio = create<StudioState>()(
         // Always write the live scene value too, a keyframe just landed exactly
         // at the current time, so this matches what re-sampling would produce,
         // and it keeps the slider/viewport from freezing on tracked properties.
-        setTargetValue(s.project.scene, target, value)
+        setTargetValue(cur(s.project), target, value)
       })
     },
 
     setCamera: (patch, label = 'camera') => {
       get().commit(label)
       set((s) => {
-        Object.assign(s.project.scene.camera, patch)
+        Object.assign(cur(s.project).scene.camera, patch)
         // If any of these camera properties are animated, applyAtTime() would
         // re-sample the keyframe and clobber the value we just wrote (making
         // presets look dead). Land a keyframe at the playhead for tracked props.
         const t = s.timeMs
         for (const key of Object.keys(patch)) {
           const target = `camera.${key}`
-          const kfs = s.project.keyframes.filter((k) => k.target === target)
+          const kfs = cur(s.project).keyframes.filter((k) => k.target === target)
           if (kfs.length === 0) continue
           const value = (patch as Record<string, number>)[key]
           const existing = kfs.find((k) => Math.abs(k.timeMs - t) <= 1)
           if (existing) existing.value = value
-          else s.project.keyframes.push({ id: `kf_${uid()}`, target, timeMs: t, value, easing: 'smooth' })
+          else cur(s.project).keyframes.push({ id: `kf_${uid()}`, target, timeMs: t, value, easing: 'smooth' })
         }
       })
     },
@@ -446,13 +492,13 @@ export const useStudio = create<StudioState>()(
     setBackground: (patch) => {
       get().commit('background')
       set((s) => {
-        Object.assign(s.project.scene.background, patch)
+        Object.assign(cur(s.project).scene.background, patch)
       })
     },
     setEnvironment: (patch) => {
       get().commit('environment')
       set((s) => {
-        Object.assign(s.project.scene.environment, patch)
+        Object.assign(cur(s.project).scene.environment, patch)
       })
     },
 
@@ -462,8 +508,8 @@ export const useStudio = create<StudioState>()(
       track('studio_look_applied', { look_id: lookId, with_camera: withCamera })
       get().commit(`look-${lookId}`)
       set((s) => {
-        s.project.scene.environment = { ...look.env }
-        s.project.scene.ground = { ...look.ground }
+        cur(s.project).scene.environment = { ...look.env }
+        cur(s.project).scene.ground = { ...look.ground }
         /*
          * The look owns the sweep, always, so switching setups and then going
          * back to the paper gets the paper that setup was designed around.
@@ -474,36 +520,36 @@ export const useStudio = create<StudioState>()(
          * you had chosen, which is not what relighting means. The Background
          * tab is one click away when you do want the paper back.
          */
-        s.project.scene.background.sweep = { ...look.sweep }
+        cur(s.project).scene.background.sweep = { ...look.sweep }
         // a look owns the mood effects, so switching setups never leaves the
         // last one's bloom behind; grain and fringe stay as the user set them
-        Object.assign(s.project.scene.effects, {
+        Object.assign(cur(s.project).scene.effects, {
           bloom: 0,
           vignette: 0,
           ...look.effects,
         })
-        s.project.scene.effects.grade = { ...NEUTRAL_GRADE, ...look.grade }
-        if (withCamera) Object.assign(s.project.scene.camera, look.camera)
+        cur(s.project).scene.effects.grade = { ...NEUTRAL_GRADE, ...look.grade }
+        if (withCamera) Object.assign(cur(s.project).scene.camera, look.camera)
       })
     },
 
     setSweep: (patch) => {
       get().commit('sweep')
       set((s) => {
-        Object.assign(s.project.scene.background.sweep, patch)
-        s.project.scene.background.type = 'studio'
+        Object.assign(cur(s.project).scene.background.sweep, patch)
+        cur(s.project).scene.background.type = 'studio'
       })
     },
     setGround: (patch) => {
       get().commit('ground')
       set((s) => {
-        Object.assign(s.project.scene.ground, patch)
+        Object.assign(cur(s.project).scene.ground, patch)
       })
     },
     setEffects: (patch) => {
       get().commit('effects')
       set((s) => {
-        Object.assign(s.project.scene.effects, patch)
+        Object.assign(cur(s.project).scene.effects, patch)
       })
     },
     /*
@@ -516,7 +562,7 @@ export const useStudio = create<StudioState>()(
       // undo entries rather than one merged blur of both
       get().commit(patchLabel('portrait', patch))
       set((s) => {
-        const fx = s.project.scene.effects
+        const fx = cur(s.project).scene.effects
         fx.portrait = { ...defaultPortrait(), ...fx.portrait, ...patch }
         s.focusGuide = true
       })
@@ -527,16 +573,16 @@ export const useStudio = create<StudioState>()(
     setGrade: (patch) => {
       get().commit('grade')
       set((s) => {
-        Object.assign(s.project.scene.effects.grade, patch)
+        Object.assign(cur(s.project).scene.effects.grade, patch)
       })
     },
 
     addDevice: (modelId) => {
-      track('device_added', { model_id: modelId, count: get().project.scene.devices.length + 1 })
+      track('device_added', { model_id: modelId, count: cur(get().project).scene.devices.length + 1 })
       get().commit('add-device')
       set((s) => {
         const spec = getDevice(modelId)
-        const n = s.project.scene.devices.length
+        const n = cur(s.project).scene.devices.length
         const dev: DeviceInstance = {
           id: `dev_${uid()}`,
           modelId,
@@ -545,7 +591,7 @@ export const useStudio = create<StudioState>()(
           transform: { position: [n * 1.3, 0, -n * 0.15], rotation: [0, 0, 0], scale: 1 },
           screen: { assetId: null, fit: 'cover', scroll: 0 },
         }
-        s.project.scene.devices.push(dev)
+        cur(s.project).scene.devices.push(dev)
         s.selectedDeviceId = dev.id
       })
     },
@@ -553,17 +599,17 @@ export const useStudio = create<StudioState>()(
     removeDevice: (id) => {
       get().commit('remove-device')
       set((s) => {
-        if (s.project.scene.devices.length <= 1) return
-        s.project.scene.devices = s.project.scene.devices.filter((d) => d.id !== id)
-        s.project.keyframes = s.project.keyframes.filter((k) => !k.target.startsWith(`dev.${id}.`))
-        if (s.selectedDeviceId === id) s.selectedDeviceId = s.project.scene.devices[0]?.id ?? null
+        if (cur(s.project).scene.devices.length <= 1) return
+        cur(s.project).scene.devices = cur(s.project).scene.devices.filter((d) => d.id !== id)
+        cur(s.project).keyframes = cur(s.project).keyframes.filter((k) => !k.target.startsWith(`dev.${id}.`))
+        if (s.selectedDeviceId === id) s.selectedDeviceId = cur(s.project).scene.devices[0]?.id ?? null
       })
     },
 
     duplicateDevice: (id) => {
       get().commit('duplicate-device')
       set((s) => {
-        const src = s.project.scene.devices.find((d) => d.id === id)
+        const src = cur(s.project).scene.devices.find((d) => d.id === id)
         if (!src) return
         const copy: DeviceInstance = JSON.parse(JSON.stringify(src))
         copy.id = `dev_${uid()}`
@@ -572,7 +618,7 @@ export const useStudio = create<StudioState>()(
           src.transform.position[1],
           src.transform.position[2] - 0.2,
         ]
-        s.project.scene.devices.push(copy)
+        cur(s.project).scene.devices.push(copy)
         s.selectedDeviceId = copy.id
       })
     },
@@ -580,7 +626,7 @@ export const useStudio = create<StudioState>()(
     updateDevice: (id, patch) => {
       get().commit('update-device')
       set((s) => {
-        const dev = s.project.scene.devices.find((d) => d.id === id)
+        const dev = cur(s.project).scene.devices.find((d) => d.id === id)
         if (dev) Object.assign(dev, patch)
       })
     },
@@ -588,7 +634,7 @@ export const useStudio = create<StudioState>()(
     updateDeviceScreen: (id, patch) => {
       get().commit('device-screen')
       set((s) => {
-        const dev = s.project.scene.devices.find((d) => d.id === id)
+        const dev = cur(s.project).scene.devices.find((d) => d.id === id)
         if (dev) Object.assign(dev.screen, patch)
       })
     },
@@ -596,7 +642,7 @@ export const useStudio = create<StudioState>()(
     setDeviceTransform: (id, patch) => {
       get().commit('device-transform')
       set((s) => {
-        const dev = s.project.scene.devices.find((d) => d.id === id)
+        const dev = cur(s.project).scene.devices.find((d) => d.id === id)
         if (!dev) return
         if (patch.position) dev.transform.position = patch.position
         if (patch.rotation) dev.transform.rotation = patch.rotation
@@ -609,7 +655,7 @@ export const useStudio = create<StudioState>()(
     arrangeDevices: (mode) => {
       get().commit('arrange')
       set((s) => {
-        const devs = s.project.scene.devices
+        const devs = cur(s.project).scene.devices
         const n = devs.length
         devs.forEach((d, i) => {
           const c = i - (n - 1) / 2
@@ -651,8 +697,8 @@ export const useStudio = create<StudioState>()(
         s.assets[id] = { url, kind: meta.kind }
         if (opts?.bind === false) return
         const dev =
-          s.project.scene.devices.find((d) => d.id === s.selectedDeviceId) ??
-          s.project.scene.devices[0]
+          cur(s.project).scene.devices.find((d) => d.id === s.selectedDeviceId) ??
+          cur(s.project).scene.devices[0]
         if (dev) {
           dev.screen.assetId = id
           dev.screen.scroll = 0
@@ -676,14 +722,17 @@ export const useStudio = create<StudioState>()(
       get().commit('remove-media')
       set((s) => {
         s.project.assets = s.project.assets.filter((a) => a.id !== id)
-        // anything still pointing at it would render as a blank screen
-        for (const d of s.project.scene.devices) if (d.screen.assetId === id) d.screen.assetId = null
-        if (s.project.scene.background.imageAssetId === id) {
-          s.project.scene.background.imageAssetId = null
+        /*
+         * Every shot, not just the one on screen. The media pool belongs to the
+         * project, so dropping a file has to unhook it everywhere: a reference
+         * left behind in a shot you are not looking at renders as a blank
+         * screen the next time you cut to it, with nothing to explain why.
+         */
+        for (const shot of s.project.shots) {
+          for (const d of shot.scene.devices) if (d.screen.assetId === id) d.screen.assetId = null
+          if (shot.scene.background.imageAssetId === id) shot.scene.background.imageAssetId = null
+          shot.overlays = shot.overlays.filter((o) => o.type !== 'image' || o.assetId !== id)
         }
-        s.project.overlays = s.project.overlays.filter(
-          (o) => o.type !== 'image' || o.assetId !== id,
-        )
       })
     },
 
@@ -698,7 +747,7 @@ export const useStudio = create<StudioState>()(
     addOverlay: (o) => {
       get().commit('add-overlay')
       set((s) => {
-        s.project.overlays.push(o)
+        cur(s.project).overlays.push(o)
         s.selectedOverlayId = o.id
       })
     },
@@ -706,7 +755,7 @@ export const useStudio = create<StudioState>()(
     updateOverlay: (id, patch) => {
       get().commit('update-overlay')
       set((s) => {
-        const o = s.project.overlays.find((x) => x.id === id)
+        const o = cur(s.project).overlays.find((x) => x.id === id)
         if (o) Object.assign(o, patch)
       })
     },
@@ -714,31 +763,87 @@ export const useStudio = create<StudioState>()(
     removeOverlay: (id) => {
       get().commit('remove-overlay')
       set((s) => {
-        s.project.overlays = s.project.overlays.filter((o) => o.id !== id)
+        const shot = cur(s.project)
+        shot.overlays = shot.overlays.filter((o) => o.id !== id)
+        // its tracks go with it, or the timeline keeps lanes for a layer that
+        // is no longer there and nothing on screen explains them
+        shot.keyframes = shot.keyframes.filter((k) => !k.target.startsWith(`ov.${id}.`))
+        s.selectedKeyframeIds = s.selectedKeyframeIds.filter((kid) =>
+          shot.keyframes.some((k) => k.id === kid),
+        )
         if (s.selectedOverlayId === id) s.selectedOverlayId = null
       })
     },
 
     selectOverlay: (id) => set((s) => void (s.selectedOverlayId = id)),
 
+    applyTextAnimation: (overlayId, presetId) => {
+      const preset = TEXT_ANIMATIONS.find((p) => p.id === presetId)
+      if (!preset) return
+      track('animation_preset_applied', { preset_id: `text-${presetId}` })
+      get().commit('text-animation')
+      set((s) => {
+        const shot = cur(s.project)
+        const o = shot.overlays.find((x) => x.id === overlayId)
+        if (!o || o.type !== 'text') return
+
+        const built = preset.build(o, s.timeMs, shot.durationMs)
+        /*
+         * A preset replaces its own tracks and leaves the rest alone, so
+         * stacking "rise by letter" and "fade out" gives a line that arrives
+         * and then leaves, rather than the second one wiping the first.
+         */
+        const targets = new Set(built.map((k) => k.target))
+        shot.keyframes = shot.keyframes.filter((k) => !targets.has(k.target))
+        for (const k of built) shot.keyframes.push({ ...k, id: `kf_${uid()}` })
+
+        // the arrival shape the preset needs, and a starting point for the
+        // driver so the line is not left invisible when the playhead is at zero
+        if (preset.reveal) o.reveal = preset.reveal
+        if (targets.has(`ov.${o.id}.progress`)) o.progress = 1
+        s.selectedKeyframeIds = []
+      })
+    },
+
+    clearOverlayAnimation: (overlayId) => {
+      get().commit('clear-overlay-animation')
+      set((s) => {
+        const shot = cur(s.project)
+        const prefix = `ov.${overlayId}.`
+        /*
+         * Bake first, then drop. Whatever the layer looks like at the playhead
+         * is what the person is looking at, and having it jump somewhere else
+         * the moment the animation comes off would read as losing the work
+         * rather than as removing the movement.
+         */
+        const sampled = sampleKeyframes(
+          shot.keyframes.filter((k) => k.target.startsWith(prefix)),
+          s.timeMs,
+        )
+        for (const [target, value] of sampled) setTargetValue(shot, target, value)
+        shot.keyframes = shot.keyframes.filter((k) => !k.target.startsWith(prefix))
+        s.selectedKeyframeIds = []
+      })
+    },
+
     toggleTrack: (target) => {
       get().commit('toggle-track')
       set((s) => {
-        const kfs = s.project.keyframes.filter((k) => k.target === target)
+        const kfs = cur(s.project).keyframes.filter((k) => k.target === target)
         if (kfs.length > 0) {
           // bake evaluated value at playhead into base, then remove the track
           const sampled = sampleKeyframes(kfs, s.timeMs).get(target)
-          if (sampled !== undefined) setTargetValue(s.project.scene, target, sampled)
-          s.project.keyframes = s.project.keyframes.filter((k) => k.target !== target)
+          if (sampled !== undefined) setTargetValue(cur(s.project), target, sampled)
+          cur(s.project).keyframes = cur(s.project).keyframes.filter((k) => k.target !== target)
           s.selectedKeyframeIds = s.selectedKeyframeIds.filter((id) =>
-            s.project.keyframes.some((k) => k.id === id),
+            cur(s.project).keyframes.some((k) => k.id === id),
           )
         } else {
-          s.project.keyframes.push({
+          cur(s.project).keyframes.push({
             id: `kf_${uid()}`,
             target,
             timeMs: s.timeMs,
-            value: getTargetValue(s.project.scene, target),
+            value: getTargetValue(cur(s.project), target),
             easing: 'smooth',
           })
         }
@@ -749,21 +854,21 @@ export const useStudio = create<StudioState>()(
       get().commit('add-kf')
       set((s) => {
         const t = timeMs ?? s.timeMs
-        const kfs = s.project.keyframes.filter((k) => k.target === target)
+        const kfs = cur(s.project).keyframes.filter((k) => k.target === target)
         const value =
           kfs.length > 0
-            ? (sampleKeyframes(kfs, t).get(target) ?? getTargetValue(s.project.scene, target))
-            : getTargetValue(s.project.scene, target)
+            ? (sampleKeyframes(kfs, t).get(target) ?? getTargetValue(cur(s.project), target))
+            : getTargetValue(cur(s.project), target)
         const existing = kfs.find((k) => Math.abs(k.timeMs - t) <= 1)
         if (existing) existing.value = value
-        else s.project.keyframes.push({ id: `kf_${uid()}`, target, timeMs: t, value, easing: 'smooth' })
+        else cur(s.project).keyframes.push({ id: `kf_${uid()}`, target, timeMs: t, value, easing: 'smooth' })
       })
     },
 
     removeKeyframes: (ids) => {
       get().commit('remove-kf')
       set((s) => {
-        s.project.keyframes = s.project.keyframes.filter((k) => !ids.includes(k.id))
+        cur(s.project).keyframes = cur(s.project).keyframes.filter((k) => !ids.includes(k.id))
         s.selectedKeyframeIds = s.selectedKeyframeIds.filter((id) => !ids.includes(id))
       })
     },
@@ -771,8 +876,8 @@ export const useStudio = create<StudioState>()(
     moveKeyframe: (id, timeMs) => {
       get().commit('move-kf')
       set((s) => {
-        const kf = s.project.keyframes.find((k) => k.id === id)
-        if (kf) kf.timeMs = Math.min(s.project.durationMs, Math.max(0, Math.round(timeMs)))
+        const kf = cur(s.project).keyframes.find((k) => k.id === id)
+        if (kf) kf.timeMs = Math.min(cur(s.project).durationMs, Math.max(0, Math.round(timeMs)))
       })
     },
 
@@ -780,13 +885,21 @@ export const useStudio = create<StudioState>()(
       if (ids.length === 0 || deltaMs === 0) return
       get().commit('move-kf')
       set((s) => {
-        const moving = s.project.keyframes.filter((k) => ids.includes(k.id))
+        const moving = cur(s.project).keyframes.filter((k) => ids.includes(k.id))
         if (moving.length === 0) return
         // clamp the delta against the group's own bounds so the shape of a
         // multi-keyframe selection survives a drag into either end
         const lo = Math.min(...moving.map((k) => k.timeMs))
         const hi = Math.max(...moving.map((k) => k.timeMs))
-        const d = Math.round(Math.min(s.project.durationMs - hi, Math.max(-lo, deltaMs)))
+        /*
+         * The headroom floors at zero. A selection can contain a key that is
+         * already past the end, because shortening a shot leaves them there,
+         * and "select all" reaches them even though the lane does not draw
+         * them. Without the floor that group had negative room to its right,
+         * so nudging it forward dragged the whole selection backwards.
+         */
+        const room = Math.max(0, cur(s.project).durationMs - hi)
+        const d = Math.round(Math.min(room, Math.max(-lo, deltaMs)))
         for (const k of moving) k.timeMs += d
       })
     },
@@ -794,14 +907,14 @@ export const useStudio = create<StudioState>()(
     setKeyframeEasing: (ids, easing) => {
       get().commit('kf-easing')
       set((s) => {
-        for (const k of s.project.keyframes) if (ids.includes(k.id)) k.easing = easing
+        for (const k of cur(s.project).keyframes) if (ids.includes(k.id)) k.easing = easing
       })
     },
 
     clearAllKeyframes: () => {
       get().commit('clear-kf')
       set((s) => {
-        s.project.keyframes = []
+        cur(s.project).keyframes = []
         s.selectedKeyframeIds = []
       })
     },
@@ -814,11 +927,11 @@ export const useStudio = create<StudioState>()(
       track('animation_preset_applied', { preset_id: presetId })
       get().commit('anim-preset')
       set((s) => {
-        const cam = s.project.scene.camera
-        const built = preset.build({ ...cam }, s.project.durationMs)
+        const cam = cur(s.project).scene.camera
+        const built = preset.build({ ...cam }, cur(s.project).durationMs)
         const targets = new Set(built.map((k) => k.target))
-        s.project.keyframes = s.project.keyframes.filter((k) => !targets.has(k.target))
-        for (const k of built) s.project.keyframes.push({ ...k, id: `kf_${uid()}` })
+        cur(s.project).keyframes = cur(s.project).keyframes.filter((k) => !targets.has(k.target))
+        for (const k of built) cur(s.project).keyframes.push({ ...k, id: `kf_${uid()}` })
       })
     },
 
@@ -826,7 +939,7 @@ export const useStudio = create<StudioState>()(
       get().commit('loopify')
       set((s) => {
         const byTarget = new Map<string, Keyframe[]>()
-        for (const k of s.project.keyframes) {
+        for (const k of cur(s.project).keyframes) {
           const arr = byTarget.get(k.target) ?? []
           arr.push(k)
           byTarget.set(k.target, arr)
@@ -835,12 +948,12 @@ export const useStudio = create<StudioState>()(
           arr.sort((a, b) => a.timeMs - b.timeMs)
           const first = arr[0]
           const last = arr[arr.length - 1]
-          if (last.timeMs >= s.project.durationMs - 1) last.value = first.value
+          if (last.timeMs >= cur(s.project).durationMs - 1) last.value = first.value
           else
-            s.project.keyframes.push({
+            cur(s.project).keyframes.push({
               id: `kf_${uid()}`,
               target,
-              timeMs: s.project.durationMs,
+              timeMs: cur(s.project).durationMs,
               value: first.value,
               easing: first.easing,
             })
@@ -855,23 +968,235 @@ export const useStudio = create<StudioState>()(
       get().commit('template')
       set((s) => {
         const currentAsset =
-          s.project.scene.devices.find((d) => d.id === s.selectedDeviceId)?.screen.assetId ??
-          s.project.scene.devices.find((d) => d.screen.assetId)?.screen.assetId ??
+          cur(s.project).scene.devices.find((d) => d.id === s.selectedDeviceId)?.screen.assetId ??
+          cur(s.project).scene.devices.find((d) => d.screen.assetId)?.screen.assetId ??
           null
-        tpl.apply(s.project)
-        if (currentAsset && s.project.scene.devices[0])
-          s.project.scene.devices[0].screen.assetId = currentAsset
-        s.selectedDeviceId = s.project.scene.devices[0]?.id ?? null
+        tpl.apply(cur(s.project))
+        if (currentAsset && cur(s.project).scene.devices[0])
+          cur(s.project).scene.devices[0].screen.assetId = currentAsset
+        s.selectedDeviceId = cur(s.project).scene.devices[0]?.id ?? null
         s.selectedKeyframeIds = []
         s.timeMs = 0
         s.dialog = null
       })
     },
 
+    // ----- shots -----
+
+    addShot: (opts) => {
+      const s0 = get()
+      if (s0.project.shots.length >= MAX_SHOTS) {
+        ui.toast(`A project holds up to ${MAX_SHOTS} shots.`, 'error')
+        return
+      }
+      s0.captureShotThumb()
+      track('shot_added', { blank: !!opts?.blank, count: s0.project.shots.length + 1 })
+      get().commit('add-shot')
+      set((s) => {
+        const at = s.project.shots.findIndex((x) => x.id === s.project.activeShotId)
+        const index = at < 0 ? s.project.shots.length - 1 : at
+        /*
+         * A new shot is a copy of the one you are standing on, not an empty
+         * set. The next shot in a reel is nearly always the same product from
+         * a different angle, and rebuilding the lighting to get there is the
+         * kind of work a tool should have already done for you. `blank` is
+         * there for the times it genuinely is a new scene.
+         */
+        const source = cur(s.project)
+        const shot: Shot = opts?.blank
+          ? makeShot(defaultScene(), index + 1)
+          : {
+              ...(JSON.parse(JSON.stringify(source)) as Shot),
+              id: `shot_${uid()}`,
+              name: `Shot ${index + 2}`,
+            }
+        shot.transition = { ...shot.transition }
+        s.project.shots.splice(index + 1, 0, shot)
+        s.project.activeShotId = shot.id
+        s.selectedDeviceId = shot.scene.devices[0]?.id ?? null
+        s.selectedKeyframeIds = []
+        s.selectedOverlayId = null
+        s.timeMs = 0
+        /*
+         * Show the strip. A second take only means something next to the first
+         * one, and the timeline is collapsed by default, so adding a shot from
+         * the transport bar would otherwise change the film with nothing on
+         * screen to show for it.
+         */
+        s.timelineOpen = true
+      })
+      localStorage.setItem('ms-timeline', 'open')
+    },
+
+    duplicateShot: (id) => {
+      const s0 = get()
+      if (s0.project.shots.length >= MAX_SHOTS) {
+        ui.toast(`A project holds up to ${MAX_SHOTS} shots.`, 'error')
+        return
+      }
+      // the copy takes over the viewport, so photograph what is there first
+      s0.captureShotThumb()
+      get().commit('duplicate-shot')
+      set((s) => {
+        const at = s.project.shots.findIndex((x) => x.id === id)
+        if (at < 0) return
+        const copy = JSON.parse(JSON.stringify(s.project.shots[at])) as Shot
+        copy.id = `shot_${uid()}`
+        copy.name = `${s.project.shots[at].name} copy`
+        s.project.shots.splice(at + 1, 0, copy)
+        s.project.activeShotId = copy.id
+        s.selectedDeviceId = copy.scene.devices[0]?.id ?? null
+        s.selectedKeyframeIds = []
+        s.timeMs = 0
+      })
+    },
+
+    removeShot: (id) => {
+      if (get().project.shots.length <= 1) return
+      get().commit('remove-shot')
+      set((s) => {
+        const at = s.project.shots.findIndex((x) => x.id === id)
+        if (at < 0) return
+        s.project.shots.splice(at, 1)
+        delete s.shotThumbs[id]
+        if (s.project.activeShotId === id) {
+          const next = s.project.shots[Math.min(at, s.project.shots.length - 1)]
+          s.project.activeShotId = next.id
+          s.selectedDeviceId = next.scene.devices[0]?.id ?? null
+          s.timeMs = 0
+        }
+        s.selectedKeyframeIds = []
+        s.selectedOverlayId = null
+      })
+    },
+
+    renameShot: (id, name) => {
+      get().commit(`rename-shot:${id}`)
+      set((s) => {
+        const shot = s.project.shots.find((x) => x.id === id)
+        if (shot) shot.name = name.slice(0, 40)
+      })
+    },
+
+    moveShot: (id, toIndex) => {
+      const from = get().project.shots.findIndex((x) => x.id === id)
+      const to = Math.min(get().project.shots.length - 1, Math.max(0, toIndex))
+      if (from < 0 || from === to) return
+      get().commit('move-shot')
+      set((s) => {
+        const [shot] = s.project.shots.splice(from, 1)
+        s.project.shots.splice(to, 0, shot)
+        /*
+         * The first shot has nothing to blend from, so a transition that ends
+         * up there would be dead state that comes back to life the moment
+         * something else is dragged in front of it. Hand it to the shot that
+         * inherited the join instead, which is what reordering a cut means.
+         */
+        const first = s.project.shots[0]
+        if (first.transition.kind !== 'cut') {
+          const orphan = first.transition
+          first.transition = defaultTransition()
+          if (s.project.shots[1] && s.project.shots[1].transition.kind === 'cut')
+            s.project.shots[1].transition = orphan
+        }
+      })
+    },
+
+    selectShot: (id, atMs = 0) => {
+      const s0 = get()
+      if (s0.project.activeShotId === id) {
+        s0.setTime(atMs)
+        return
+      }
+      // the outgoing shot is still on screen, so this is the last chance to
+      // take its picture for the ribbon
+      s0.captureShotThumb()
+      set((s) => {
+        const shot = s.project.shots.find((x) => x.id === id)
+        if (!shot) return
+        s.project.activeShotId = id
+        s.timeMs = Math.min(shot.durationMs, Math.max(0, atMs))
+        s.selectedKeyframeIds = []
+        s.selectedOverlayId = null
+        if (!shot.scene.devices.some((d) => d.id === s.selectedDeviceId))
+          s.selectedDeviceId = shot.scene.devices[0]?.id ?? null
+      })
+    },
+
+    setShotDuration: (id, ms) => {
+      get().commit(`shot-duration:${id}`)
+      set((s) => {
+        const shot = s.project.shots.find((x) => x.id === id)
+        if (!shot) return
+        shot.durationMs = Math.min(30000, Math.max(MIN_SHOT_MS, Math.round(ms)))
+        /*
+         * Keyframes past the new end are left where they are, the way an
+         * editor leaves keys past a clip's out point. Squashing them onto the
+         * end would destroy the timing of a move while you are still dragging
+         * the edge, and the drag is one gesture: pulling back out has to give
+         * you what you had, not a stack of keys piled on the last frame.
+         */
+        if (s.project.activeShotId === id && s.timeMs > shot.durationMs) s.timeMs = shot.durationMs
+      })
+    },
+
+    setTransition: (id, patch) => {
+      get().commit(`transition:${id}`)
+      set((s) => {
+        const shot = s.project.shots.find((x) => x.id === id)
+        if (!shot) return
+        Object.assign(shot.transition, patch)
+        shot.transition.durationMs = Math.min(
+          MAX_TRANSITION_MS,
+          Math.max(100, Math.round(shot.transition.durationMs)),
+        )
+      })
+    },
+
+    captureShotThumb: (id) => {
+      const s0 = get()
+      /*
+       * Never mid-export. An export drives the shots past the viewport itself,
+       * at export resolution and with the frame loop stopped, so a thumbnail
+       * taken then is as likely to be a half-cleared buffer as a picture, and
+       * the store write behind it would re-render the editor between frames of
+       * a render that is trying to be deterministic.
+       */
+      if (s0.exportProgress) return
+      const shotId = id ?? s0.project.activeShotId
+      const url = captureViewportThumb()
+      if (!url) return
+      set((s) => void (s.shotThumbs[shotId] = url))
+    },
+
+    activateForRender: (id) =>
+      set((s) => {
+        s.project.activeShotId = id
+      }),
+
+    // ----- playback -----
+
     setTime: (ms) =>
       set((s) => {
-        s.timeMs = Math.min(s.project.durationMs, Math.max(0, ms))
+        s.timeMs = Math.min(cur(s.project).durationMs, Math.max(0, ms))
       }),
+
+    setGlobalTime: (ms) => {
+      const s0 = get()
+      const slice = resolveSequence(s0.project, ms)
+      /*
+       * Inside a blend both shots are on screen, and only one of them can be
+       * the one you are editing. The frame belongs to whichever side is
+       * winning, which is also where a cut would have fallen, so scrubbing
+       * across a dissolve hands over at its midpoint rather than at either end.
+       */
+      const showing = slice.from && slice.mix < 0.5 ? slice.from : slice.to
+      const localMs = slice.from && slice.mix < 0.5 ? slice.fromLocalMs : slice.toLocalMs
+      if (showing.shot.id !== s0.project.activeShotId) s0.selectShot(showing.shot.id, localMs)
+      else s0.setTime(localMs)
+    },
+
+    setScrubMode: (m) => set((s) => void (s.scrubMode = m)),
     setPlaying: (playing) => set((s) => void (s.playing = playing)),
     setLoop: (loop) => set((s) => void (s.loop = loop)),
 
@@ -885,6 +1210,7 @@ export const useStudio = create<StudioState>()(
     setMode: (m) => {
       if (m !== get().mode) track('mode_changed', { mode: m, from: get().mode })
       localStorage.setItem('ms-mode', m)
+      writeMode(m)
       set((s) => void (s.mode = m))
     },
     setToolPanelOpen: (v) => {
@@ -927,7 +1253,7 @@ export const useStudio = create<StudioState>()(
     setGizmo: (m) => set((s) => void (s.gizmo = m)),
 
     frameDevices: () => {
-      const fit = framingForDevices(get().project.scene.camera.fov)
+      const fit = framingForDevices(cur(get().project).scene.camera.fov)
       if (!fit) return
       get().setCamera(fit, 'cam-frame')
     },
@@ -936,7 +1262,7 @@ export const useStudio = create<StudioState>()(
       try {
         const theme = localStorage.getItem('ms-theme') === 'light' ? 'light' : 'dark'
         const savedMode = localStorage.getItem('ms-mode')
-        const mode: AppMode =
+        const savedTool: AppMode =
           savedMode === 'shots' ||
           savedMode === 'studio' ||
           savedMode === 'draw' ||
@@ -944,53 +1270,55 @@ export const useStudio = create<StudioState>()(
           savedMode === 'signal'
             ? savedMode
             : 'home'
+        /*
+         * A link beats the last session, and only a link to a tool counts as
+         * one. The root is the address you get by typing the domain, so it
+         * still means "carry on where I was", which for a first visit or for
+         * someone whose last stop was the launcher is the launcher anyway.
+         * Whatever wins, the URL is corrected to match in place, so a refresh
+         * from here lands on the same screen.
+         */
+        const linked = modeFromLocation()
+        const mode: AppMode = linked && linked !== 'home' ? linked : savedTool
+        writeMode(mode, true)
         set((s) => {
           s.theme = theme
           s.mode = mode
         })
-        const saved = await loadProjectJSON<ProjectDoc & { version: number }>()
-        if (saved && saved.version === 2) {
+        const saved = await loadProjectJSON<(ProjectDoc | ProjectDocV2) & { version: number }>()
+        if (saved && (saved.version === 2 || saved.version === 3)) {
+          const doc = migrateProject(saved)
           const runtime: Record<string, AssetRuntime> = {}
           const alive: AssetMeta[] = []
-          for (const meta of saved.assets) {
+          for (const meta of doc.assets) {
             const blob = await loadAsset(meta.id)
             if (blob) {
               runtime[meta.id] = { url: URL.createObjectURL(blob), kind: meta.kind }
               alive.push(meta)
             }
           }
-          saved.assets = alive
+          doc.assets = alive
           /*
            * Saves from before the tray have no roles. What the scene points at
            * is the only evidence of what a file was for, so a backdrop or a
-           * logo is scene dressing and everything else is screen media.
+           * logo is scene dressing and everything else is screen media. Read
+           * across every shot: one shot using a file as a backdrop is enough to
+           * settle what that file is for.
            */
           const dressing = new Set(
-            [
-              saved.scene.background.imageAssetId,
-              ...saved.overlays.map((o) => (o.type === 'image' ? o.assetId : null)),
-            ].filter((x): x is string => !!x),
+            doc.shots
+              .flatMap((shot) => [
+                shot.scene.background.imageAssetId,
+                ...shot.overlays.map((o) => (o.type === 'image' ? o.assetId : null)),
+              ])
+              .filter((x): x is string => !!x),
           )
-          for (const meta of saved.assets) meta.role ??= dressing.has(meta.id) ? 'scene' : 'screen'
-          // migration: backfill color grade on projects saved before §6.6 landed
-          if (!saved.scene.effects.grade)
-            saved.scene.effects.grade = { exposure: 1, contrast: 1, saturation: 1, temperature: 0 }
-          // drop the removed depth-of-field state from older saves
-          delete (saved.scene as { blur?: unknown }).blur
-          // migration: projects saved before the studio rig only carried the
-          // four intensities, and had no sweep to fall back on
-          saved.scene.environment = { ...DEFAULT_LOOK.env, ...saved.scene.environment }
-          if (!saved.scene.background.sweep)
-            saved.scene.background.sweep = { ...DEFAULT_LOOK.sweep }
-          for (const dev of saved.scene.devices)
-            if (dev.screen.assetId && !runtime[dev.screen.assetId]) dev.screen.assetId = null
-          if (saved.scene.background.imageAssetId && !runtime[saved.scene.background.imageAssetId])
-            saved.scene.background.imageAssetId = null
-          if (saved.scene.devices.length === 0) saved.scene.devices.push(defaultDevice())
+          for (const meta of doc.assets) meta.role ??= dressing.has(meta.id) ? 'scene' : 'screen'
+          repairShots(doc, runtime)
           set((s) => {
-            s.project = saved
+            s.project = doc
             s.assets = runtime
-            s.selectedDeviceId = saved.scene.devices[0]?.id ?? null
+            s.selectedDeviceId = cur(doc).scene.devices[0]?.id ?? null
           })
         }
       } catch (err) {
@@ -998,12 +1326,25 @@ export const useStudio = create<StudioState>()(
       } finally {
         set((s) => {
           s.hydrated = true
-          s.selectedDeviceId ??= s.project.scene.devices[0]?.id ?? null
+          s.selectedDeviceId ??= cur(s.project).scene.devices[0]?.id ?? null
         })
       }
     },
   })),
 )
+
+/**
+ * Where the playhead sits on the film rather than inside its shot.
+ *
+ * The store keeps shot-local time, because that is what keyframes, the
+ * evaluator and every scene setter are written against. The film's own clock is
+ * derived from it, never stored, so the two can never drift apart.
+ */
+export const globalTimeOf = (s: { project: ProjectDoc; timeMs: number }) =>
+  shotStart(s.project, s.project.activeShotId) + s.timeMs
+
+/** Running time of every shot and blend together. */
+export const filmDurationOf = (s: { project: ProjectDoc }) => sequenceDuration(s.project)
 
 export async function persistProject() {
   const s = useStudio.getState()
@@ -1072,18 +1413,21 @@ export async function exportProjectFile() {
 
 export async function importProjectFile(file: File) {
   const text = await file.text()
-  const parsed = JSON.parse(text) as { project: ProjectDoc; blobs: Record<string, string> }
-  if (parsed.project?.version !== 2) throw new Error('Unsupported project file')
-  if (!parsed.project.scene.effects.grade)
-    parsed.project.scene.effects.grade = { exposure: 1, contrast: 1, saturation: 1, temperature: 0 }
-  delete (parsed.project.scene as { blur?: unknown }).blur
+  const parsed = JSON.parse(text) as {
+    project: (ProjectDoc | ProjectDocV2) & { version: number }
+    blobs: Record<string, string>
+  }
+  const version = parsed.project?.version
+  if (version !== 2 && version !== 3) throw new Error('Unsupported project file')
+  const doc = migrateProject(parsed.project)
   const runtime: Record<string, AssetRuntime> = {}
-  for (const meta of parsed.project.assets) {
+  for (const meta of doc.assets) {
     const dataUrl = parsed.blobs[meta.id]
     if (!dataUrl) continue
     const blob = await (await fetch(dataUrl)).blob()
     await saveAsset(meta.id, blob)
     runtime[meta.id] = { url: URL.createObjectURL(blob), kind: meta.kind }
   }
-  useStudio.getState().loadProjectDoc(parsed.project, runtime)
+  repairShots(doc, runtime)
+  useStudio.getState().loadProjectDoc(doc, runtime)
 }

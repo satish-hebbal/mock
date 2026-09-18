@@ -73,7 +73,7 @@ function LooksGroup() {
       }
     >
       {/*
-       * A hundred and twelve presets will not fit in a column, and a single
+       * A hundred and five presets will not fit in a column, and a single
        * scrolling list of them is a worse way in than no list at all. The group
        * is picked first, which turns one impossible choice into two easy ones.
        */}
@@ -309,7 +309,7 @@ function MotionGroup() {
  * Surprise me, cut into the panel rather than laid on it.
  *
  * It is the one control here worth pressing before you understand anything
- * else, and it used to be buried under a hundred and twelve preset buttons,
+ * else, and it used to be buried under a hundred and five preset buttons,
  * four groups deep in a scrolling column: the place you reached it from was the
  * place you least needed it. Moving it into the header made it visible; giving
  * it the header's own corner makes it a thing rather than a chip, the same way

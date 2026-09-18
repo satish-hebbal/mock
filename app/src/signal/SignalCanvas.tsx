@@ -129,7 +129,7 @@ export function SignalCanvas() {
       }
 
       if (s.playing) {
-        // speed scales the clock here rather than inside seventy-one generators
+        // speed scales the clock here rather than inside sixty-eight generators
         useSignal.setState({ time: s.time + dt * s.doc.source.speed })
       }
       renderSignal(useSignal.getState().doc, useSignal.getState().time, canvas, {

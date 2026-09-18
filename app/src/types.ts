@@ -203,7 +203,27 @@ interface OverlayBase {
   opacity: number
   /** degrees */
   rotation: number
+  /**
+   * Uniform multiplier on whatever size the overlay already has.
+   *
+   * Every kind of overlay measures itself differently: text in ems of the
+   * frame, a logo in frame widths, a shape in both. One multiplier on top of
+   * all of them gives "grow" and "shrink" a single animatable handle, so a pop
+   * or a settle is one track rather than one per type. Optional because
+   * overlays saved before it carry none; every reader falls back to 1.
+   */
+  scale?: number
 }
+
+/**
+ * How a line of text arrives on screen.
+ *
+ * The kinds all run off one 0..1 driver, `reveal`, which is what carries
+ * keyframes. That keeps the animation in the same evaluator as everything else
+ * (so it scrubs, eases and exports like a camera move) and leaves this field
+ * describing only the *shape* of the arrival.
+ */
+export type TextRevealKind = 'none' | 'letters' | 'words' | 'rise' | 'fade'
 
 export interface TextOverlay extends OverlayBase {
   type: 'text'
@@ -216,6 +236,13 @@ export interface TextOverlay extends OverlayBase {
   align: 'left' | 'center' | 'right'
   /** pill background color or null */
   bg: string | null
+  /** how the text arrives; absent means it is simply there */
+  reveal?: TextRevealKind
+  /**
+   * How far through that arrival, 0..1. Animate this, not the kind. Absent
+   * means fully arrived, so a text overlay with no animation still draws.
+   */
+  progress?: number
 }
 
 export interface ImageOverlay extends OverlayBase {
@@ -270,7 +297,57 @@ export interface SceneState {
   effects: EffectsState
 }
 
+/**
+ * How one shot gives way to the next.
+ *
+ * A transition is an *overlap*: it eats `durationMs` off the end of the
+ * outgoing shot and the start of the incoming one, the way an editor's timeline
+ * does, so adding a dissolve shortens the film rather than padding it. A cut
+ * has no overlap at all, which is why its duration is ignored rather than zero.
+ */
+export type TransitionKind = 'cut' | 'dissolve' | 'fadeBlack' | 'fadeWhite'
+
+export interface Transition {
+  kind: TransitionKind
+  /** length of the blend in ms; meaningless for 'cut' */
+  durationMs: number
+}
+
+/**
+ * One take: a whole scene, its own animation, and its own length.
+ *
+ * Shots are independent sets. Two shots can hold different devices, a different
+ * backdrop and a different rig; what they share is the project's media pool,
+ * frame size and frame rate, because those belong to the film rather than to
+ * any one take.
+ */
+export interface Shot {
+  id: string
+  name: string
+  durationMs: number
+  scene: SceneState
+  overlays: Overlay[]
+  keyframes: Keyframe[]
+  /** how this shot enters from the one before it; unused on the first shot */
+  transition: Transition
+}
+
 export interface ProjectDoc {
+  version: 3
+  name: string
+  fps: number
+  exportSize: { width: number; height: number }
+  shots: Shot[]
+  /** the shot being edited; every scene edit lands on it */
+  activeShotId: string
+  assets: AssetMeta[]
+}
+
+/**
+ * A project from before shots existed: one scene, one timeline, one length.
+ * Only the migration reads this, and only to fold it into a single shot.
+ */
+export interface ProjectDocV2 {
   version: 2
   name: string
   durationMs: number

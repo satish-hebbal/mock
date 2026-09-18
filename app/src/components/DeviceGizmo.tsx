@@ -1,3 +1,4 @@
+import { activeShot } from '../lib/sequence'
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { TransformControls } from '@react-three/drei'
@@ -13,7 +14,7 @@ import { useStudio } from '../store'
 export function DeviceGizmo() {
   const mode = useStudio((s) => s.gizmo)
   const selectedId = useStudio((s) => s.selectedDeviceId)
-  const devices = useStudio((s) => s.project.scene.devices)
+  const devices = useStudio((s) => activeShot(s.project).scene.devices)
   const controls = useRef<THREE.Object3D>(null)
 
   // The gizmo shares the scene the exporter renders, so it has to be findable
@@ -34,9 +35,9 @@ export function DeviceGizmo() {
   // fight the gizmo mid-drag. Warn once rather than silently snapping back.
   useEffect(() => {
     if (mode === 'off' || !id) return
-    const tracked = useStudio
-      .getState()
-      .project.keyframes.some((k) => k.target.startsWith(`dev.${id}.`))
+    const tracked = activeShot(useStudio.getState().project).keyframes.some((k) =>
+      k.target.startsWith(`dev.${id}.`),
+    )
     if (tracked) {
       // eslint-disable-next-line no-console
       console.warn('[gizmo] this device has keyframed transforms; edits land on the base value')

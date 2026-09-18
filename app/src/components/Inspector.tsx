@@ -1,3 +1,4 @@
+import { activeShot } from '../lib/sequence'
 import { useState, type ReactNode } from 'react'
 import { MAX_SCREEN_MEDIA, pickMediaFile, screenMedia, useStudio } from '../store'
 import { ColorRow, Disclosure, Dropdown, MiniButton, Section, Segments, SliderRow, SubHeading } from './controls'
@@ -14,6 +15,7 @@ import {
   Image,
   Images,
   Link,
+  Move,
   Move3d,
   Palette,
   Plus,
@@ -25,12 +27,19 @@ import {
 } from 'lucide-react'
 import { focalFromFov, keyColor } from '../lib/studio'
 import { getMood } from '../lib/moods'
-import { OVERLAY_FONTS } from '../lib/presets'
+import { OVERLAY_FONTS, TEXT_ANIMATIONS } from '../lib/presets'
+import { progressOf, revealOf, scaleOf } from '../lib/overlays'
 import { getDevice } from '../lib/registry'
 import { CAMERA_LIMITS } from '../lib/camera'
 import { ui } from '../lib/ui'
 import { portraitOf } from '../lib/portrait'
-import type { AssetRuntime, BackgroundType, PortraitMode } from '../types'
+import type {
+  AssetRuntime,
+  BackgroundType,
+  PortraitMode,
+  TextOverlay,
+  TextRevealKind,
+} from '../types'
 
 /** Glyphs for section headers and sub-headings. */
 const secIcon = { size: 13, strokeWidth: 1.75 } as const
@@ -121,9 +130,9 @@ function MediaSection() {
   const selectedDeviceId = useStudio((s) => s.selectedDeviceId)
   const device = useStudio(
     (s) =>
-      s.project.scene.devices.find((d) => d.id === s.selectedDeviceId) ?? s.project.scene.devices[0],
+      activeShot(s.project).scene.devices.find((d) => d.id === s.selectedDeviceId) ?? activeShot(s.project).scene.devices[0],
   )
-  const devices = useStudio((s) => s.project.scene.devices)
+  const devices = useStudio((s) => activeShot(s.project).scene.devices)
   // the whole list, not a filtered one: a selector that builds a new array
   // every call re-renders this panel on every frame the timeline plays
   const assets = useStudio((s) => s.project.assets)
@@ -243,7 +252,7 @@ function MediaSection() {
 // ----- Camera -----
 
 function CameraSection() {
-  const cam = useStudio((s) => s.project.scene.camera)
+  const cam = useStudio((s) => activeShot(s.project).scene.camera)
   const setAnimatable = useStudio((s) => s.setAnimatable)
 
   const row = (
@@ -295,9 +304,9 @@ function CameraSection() {
 // ----- Scene (background / environment / ground) -----
 
 function SceneSection() {
-  const bg = useStudio((s) => s.project.scene.background)
-  const env = useStudio((s) => s.project.scene.environment)
-  const ground = useStudio((s) => s.project.scene.ground)
+  const bg = useStudio((s) => activeShot(s.project).scene.background)
+  const env = useStudio((s) => activeShot(s.project).scene.environment)
+  const ground = useStudio((s) => activeShot(s.project).scene.ground)
   const setBackground = useStudio((s) => s.setBackground)
   const setSweep = useStudio((s) => s.setSweep)
   const setEnvironment = useStudio((s) => s.setEnvironment)
@@ -604,7 +613,7 @@ function PortraitSection() {
    * selector results by identity, so calling it inside would hand back a new
    * object every render and never settle.
    */
-  const saved = useStudio((s) => s.project.scene.effects.portrait)
+  const saved = useStudio((s) => activeShot(s.project).scene.effects.portrait)
   const portrait = portraitOf(saved)
   const guide = useStudio((s) => s.focusGuide)
   const setFocusGuide = useStudio((s) => s.setFocusGuide)
@@ -699,7 +708,7 @@ function PortraitSection() {
 }
 
 function EffectsSection() {
-  const fx = useStudio((s) => s.project.scene.effects)
+  const fx = useStudio((s) => activeShot(s.project).scene.effects)
   const setEffects = useStudio((s) => s.setEffects)
   const setGrade = useStudio((s) => s.setGrade)
   const g = fx.grade
@@ -733,7 +742,7 @@ function EffectsSection() {
 // ----- Devices -----
 
 function DevicesSection() {
-  const devices = useStudio((s) => s.project.scene.devices)
+  const devices = useStudio((s) => activeShot(s.project).scene.devices)
   const selectedId = useStudio((s) => s.selectedDeviceId)
   const st = useStudio.getState
 
@@ -839,7 +848,7 @@ function DevicesSection() {
 }
 
 function DeviceTransformRows({ deviceId }: { deviceId: string }) {
-  const dev = useStudio((s) => s.project.scene.devices.find((d) => d.id === deviceId))
+  const dev = useStudio((s) => activeShot(s.project).scene.devices.find((d) => d.id === deviceId))
   const setAnimatable = useStudio((s) => s.setAnimatable)
   if (!dev) return null
   const p = `dev.${deviceId}`
@@ -870,13 +879,23 @@ function DeviceTransformRows({ deviceId }: { deviceId: string }) {
 // ----- Overlays -----
 
 function OverlaysSection() {
-  const overlays = useStudio((s) => s.project.overlays)
+  const overlays = useStudio((s) => activeShot(s.project).overlays)
   const selectedId = useStudio((s) => s.selectedOverlayId)
+  const hasAnimation = useStudio((s) =>
+    activeShot(s.project).keyframes.some((k) => k.target.startsWith(`ov.${s.selectedOverlayId}.`)),
+  )
   const st = useStudio.getState
   const selected = overlays.find((o) => o.id === selectedId)
 
   return (
-    <Section title="Text · Logo · Shapes" icon={<Type {...secIcon} />} defaultOpen={false}>
+    <Section
+      title="Text · Logo · Shapes"
+      icon={<Type {...secIcon} />}
+      defaultOpen={false}
+      // picking a layer on the canvas is the request for these controls
+      openWhen={selectedId}
+      badge={overlays.length > 0 ? String(overlays.length) : undefined}
+    >
       {overlays.length === 0 && (
         <p className="t-caption text-(--tx3)">
           Add text, a shape or a logo from the toolbar above. They'll show up here to edit.
@@ -925,7 +944,13 @@ function OverlaysSection() {
                   className="flex-1"
                   value={selected.font}
                   onChange={(font) => st().updateOverlay(selected.id, { font })}
-                  options={OVERLAY_FONTS.map((f) => ({ value: f, label: f }))}
+                  /* each face shown in itself: a font list in one typeface is
+                     twelve words, not twelve fonts */
+                  options={OVERLAY_FONTS.map((f) => ({
+                    value: f,
+                    label: f,
+                    icon: <span style={{ fontFamily: f, fontSize: 13 }}>Ag</span>,
+                  }))}
                 />
                 <Dropdown
                   className="w-20"
@@ -987,12 +1012,144 @@ function OverlaysSection() {
           {selected.type === 'image' && (
             <SliderRow label="Width" value={selected.width} min={0.03} max={1} onChange={(width) => st().updateOverlay(selected.id, { width })} />
           )}
-          <SliderRow label="Opacity" value={selected.opacity} min={0} max={1} onChange={(opacity) => st().updateOverlay(selected.id, { opacity })} />
-          <SliderRow label="Rotate" value={selected.rotation} min={-180} max={180} step={1} onChange={(rotation) => st().updateOverlay(selected.id, { rotation })} />
+
+          {/*
+            From here down is what the timeline can drive. Each row carries the
+            same diamond every animatable property in the app carries, so a
+            caption is keyframed the way a camera move is rather than through
+            some second system of its own.
+          */}
+          <SubHeading icon={<Move {...secIcon} />}>Placement</SubHeading>
+          <SliderRow
+            label="X"
+            target={`ov.${selected.id}.x`}
+            value={selected.x}
+            min={0}
+            max={1}
+            step={0.001}
+            onChange={(x) => st().setAnimatable(`ov.${selected.id}.x`, x, 'overlay-x')}
+          />
+          <SliderRow
+            label="Y"
+            target={`ov.${selected.id}.y`}
+            value={selected.y}
+            min={0}
+            max={1}
+            step={0.001}
+            onChange={(y) => st().setAnimatable(`ov.${selected.id}.y`, y, 'overlay-y')}
+          />
+          <SliderRow
+            label="Scale"
+            target={`ov.${selected.id}.scale`}
+            value={scaleOf(selected)}
+            min={0.1}
+            max={3}
+            step={0.01}
+            onChange={(v) => st().setAnimatable(`ov.${selected.id}.scale`, v, 'overlay-scale')}
+          />
+          <SliderRow
+            label="Opacity"
+            target={`ov.${selected.id}.opacity`}
+            value={selected.opacity}
+            min={0}
+            max={1}
+            onChange={(v) => st().setAnimatable(`ov.${selected.id}.opacity`, v, 'overlay-opacity')}
+          />
+          <SliderRow
+            label="Rotate"
+            target={`ov.${selected.id}.rotation`}
+            value={selected.rotation}
+            min={-180}
+            max={180}
+            step={1}
+            onChange={(v) => st().setAnimatable(`ov.${selected.id}.rotation`, v, 'overlay-rotate')}
+          />
+
+          {selected.type === 'text' && <TextAnimationRow o={selected} />}
+
+          {hasAnimation && (
+            <button
+              onClick={() => st().clearOverlayAnimation(selected.id)}
+              className="mt-1 w-full rounded-xs border border-(--line) py-1 t-caption text-(--tx3) hover:border-(--line2) hover:text-(--tx)"
+            >
+              Remove this layer's animation
+            </button>
+          )}
         </div>
       )}
     </Section>
   )
+}
+
+/**
+ * The ready-made text moves.
+ *
+ * Presented as a list of names rather than as a row of controls because what
+ * anyone wants here is the effect, not its parameters: pick "Type on" and the
+ * keyframes land on the timeline at the playhead, where they can then be
+ * dragged, re-eased or thrown away like any others.
+ */
+function TextAnimationRow({ o }: { o: TextOverlay }) {
+  const st = useStudio.getState
+  const [open, setOpen] = useState(false)
+  const kind = revealOf(o)
+
+  return (
+    <>
+      <SubHeading icon={<Sparkles {...secIcon} />}>Animation</SubHeading>
+      <div className="mb-1 flex flex-wrap gap-1">
+        {TEXT_ANIMATIONS.map((a) => (
+          <MiniButton
+            key={a.id}
+            title={a.desc}
+            onClick={() => st().applyTextAnimation(o.id, a.id)}
+          >
+            {a.name}
+          </MiniButton>
+        ))}
+      </div>
+      <button
+        onClick={() => setOpen(!open)}
+        className="mb-1 flex w-full items-center justify-between t-caption text-(--tx3) hover:text-(--tx2)"
+      >
+        <span>Arrival · {REVEAL_LABELS[kind]}</span>
+        <span>{open ? '−' : '+'}</span>
+      </button>
+      {open && (
+        <>
+          {/*
+            The shape of the arrival on its own, for the times a preset is
+            nearly right: pick the shape here and keyframe Reveal by hand.
+          */}
+          <Dropdown
+            className="mb-1"
+            value={kind}
+            onChange={(reveal) => st().updateOverlay(o.id, { reveal })}
+            options={(Object.keys(REVEAL_LABELS) as TextRevealKind[]).map((k) => ({
+              value: k,
+              label: REVEAL_LABELS[k],
+            }))}
+          />
+          <SliderRow
+            label="Reveal"
+            target={`ov.${o.id}.progress`}
+            value={progressOf(o)}
+            min={0}
+            max={1}
+            onChange={(v) => st().setAnimatable(`ov.${o.id}.progress`, v, 'overlay-progress')}
+          />
+        </>
+      )}
+    </>
+  )
+}
+
+const REVEAL_LABELS: Record<TextRevealKind, string> = {
+  none: 'Just there',
+  letters: 'By letter',
+  words: 'By word',
+  rise: 'Letters rise',
+  fade: 'Fade',
 }
 
 // ----- assembled inspector -----

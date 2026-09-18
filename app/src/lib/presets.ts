@@ -1,6 +1,6 @@
 import { DEFAULT_DEVICE_ID, isPickable } from './registry'
 import { clampCamera } from './camera'
-import type { CameraState, Keyframe, ProjectDoc } from '../types'
+import type { CameraState, Keyframe, Shot, TextOverlay, TextRevealKind } from '../types'
 
 // ----- Social / platform export sizes (PRD §6.8) -----
 
@@ -393,6 +393,118 @@ export const ANIMATION_PRESETS: AnimationPreset[] = [
 ]
 
 // ----- Gradient presets (PRD §10.3) -----
+// ----- Text animations -----
+
+/**
+ * The half-dozen text moves people actually ask for, as keyframes.
+ *
+ * Each one is written against the overlay's own animatable properties rather
+ * than being a special case in the renderer, so a preset is a starting point: a
+ * reveal that lands too early can be dragged later on its track like anything
+ * else, and a shot can hold two captions arriving at different times without
+ * the two knowing about each other.
+ *
+ * `reveal` is the shape of the arrival, set on the overlay; `progress` is the
+ * 0..1 driver the keyframes move. Presets that need neither leave `reveal` off
+ * and animate opacity, position or scale instead.
+ */
+export interface TextAnimation {
+  id: string
+  name: string
+  desc: string
+  /** the arrival shape this preset needs, if any */
+  reveal?: TextRevealKind
+  /**
+   * Keyframes for one overlay, in shot-local ms. `at` is where the move starts,
+   * which is the playhead, and `dur` is the shot's own length so an exit can
+   * find the end. The overlay itself comes along because a move has to land on
+   * where the thing already is: sliding up means arriving at the place it was
+   * put, not at the top of the frame.
+   */
+  build: (o: TextOverlay, at: number, dur: number) => Omit<Keyframe, 'id'>[]
+}
+
+/** How long a text move runs by default. Long enough to read as a move. */
+const TEXT_MS = 700
+
+const ease = (target: string, timeMs: number, value: number, easing: Keyframe['easing'] = 'smooth') =>
+  ({ target, timeMs, value, easing }) as Omit<Keyframe, 'id'>
+
+export const TEXT_ANIMATIONS: TextAnimation[] = [
+  {
+    id: 'letters',
+    name: 'Type on',
+    desc: 'One character at a time',
+    reveal: 'letters',
+    build: (o, at, dur) => [
+      ease(`ov.${o.id}.progress`, at, 0, 'linear'),
+      ease(`ov.${o.id}.progress`, Math.min(dur, at + TEXT_MS * 1.6), 1, 'linear'),
+    ],
+  },
+  {
+    id: 'words',
+    name: 'Word by word',
+    desc: 'A word at a time',
+    reveal: 'words',
+    build: (o, at, dur) => [
+      ease(`ov.${o.id}.progress`, at, 0, 'linear'),
+      ease(`ov.${o.id}.progress`, Math.min(dur, at + TEXT_MS * 1.4), 1, 'linear'),
+    ],
+  },
+  {
+    id: 'rise',
+    name: 'Rise by letter',
+    desc: 'Letters fade up in sequence',
+    reveal: 'rise',
+    build: (o, at, dur) => [
+      ease(`ov.${o.id}.progress`, at, 0),
+      ease(`ov.${o.id}.progress`, Math.min(dur, at + TEXT_MS * 1.5), 1),
+    ],
+  },
+  {
+    id: 'fade-in',
+    name: 'Fade in',
+    desc: 'The whole line together',
+    reveal: 'fade',
+    build: (o, at, dur) => [
+      ease(`ov.${o.id}.progress`, at, 0),
+      ease(`ov.${o.id}.progress`, Math.min(dur, at + TEXT_MS), 1),
+    ],
+  },
+  {
+    id: 'slide-up',
+    name: 'Slide up',
+    desc: 'Drifts up into place as it fades in',
+    build: (o, at, dur) => [
+      ease(`ov.${o.id}.opacity`, at, 0),
+      ease(`ov.${o.id}.opacity`, Math.min(dur, at + TEXT_MS), o.opacity),
+      // a twentieth of the frame below where it belongs, then home
+      ease(`ov.${o.id}.y`, at, Math.min(1, o.y + 0.05)),
+      ease(`ov.${o.id}.y`, Math.min(dur, at + TEXT_MS), o.y),
+    ],
+  },
+  {
+    id: 'pop',
+    name: 'Pop in',
+    desc: 'Scales up from small',
+    build: (o, at, dur) => [
+      ease(`ov.${o.id}.opacity`, at, 0),
+      ease(`ov.${o.id}.opacity`, Math.min(dur, at + TEXT_MS * 0.5), o.opacity),
+      ease(`ov.${o.id}.scale`, at, (o.scale ?? 1) * 0.72),
+      ease(`ov.${o.id}.scale`, Math.min(dur, at + TEXT_MS), o.scale ?? 1),
+    ],
+  },
+  {
+    id: 'fade-out',
+    name: 'Fade out',
+    desc: 'Leaves at the end of the shot',
+    build: (o, _at, dur) => [
+      ease(`ov.${o.id}.opacity`, Math.max(0, dur - TEXT_MS), o.opacity),
+      ease(`ov.${o.id}.opacity`, dur, 0),
+    ],
+  },
+]
+
 export const GRADIENT_PRESETS: { from: string; to: string; angle: number }[] = [
   { from: '#c7b9f0', to: '#9fc4ee', angle: 135 },
   { from: '#fbc2eb', to: '#a6c1ee', angle: 120 },
@@ -433,7 +545,8 @@ export interface Template {
   swatch: string
   /** device models the layout needs: the template hides while any is missing */
   needs: string[]
-  apply: (p: ProjectDoc) => void
+  /** writes the take in place: its scene, its animation, its length */
+  apply: (shot: Shot) => void
 }
 
 const uid = () => crypto.randomUUID()

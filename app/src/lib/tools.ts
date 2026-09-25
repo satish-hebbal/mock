@@ -1,5 +1,13 @@
 import type { CSSProperties } from 'react'
-import { Boxes, Grid3x3, Image as ImageIcon, PenLine, Waves, type LucideIcon } from 'lucide-react'
+import {
+  Boxes,
+  Grid3x3,
+  Image as ImageIcon,
+  PenLine,
+  ReceiptText,
+  Waves,
+  type LucideIcon,
+} from 'lucide-react'
 import type { AppMode } from '../store'
 
 /**
@@ -21,6 +29,8 @@ export interface Tool {
   tagline: string
   icon: LucideIcon
   soon?: boolean
+  /** usable, but still settling */
+  beta?: boolean
   /** [near, far] glyph colours */
   tint: [string, string]
   aurora: Aurora
@@ -46,8 +56,8 @@ export interface Tool {
  *           is what the black at the top of the card fades into.
  *
  * `at` is where the core and the accent sit horizontally, as percentages. They
- * are deliberately not the same across the five: five cards each lit from dead
- * centre is a row of five identical lamps, and the reference glow is off-centre
+ * are deliberately not the same across the six: six cards each lit from dead
+ * centre is a row of six identical lamps, and the reference glow is off-centre
  * in a way you notice before you can say why. The pairs below alternate sides
  * down the row so no two neighbours lean the same way.
  */
@@ -66,7 +76,7 @@ export const TOOLS: Tool[] = [
   {
     id: 'studio',
     name: '3D Studio',
-    tagline: 'Put a screen on a 3D device, light it, and export a video.',
+    tagline: 'Put a screen on a 3D device and film it.',
     icon: Boxes,
     tint: ['94, 106, 210', '130, 143, 255'],
     // indigo climbing into periwinkle, cut by a cyan lobe on the left
@@ -82,13 +92,14 @@ export const TOOLS: Tool[] = [
   {
     id: 'shots',
     name: 'Shots',
-    tagline: 'Frame screens on a backdrop worth posting, in seconds.',
+    tagline: 'Screens on a backdrop, ready to post.',
     icon: ImageIcon,
     tint: ['224, 138, 62', '236, 186, 96'],
-    // the only warm card in the row: rose under amber, gold breaking right
+    // the one warm card: burnt orange under amber, gold breaking right. The
+    // deep used to be rose, which is Invoice's hue now; see its note
     aurora: {
-      deep: '198, 58, 112',
-      mid: '232, 124, 60',
+      deep: '196, 76, 34',
+      mid: '238, 140, 52',
       accent: '250, 196, 88',
       core: '255, 230, 196',
       seed: 3391,
@@ -98,10 +109,10 @@ export const TOOLS: Tool[] = [
   {
     id: 'draw',
     name: 'Draw',
-    tagline: 'A hand-drawn whiteboard, and a tray of pens that behave like pens.',
+    tagline: 'A whiteboard with pens.',
     icon: PenLine,
     tint: ['64, 176, 140', '96, 200, 176'],
-    // deep teal into emerald, with lime as the break. The one green in five
+    // deep teal into emerald, with lime as the break. The one green in six
     aurora: {
       deep: '22, 118, 160',
       mid: '40, 180, 148',
@@ -114,7 +125,7 @@ export const TOOLS: Tool[] = [
   {
     id: 'ascii',
     name: 'ASCII',
-    tagline: 'Redraw a picture as characters, tiles or dither, and keep the text.',
+    tagline: 'Turn any picture into text or dither.',
     icon: Grid3x3,
     tint: ['158, 118, 226', '196, 150, 244'],
     // violet-blue into orchid, magenta thrown hard right
@@ -130,7 +141,7 @@ export const TOOLS: Tool[] = [
   {
     id: 'signal',
     name: 'Signal',
-    tagline: 'Dithered motion out of nothing. Take it away as a loop.',
+    tagline: 'Dithered motion, exported as a loop.',
     icon: Waves,
     tint: ['58, 168, 208', '110, 208, 236'],
     // cobalt into cyan, landing on aqua green. Next to Studio's indigo it needs
@@ -142,6 +153,37 @@ export const TOOLS: Tool[] = [
       core: '202, 242, 255',
       seed: 9142,
       at: [56, 14],
+    },
+  },
+  {
+    id: 'invoice',
+    name: 'Invoice',
+    tagline: 'A ready-to-send invoice in minutes.',
+    icon: ReceiptText,
+    beta: true,
+    tint: ['212, 78, 140', '240, 132, 184'],
+    /*
+     * Rose, because it is the one stretch of the wheel nobody else is on.
+     *
+     * It used to be red clay, and red clay is ten degrees from Shots' orange:
+     * two places apart in the row they still read as the same card. Read round
+     * the wheel the other five sit at amber, teal, cyan, indigo and violet,
+     * which leaves the gap between violet and amber, and rose lands in the
+     * middle of it, clear of both.
+     *
+     * ASCII throws a magenta accent, so this one keeps its break close in hue
+     * (a paler pink rather than a second colour) and reads as one pigment at
+     * two strengths, a plum deep under a rose mid. That also keeps it from
+     * travelling the way Shots does, which is a difference that survives at
+     * thumbnail size where hue alone would not.
+     */
+    aurora: {
+      deep: '118, 26, 92',
+      mid: '222, 70, 136',
+      accent: '248, 146, 176',
+      core: '255, 222, 236',
+      seed: 6427,
+      at: [28, 72],
     },
   },
 ]

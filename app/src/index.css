@@ -1248,6 +1248,30 @@ body {
   color: color-mix(in srgb, rgb(var(--tool-tint)) 70%, #000);
 }
 
+/* a tag beside the name, cut from the card's own tint so it reads as part of
+   the card rather than a grey sticker on it. Same ink as the glyph on each
+   theme, over a wash of the same hue */
+.tool-card-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  padding: 1px 7px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 14px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgb(var(--tool-tint-far));
+  background: rgba(var(--tool-tint-far), 0.12);
+  box-shadow: inset 0 0 0 1px rgba(var(--tool-tint-far), 0.28);
+}
+
+:root.light .tool-card-chip {
+  color: color-mix(in srgb, rgb(var(--tool-tint)) 70%, #000);
+  background: rgba(var(--tool-tint), 0.12);
+  box-shadow: inset 0 0 0 1px rgba(var(--tool-tint), 0.3);
+}
+
 /* the same reasoning as `--tool-copy` above, inverted: black at strength, so
    the copy takes its colour from whatever the glow has done to the ground */
 :root.light .tool-card {
@@ -2352,6 +2376,990 @@ input[type="checkbox"] {
   .dw-bar[data-vertical] .dw-swatches {
     flex-direction: column;
   }
+}
+
+/*
+ * ----- Invoice -----
+ *
+ * Two kinds of rule live here and they must not be confused, because one of
+ * them is printed and the other is not.
+ *
+ * The page itself is styled inline, in the component, and almost nothing about
+ * it is in this file. That is deliberate: the paper is the deliverable, its
+ * colours are the user's choice rather than the theme's, and a rule in a
+ * stylesheet the print path has to remember to carry across is a rule that will
+ * one day fail to be carried. What IS here is the small set of things inline
+ * styles cannot express, keyframes and pseudo-elements, and the print path
+ * neutralises each of them by name.
+ *
+ * Everything else below is editor chrome, which is never printed and follows
+ * the app's tokens like the rest of the UI.
+ */
+
+/*
+ * The sheet on the table.
+ *
+ * Paper is lifted off its surface by a contact shadow, not by a border: an
+ * outline round a page reads as a frame round a picture, and this is not a
+ * picture of a document. Two shadows, because one cannot do both jobs, a tight
+ * dark one where the sheet meets the table, and a wide soft one for the light
+ * it blocks.
+ *
+ * The corner is 2px rather than 0. A perfectly square corner against the dot
+ * grid aliases into a stepped edge at fractional zooms, and two pixels of
+ * radius is below the threshold of looking rounded while being enough for the
+ * rasteriser to anti-alias against.
+ */
+.inv-sheet {
+  border-radius: 2px;
+  background: #fff;
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.16),
+    0 14px 40px -12px rgb(0 0 0 / 0.34);
+  transition: transform 140ms var(--ease-settle);
+}
+:root.light .inv-sheet {
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.08),
+    0 16px 44px -16px rgb(0 0 0 / 0.22);
+}
+
+/*
+ * ----- typing on the page -----
+ *
+ * A field on the paper is a one-cell grid whose only cell is an invisible copy
+ * of its text (`::after`, from `data-v`), with the real input laid over it.
+ * The copy is what gives the field its width, so it is exactly as wide as the
+ * words in it and sits in a sentence, beside a colon or
+ * against the right margin the way the printed word does. `data-multi` lets
+ * the copy wrap, which grows a textarea by its content with no script.
+ *
+ * Every plate is mixed from `--inv-ink`, set on the page by the component,
+ * never from the app's tokens: the paper ignores the theme, and so do the
+ * marks made on it while it is being edited. The plate bleeds four pixels past
+ * the text on each side so it reads as a highlight around the word rather than
+ * a box drawn tight to it, and the negative margin takes those pixels back so
+ * turning editing on moves nothing on the page.
+ */
+.inv-ed {
+  position: relative;
+  display: inline-grid;
+  vertical-align: top;
+  min-width: 1ch;
+  margin: -1px -4px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  transition:
+    background-color var(--dur-out) var(--ease-smooth),
+    box-shadow var(--dur-out) var(--ease-smooth);
+}
+.inv-ed[data-block] {
+  display: grid;
+}
+.inv-ed::after,
+.inv-ed > input,
+.inv-ed > textarea {
+  grid-area: 1 / 1;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font: inherit;
+  font-variant-numeric: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+  text-align: inherit;
+  color: inherit;
+}
+.inv-ed::after {
+  /*
+   * Two pixels of room for the caret at the end of the line, and a zero-width
+   * space after the text. Without it an empty field with no placeholder has
+   * no line box at all: it collapsed to a sliver of padding floating above the
+   * baseline, and its focus ring hung in the air over the text beside it.
+   */
+  content: attr(data-v) "\200B";
+  padding-inline-end: 2px;
+  visibility: hidden;
+  white-space: pre;
+  pointer-events: none;
+}
+.inv-ed[data-multi]::after {
+  /* the trailing space is what gives a just-typed newline a line to sit on */
+  content: attr(data-v) " ";
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.inv-ed > input,
+.inv-ed > textarea {
+  /*
+   * Laid over the copy rather than beside it in the grid. An input keeps a
+   * floor width of its own whatever `size` says (32px here, for "ABN" and for
+   * "10" alike), which left a gap before every colon and percent sign. Out of
+   * the flow, it cannot vote on the width, and the copy alone decides it.
+   */
+  position: absolute;
+  /* out of the grid too, so its box is the wrapper's, less the plate's bleed */
+  grid-area: auto;
+  top: 1px;
+  left: 4px;
+  width: calc(100% - 8px);
+  height: calc(100% - 2px);
+  min-width: 0;
+  background: transparent;
+  outline: none;
+  resize: none;
+  overflow: hidden;
+}
+.inv-ed > textarea {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.inv-ed ::placeholder {
+  color: color-mix(in srgb, var(--inv-ink) 30%, transparent);
+  opacity: 1;
+}
+.inv-ed:hover {
+  background: color-mix(in srgb, var(--inv-ink) 5%, transparent);
+  transition-duration: var(--dur-in);
+}
+.inv-ed:focus-within {
+  background: color-mix(in srgb, var(--inv-ink) 4%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--inv-ink) 22%, transparent);
+  transition-duration: var(--dur-in);
+}
+
+/* a date: the printed text, with the native field laid invisibly over it */
+.inv-ed-date {
+  position: relative;
+  cursor: pointer;
+}
+.inv-ed-date::after {
+  content: none;
+}
+.inv-ed-date > input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/*
+ * "+ Add a line", "+ Tax": what is not on the page yet, offered where it would
+ * go. Dashed and faint at rest, because at rest the page is being read and
+ * these are furniture; solid under the pointer, because then they are the
+ * thing being reached for.
+ */
+.inv-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 9px 0 7px;
+  border: 1px dashed color-mix(in srgb, var(--inv-ink) 22%, transparent);
+  border-radius: 999px;
+  background: transparent;
+  color: color-mix(in srgb, var(--inv-ink) 50%, transparent);
+  font: inherit;
+  font-size: 0.88em;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    color var(--dur-out) var(--ease-smooth),
+    background-color var(--dur-out) var(--ease-smooth),
+    border-color var(--dur-out) var(--ease-smooth),
+    transform var(--dur-out) var(--ease-snappy);
+}
+.inv-add:hover,
+.inv-add:focus-visible {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--inv-ink) 28%, transparent);
+  background: color-mix(in srgb, var(--inv-ink) 4%, transparent);
+  color: color-mix(in srgb, var(--inv-ink) 85%, transparent);
+  outline: none;
+  transition-duration: var(--dur-in);
+}
+.inv-add:active {
+  transform: scale(0.96);
+}
+
+/* the logo's corner: a dashed target when empty, the mark itself when not */
+.inv-logo-add,
+.inv-logo {
+  flex: none;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+  transition:
+    color var(--dur-out) var(--ease-smooth),
+    background-color var(--dur-out) var(--ease-smooth),
+    border-color var(--dur-out) var(--ease-smooth),
+    opacity var(--dur-out) var(--ease-smooth);
+}
+.inv-logo-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed color-mix(in srgb, var(--inv-ink) 22%, transparent);
+  border-radius: 8px;
+  background: transparent;
+  color: color-mix(in srgb, var(--inv-ink) 45%, transparent);
+  font-size: 0.92em;
+}
+.inv-logo-add:hover,
+.inv-logo-add:focus-visible {
+  border-style: solid;
+  background: color-mix(in srgb, var(--inv-ink) 4%, transparent);
+  color: color-mix(in srgb, var(--inv-ink) 80%, transparent);
+  outline: none;
+  transition-duration: var(--dur-in);
+}
+.inv-logo {
+  display: block;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+}
+.inv-logo:hover,
+.inv-logo:focus-visible {
+  opacity: 0.75;
+  outline: none;
+  transition-duration: var(--dur-in);
+}
+
+/*
+ * A row's tools, out in the page margin.
+ *
+ * Hidden until the row is hovered, unlike the panel's row actions, because
+ * this is the page and at rest it has to read as the invoice rather than as a
+ * form covered in buttons. They stay reachable from the keyboard: a focused
+ * tool shows itself. Padding rather than margin keeps the gap between the row
+ * and its tools inside the tools' own box, so the pointer can travel from one
+ * to the other without the hover dropping on the way.
+ */
+.inv-tools {
+  position: absolute;
+  top: 50%;
+  display: flex;
+  gap: 1px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%);
+  transition: opacity var(--dur-out) var(--ease-smooth);
+}
+.inv-tools-left {
+  right: 100%;
+  padding-right: 6px;
+}
+.inv-tools-right {
+  left: 100%;
+  padding-left: 8px;
+}
+.inv-tools-pill {
+  left: 50%;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--inv-paper);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--inv-ink) 12%, transparent),
+    0 4px 12px -4px rgb(0 0 0 / 0.25);
+  transform: translate(-50%, -50%);
+}
+.inv-row:hover .inv-tools,
+.inv-tools:focus-within {
+  opacity: 1;
+  pointer-events: auto;
+  transition-duration: var(--dur-in);
+}
+.inv-tool {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: color-mix(in srgb, var(--inv-ink) 40%, transparent);
+  cursor: pointer;
+  /* the grip is dragged, and a drag that starts by selecting text never starts */
+  touch-action: none;
+  user-select: none;
+  transition:
+    color var(--dur-out) var(--ease-smooth),
+    background-color var(--dur-out) var(--ease-smooth);
+}
+.inv-tool:hover,
+.inv-tool:focus-visible {
+  background: color-mix(in srgb, var(--inv-ink) 7%, transparent);
+  color: color-mix(in srgb, var(--inv-ink) 85%, transparent);
+  outline: none;
+  transition-duration: var(--dur-in);
+}
+.inv-tool[data-on] {
+  background: color-mix(in srgb, var(--inv-ink) 9%, transparent);
+  color: color-mix(in srgb, var(--inv-ink) 90%, transparent);
+}
+.inv-tool[data-danger]:hover {
+  color: var(--danger);
+}
+.inv-tool[data-grip] {
+  cursor: grab;
+}
+.inv-tool[data-grip]:active {
+  cursor: grabbing;
+}
+.inv-row[data-dragging] .inv-tools {
+  opacity: 1;
+}
+
+/*
+ * ----- the stamp -----
+ *
+ * A rubber stamp is a frame, a hairline inside it, and letterforms cut wide
+ * enough to survive being pressed into paper. All three are here, at one
+ * colour and slightly transparent, because stamp ink sits on the fibres rather
+ * than replacing them: fully opaque, the mark reads as a sticker laid on the
+ * page instead of something pressed into it.
+ */
+.inv-stamp {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  opacity: 0.88;
+  transform: translate(-50%, -50%) rotate(var(--inv-stamp-angle, -3deg));
+}
+/*
+ * The ink, on its own layer. The texture filter (see `StampMark`) lives here
+ * rather than on `.inv-stamp` because the landing animation animates `filter`
+ * on the outer one, and the two would overwrite each other: the mark would
+ * fall with its misprint missing and have it pop on as it landed.
+ */
+.inv-stamp-ink {
+  padding: 5px;
+  border: 2.5px solid currentColor;
+  border-radius: 9px;
+}
+.inv-stamp-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 7px 20px 9px;
+  /* past a single pixel so the grain thins the hairline rather than erasing it */
+  border: 1.5px solid currentColor;
+  border-radius: 5px;
+}
+.inv-stamp-kind {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.42em;
+  /* the tracking is applied to both sides of every glyph, so without this the
+     word sits half a space right of the numerals underneath it */
+  text-indent: 0.42em;
+  text-transform: uppercase;
+}
+.inv-stamp-date {
+  font-size: 27px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.05;
+  white-space: nowrap;
+}
+
+/*
+ * It lands; it does not appear.
+ *
+ * The whole reason this tool has a stamp rather than a status field is that
+ * marking an invoice paid is the one moment worth an event, so the mark comes
+ * down from above the page, overshoots into the paper, and settles. The blur
+ * clearing over the first half is what sells the distance: something moving
+ * fast toward you is out of focus until it arrives.
+ *
+ * Every keyframe restates the full transform. `translate(-50%, -50%)` is what
+ * centres it, and a keyframe that names only `scale` drops the centring and
+ * throws the mark into the corner for that frame.
+ */
+@keyframes inv-stamp-land {
+  0% {
+    opacity: 0;
+    filter: blur(4px);
+    transform: translate(-50%, -50%) rotate(calc(var(--inv-stamp-angle, -3deg) - 14deg)) scale(2.2);
+  }
+  45% {
+    opacity: 1;
+    filter: blur(0.6px);
+  }
+  62% {
+    opacity: 1;
+    filter: blur(0);
+    /* past its resting size and into the page: the compression is the press */
+    transform: translate(-50%, -50%) rotate(var(--inv-stamp-angle, -3deg)) scale(0.93);
+  }
+  80% {
+    transform: translate(-50%, -50%) rotate(var(--inv-stamp-angle, -3deg)) scale(1.035);
+  }
+  100% {
+    opacity: 0.88;
+    transform: translate(-50%, -50%) rotate(var(--inv-stamp-angle, -3deg)) scale(1);
+  }
+}
+.inv-stamp-land {
+  animation: inv-stamp-land 620ms var(--ease-settle) both;
+}
+
+/*
+ * ----- the date roller -----
+ *
+ * Real scroll containers with CSS snap, so the platform's own inertia, rubber
+ * banding, trackpad, wheel, touch and keyboard all come for free. The mask is
+ * the only thing making them read as a cylinder rather than as three lists:
+ * rows do not stop at the edge of the window, they fade out of it.
+ */
+/*
+ * The window the chosen row sits in, drawn once across all three columns so it
+ * reads as one slot cut through the roller rather than as three highlights that
+ * happen to line up.
+ */
+.inv-roller-band {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  border-radius: 12px;
+  background: var(--sel);
+  pointer-events: none;
+}
+.inv-wheel {
+  overflow-y: auto;
+  scroll-snap-type: y mandatory;
+  outline: none;
+  /* the fade at both ends; `mask` alone is not enough on WebKit yet */
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 22%,
+    #000 78%,
+    transparent
+  );
+  mask-image: linear-gradient(to bottom, transparent, #000 22%, #000 78%, transparent);
+}
+.inv-wheel:focus-visible {
+  border-radius: 12px;
+  box-shadow: 0 0 0 2px var(--focus);
+}
+.inv-wheel-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  scroll-snap-align: center;
+  font-size: 34px;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--tx);
+  /*
+   * Blur and transform change every frame while the wheel turns, so the
+   * compositor is told in advance. Without it a flick on a three-column roller
+   * drops frames on integrated graphics, which is precisely the machine this
+   * is most likely to be used on.
+   */
+  will-change: filter, transform, opacity;
+}
+
+/* the date written out in full, re-mounted on every change so it re-plays */
+@keyframes inv-date-read {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.inv-date-read {
+  animation: inv-date-read 220ms var(--ease-settle) both;
+}
+
+/* the ink the stamp is made in: a dot, ringed when it is the chosen one */
+.inv-ink-dot {
+  /* small rounded squares: ink chips, a sibling of the paper's own swatches */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  color: #fff;
+  transition: transform var(--dur-in) var(--ease-snappy);
+}
+.inv-ink-dot:hover {
+  transform: scale(1.12);
+}
+/* the chosen ink carries a check, which pops in rather than blinking on */
+.inv-ink-check {
+  opacity: 0;
+  transform: scale(0.4);
+  transition:
+    opacity var(--dur-out) var(--ease-smooth),
+    transform var(--dur-out) var(--ease-snappy);
+}
+.inv-ink-dot[data-on] .inv-ink-check {
+  opacity: 1;
+  transform: scale(1);
+  transition-duration: var(--dur-in);
+}
+
+/* ----- editor chrome ----- */
+
+/*
+ * The accent chips: rounded squares with a check, the same family as the
+ * stamp's inks, rather than circles with a ring. The ring came out in the
+ * panel's secondary text colour, which on the near-black accent was a grey
+ * ring on a grey chip on a grey panel; a white check reads on all eight.
+ */
+.inv-swatch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  color: #fff;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08);
+  transition: transform var(--dur-in) var(--ease-snappy);
+}
+.inv-swatch:hover {
+  transform: scale(1.1);
+}
+.inv-swatch[data-on] .inv-ink-check {
+  opacity: 1;
+  transform: scale(1);
+  transition-duration: var(--dur-in);
+}
+
+/* the pick-your-own chip: a colour wheel until it holds a colour of its own */
+.inv-swatch-custom {
+  position: relative;
+  cursor: pointer;
+  background: conic-gradient(from 200deg, #f43f5e, #f59e0b, #84cc16, #06b6d4, #6366f1, #d946ef, #f43f5e);
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+}
+.inv-swatch-custom > input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+.inv-swatch-custom > svg {
+  position: relative;
+  pointer-events: none;
+  filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.45));
+}
+
+/* ----- choices drawn as what they produce: template, density, page ----- */
+
+.inv-choice {
+  background: transparent;
+}
+.inv-choice:not(.is-picked):hover {
+  background: color-mix(in srgb, var(--panel3) 45%, transparent);
+}
+.inv-choice.is-picked {
+  background: var(--field);
+}
+
+/*
+ * A page in miniature. White whatever the theme, like the real one, with bars
+ * of ink standing in for the text; the accent goes exactly where the paper
+ * puts it, so the three templates differ here in the ways they differ there.
+ */
+.inv-thumb {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 32px;
+  height: 42px;
+  overflow: hidden;
+  /* square: it is a sheet of paper, and paper is cut, not moulded */
+  border-radius: 0;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.35);
+  transition: transform var(--dur-out) var(--ease-snappy);
+}
+.inv-choice:hover .inv-thumb {
+  transform: translateY(-1px);
+  transition-duration: var(--dur-in);
+}
+.inv-thumb-plain {
+  /* a sheet with nothing on it but its proportions */
+  width: auto;
+}
+.inv-thumb-wash {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 16px;
+}
+.inv-thumb-title,
+.inv-thumb-head,
+.inv-thumb-row,
+.inv-thumb-rule {
+  /* over the wash, like the page's own content */
+  position: relative;
+}
+.inv-thumb-band {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+}
+.inv-thumb-title {
+  height: 3px;
+  margin-top: 1px;
+  border-radius: 1px;
+  background: #1c1e22;
+}
+.inv-thumb-head {
+  height: 3px;
+  margin-top: 4px;
+  border-radius: 1px;
+  background: rgb(0 0 0 / 0.1);
+}
+.inv-thumb-row {
+  height: 1.5px;
+  border-radius: 1px;
+  background: rgb(0 0 0 / 0.22);
+}
+.inv-thumb-rule {
+  width: 55%;
+  height: 1.5px;
+  margin-top: auto;
+  margin-left: auto;
+  border-radius: 1px;
+}
+
+/*
+ * ----- paper, as paper -----
+ *
+ * Each stock is a box of it: a kraft carton, open at the top, with a sheet of
+ * the stock's own colour standing up out of it. Three layers, back to front:
+ * the carton's far rim (`::before`), the sheet, then the carton's front wall
+ * with the name printed on it. The sheet is in front of the rim and behind the
+ * wall, which is all it takes for it to read as coming *out of* the box
+ * rather than being laid on top of a button.
+ *
+ * The pointer draws the sheet a little further out, as if lifting it to look
+ * at; the chosen stock stays drawn out and carries a check in its label. The
+ * whole thing lives inside the button's own box, so nothing pokes out past the
+ * section it is in.
+ */
+.inv-paper-card {
+  --kraft: #b98f5c;
+  --kraft-dark: #7a5a36;
+  --kraft-ink: #3d2a14;
+  position: relative;
+  height: 44px;
+  padding-top: 13px;
+  /* for the front wall's hinge: close enough to foreshorten visibly */
+  perspective: 180px;
+}
+/* the far rim of the open carton, the inside of the box seen over the front */
+.inv-paper-card::before {
+  content: "";
+  position: absolute;
+  top: 10px;
+  left: 5px;
+  right: 5px;
+  height: 8px;
+  border-radius: 2px 2px 0 0;
+  background: var(--kraft-dark);
+}
+.inv-paper-sheet {
+  position: absolute;
+  top: 3px;
+  left: 50%;
+  width: 58%;
+  height: 24px;
+  /* square: paper is cut, not moulded */
+  border-radius: 0;
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 0.12),
+    0 -1px 4px rgb(0 0 0 / 0.25);
+  transform: translateX(-50%) rotate(-2deg);
+  transform-origin: 50% 100%;
+  transition: transform var(--dur-out) var(--ease-snappy);
+}
+.inv-paper-card:hover .inv-paper-sheet {
+  transform: translateX(-50%) translateY(-4px) rotate(-4deg);
+  transition-duration: var(--dur-in);
+}
+.inv-paper-card[data-on] .inv-paper-sheet {
+  transform: translateX(-50%) translateY(-3px) rotate(-3deg);
+}
+/* the front wall: kraft, lit from above, with the stock's name printed on */
+.inv-paper-face {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 31px;
+  border-radius: 2px 2px 6px 6px;
+  background: linear-gradient(180deg, var(--kraft) 0%, color-mix(in srgb, var(--kraft) 82%, #000) 100%);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.22),
+    0 2px 6px -2px rgb(0 0 0 / 0.5);
+  color: var(--kraft-ink);
+  font-weight: 600;
+  /* hinged along its bottom edge, like a carton's front flap */
+  transform-origin: 50% 100%;
+  transition:
+    filter var(--dur-out) var(--ease-smooth),
+    transform var(--dur-out) var(--ease-snappy);
+}
+/*
+ * The front drops open under the pointer: it tips toward you on its bottom
+ * hinge, so it foreshortens and shows more of the sheet and the inside of the
+ * box behind it, and it brightens because a wall tilted up faces the light.
+ */
+.inv-paper-card:hover .inv-paper-face {
+  transform: rotateX(-26deg);
+  filter: brightness(1.08);
+  transition-duration: var(--dur-in);
+}
+.inv-paper-card:not([data-on]) .inv-paper-face {
+  /* the unchosen cartons sit back a step, so the chosen one reads first */
+  filter: saturate(0.8) brightness(0.86);
+}
+.inv-paper-card:not([data-on]):hover .inv-paper-face {
+  filter: saturate(0.9) brightness(1);
+}
+
+/*
+ * ----- the mark, previewed -----
+ *
+ * The logo on a patch of the chosen paper, since that is the only ground it
+ * will ever be seen on. Clicking the patch replaces it.
+ */
+.inv-mark-preview {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  height: 64px;
+  padding: 10px;
+  border-radius: var(--radius-md);
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.12);
+  overflow: hidden;
+  transition: opacity var(--dur-out) var(--ease-smooth);
+}
+.inv-mark-preview:hover {
+  opacity: 0.88;
+  transition-duration: var(--dur-in);
+}
+.inv-mark-preview img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+/*
+ * With an image in it, the patch shrinks to the image: the logo at the full
+ * height of the patch and exactly as wide as it is, rather than a small mark
+ * floating in a wide white field. The paper still shows through anything
+ * transparent in it.
+ */
+.inv-mark-preview[data-img] {
+  flex: none;
+  /* big enough to actually judge the mark, which is the point of showing it */
+  height: 104px;
+  max-width: calc(100% - 40px);
+  padding: 0;
+}
+.inv-mark-preview[data-img] img {
+  display: block;
+  height: 100%;
+  width: auto;
+}
+.inv-mark-mono {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 38px;
+  height: 38px;
+  padding: 0 9px;
+  border-radius: 11px;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.inv-mark-empty {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: rgb(0 0 0 / 0.45);
+}
+
+/*
+ * A floating menu arriving: a short drop and a fade from the edge it opens
+ * from, on the house curve. `data-up` menus are translated up by their own
+ * height inline, so their keyframes carry that translation with them.
+ */
+@keyframes inv-pop-down {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+@keyframes inv-pop-up {
+  from {
+    opacity: 0;
+    transform: translateY(calc(-100% + 4px)) scale(0.98);
+  }
+}
+.inv-pop {
+  transform-origin: top center;
+  animation: inv-pop-down 160ms var(--ease-settle) both;
+}
+.inv-pop[data-up] {
+  transform-origin: bottom center;
+  animation-name: inv-pop-up;
+}
+
+/*
+ * ----- a currency as a banknote -----
+ *
+ * Thirty by eighteen: a note's proportions, in the note's colour, lit from the
+ * top-left the way paper under a desk lamp is. The inner frame (`::before`)
+ * is the engraved border every note carries, and the two dots (`::after`) are
+ * the corner numerals reduced to what reads at this size. The medallion in the
+ * middle holds the symbol where the portrait would be. The highlighted row's
+ * note tilts a little, as if picked up to look at.
+ */
+.inv-note {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 18px;
+  border-radius: 3px;
+  background:
+    linear-gradient(135deg, rgb(255 255 255 / 0.18), transparent 55%),
+    linear-gradient(160deg, var(--note), color-mix(in srgb, var(--note) 72%, #000));
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.14),
+    0 1px 2px rgb(0 0 0 / 0.45);
+  transition: transform var(--dur-out) var(--ease-snappy);
+}
+.inv-note::before {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  border: 1px solid rgb(255 255 255 / 0.32);
+  border-radius: 2px;
+}
+.inv-note::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 5px 50%, rgb(255 255 255 / 0.45) 0 1px, transparent 1.5px),
+    radial-gradient(circle at calc(100% - 5px) 50%, rgb(255 255 255 / 0.45) 0 1px, transparent 1.5px);
+}
+.inv-note-medal {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 12px;
+  height: 12px;
+  padding: 0 2px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.9);
+  color: color-mix(in srgb, var(--note) 70%, #000);
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1;
+}
+/* longer symbols (R$, kr, CHF) shrink rather than bursting the medallion */
+.inv-note[data-long="2"] .inv-note-medal {
+  font-size: 7.5px;
+}
+.inv-note[data-long="3"] .inv-note-medal,
+.inv-note[data-long="4"] .inv-note-medal {
+  font-size: 6px;
+  letter-spacing: -0.02em;
+}
+[data-active] > .inv-note,
+button:hover > .inv-note {
+  transform: rotate(-6deg) translateY(-1px);
+  transition-duration: var(--dur-in);
+}
+
+/*
+ * The stamp in miniature, for the Status group: the same double frame, the
+ * same tilt and the same ink as the one on the page, at a size that fits a
+ * panel. It is what the status *is*, so it is shown rather than described.
+ */
+.inv-mini-stamp {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px 12px 5px;
+  border: 1.5px solid currentColor;
+  border-radius: 6px;
+  outline: 1px solid currentColor;
+  outline-offset: 2px;
+  transform: rotate(-4deg);
+}
+.inv-mini-stamp-kind {
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.36em;
+  text-indent: 0.36em;
+  text-transform: uppercase;
+}
+.inv-mini-stamp-date {
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+/*
+ * Row actions stay visible at a third strength rather than being hidden until
+ * hover. Hidden-until-hover is a pattern for dense tables where the controls
+ * would be noise; in a four-line list it just means the delete button cannot be
+ * found by anyone navigating with a keyboard or a touchscreen.
+ */
+.inv-row-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border-radius: var(--radius-xs);
+  color: var(--tx3);
+  opacity: 0.55;
+  transition:
+    opacity var(--dur-out) var(--ease-smooth),
+    color var(--dur-out) var(--ease-smooth),
+    background-color var(--dur-out) var(--ease-smooth);
+}
+.inv-row-action:hover,
+.inv-row-action:focus-visible {
+  opacity: 1;
+}
+.inv-row-action:hover {
+  background: var(--panel3);
+  color: var(--tx);
+  transition-duration: var(--dur-in);
 }
 
 /*

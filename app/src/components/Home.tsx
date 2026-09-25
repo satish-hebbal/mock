@@ -22,13 +22,15 @@ export function Home() {
       {/* the bottom padding matches the sides, so the hint is inset from the edge
           by the same amount the content is rather than floating above a band of
           nothing */}
-      <div className="mx-auto flex min-h-full max-w-6xl flex-col px-8 pt-16 pb-8">
+      {/* the column widens with the row: six cards across 6xl are 172pt each,
+          which is narrow enough that every tagline runs to five lines */}
+      <div className="mx-auto flex min-h-full max-w-6xl flex-col px-8 pt-16 pb-8 xl:max-w-7xl">
         {/* brand */}
         <div className="mt-auto mb-10 flex flex-col items-center text-center">
           <Mascot size={128} className="mb-4" />
           <h1 className="t-headline text-(--tx)">Ribbit</h1>
           <p className="mt-1.5 t-body text-(--tx2)">
-            A personal toolkit for visual work. Mock it up, dress it up, ship it.
+            A personal toolkit for visual work.
           </p>
         </div>
 
@@ -37,9 +39,17 @@ export function Home() {
           One row once there is width for it. Below that the cards pair off two
           by two rather than stacking into a column, which keeps the interlocked
           first two side by side at every size they are drawn as a pair.
+
+          Six tools no longer fit across the editor's own minimum width: at
+          1024 a sixth column leaves each card 160pt, and a card whose tagline
+          runs to five lines is a paragraph with a glyph on it. So the row
+          halves into two rows of three between 1024 and 1280 and goes back to
+          one above it. Three keeps the pair intact, which two rows of *two*
+          would not: the interlocked cards are the first two, and they have to
+          stay neighbours at every size.
         */}
         <div
-          className="tool-row mb-auto grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5"
+          className="tool-row mb-auto grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6"
           style={HOME_SEAM.row}
         >
           {TOOLS.map((t, i) => {
@@ -67,6 +77,11 @@ export function Home() {
                     {t.soon && (
                       <span className="rounded-xs bg-(--panel3) px-1.5 py-0.5 t-caption text-(--tx3) uppercase">
                         Soon
+                      </span>
+                    )}
+                    {t.beta && (
+                      <span className="tool-card-chip">
+                        Beta
                       </span>
                     )}
                   </div>

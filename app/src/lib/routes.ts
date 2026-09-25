@@ -3,7 +3,7 @@ import type { AppMode } from '../store'
 /**
  * One path per tool, so a link can name the tool it opens.
  *
- * The app is five tools behind one shell, and until now the only way to point
+ * The app is six tools behind one shell, and until now the only way to point
  * someone at Draw was "open the app, then pick Draw from the menu". A mode is
  * already the one piece of state that decides what the whole window is, which
  * makes it the one piece of state that belongs in the address bar: /draw is
@@ -11,7 +11,7 @@ import type { AppMode } from '../store'
  *
  * This is deliberately not a router. There is one level, no params and no
  * nesting, so the whole thing is a lookup in both directions plus a
- * `pushState`, and pulling in a routing library to hold six strings would be
+ * `pushState`, and pulling in a routing library to hold seven strings would be
  * more moving parts than the feature has.
  */
 const PATH_BY_MODE: Record<AppMode, string> = {
@@ -21,6 +21,7 @@ const PATH_BY_MODE: Record<AppMode, string> = {
   draw: '/draw',
   ascii: '/ascii',
   signal: '/signal',
+  invoice: '/invoice',
 }
 
 const MODE_BY_PATH = new Map<string, AppMode>(

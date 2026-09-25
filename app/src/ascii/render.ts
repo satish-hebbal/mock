@@ -22,6 +22,7 @@ import { paintMeshGradient } from '../lib/meshGradient'
 import { ditherImage } from './dither'
 import { paletteRGB, type RGB } from './palettes'
 import { PAINTERS, type CellCtx, type PainterEnv } from './painters'
+import type { CellField } from './cursor'
 import { applyFx, hasFx } from './postfx'
 import { rampChars, getRamp } from './ramps'
 import { applyToneToPixels, sampleGrid, toInk, type CellGrid, type Levels } from './sample'
@@ -243,6 +244,22 @@ export interface GridResult {
  * place is how a .txt file ends up one column narrower than the PNG beside it.
  */
 export function buildGrid(doc: AsciiDoc, source: CanvasImageSource): GridResult {
+  /*
+   * Remembered for the last document and source. The cursor redraws the
+   * preview every frame while nothing about the picture has changed, and
+   * resampling the source sixty times a second for the same answer was most of
+   * the cost of a frame.
+   */
+  const key = JSON.stringify([doc.style, doc.size, doc.grid.cell, doc.grid.aspect, doc.tone])
+  if (gridCache && gridCache.source === source && gridCache.key === key) return gridCache.result
+  const result = cutGrid(doc, source)
+  gridCache = { source, key, result }
+  return result
+}
+
+let gridCache: { source: CanvasImageSource; key: string; result: GridResult } | null = null
+
+function cutGrid(doc: AsciiDoc, source: CanvasImageSource): GridResult {
   const spec = getStyle(doc.style)
   const { cols, rows } = gridSize(doc, spec.square)
   const grid = sampleGrid(source, cols, rows)
@@ -308,6 +325,7 @@ export function paintArt(
   source: CanvasImageSource,
   outW: number,
   outH: number,
+  field?: CellField,
 ): { cols: number; rows: number } {
   const spec = getStyle(doc.style)
   const { grid, levels, fine, cols, rows } = buildGrid(doc, source)
@@ -390,6 +408,7 @@ export function paintArt(
       cell.r = r
       cell.g = g
       cell.b = b
+      field?.(cell)
       painter(cell, env)
     }
   }
@@ -397,17 +416,52 @@ export function paintArt(
   return { cols, rows }
 }
 
+/**
+ * The last backdrop the preview painted.
+ *
+ * Only the preview asks for it. A blurred backdrop is the costliest thing in a
+ * frame and the cursor never changes it, but holding an export-sized copy of
+ * one would pin a hundred megabytes for a picture already downloaded.
+ */
+let backdropCache: { source: CanvasImageSource | null; key: string; canvas: HTMLCanvasElement } | null = null
+
+function backdropLayer(
+  doc: AsciiDoc,
+  source: CanvasImageSource | null,
+  w: number,
+  h: number,
+  scale: number,
+): HTMLCanvasElement {
+  const key = JSON.stringify([doc.backdrop, w, h])
+  if (backdropCache && backdropCache.source === source && backdropCache.key === key) {
+    return backdropCache.canvas
+  }
+  const canvas = makeCanvas(w, h)
+  paintBackdrop(canvas.getContext('2d')!, doc, source, w, h, scale)
+  backdropCache = { source, key, canvas }
+  return canvas
+}
+
+export interface RenderOptions {
+  /** moves cells before they are painted; the cursor's scatter */
+  field?: CellField
+  /** keep the backdrop between calls, for a preview redrawn every frame */
+  reuse?: boolean
+}
+
 export function renderAscii(
   doc: AsciiDoc,
   source: CanvasImageSource | null,
   outW: number,
   outH: number,
+  opts: RenderOptions = {},
 ): AsciiRender {
   const out = makeCanvas(outW, outH)
   const ctx = out.getContext('2d')!
   const scale = outW / Math.max(1, doc.size.width)
 
-  paintBackdrop(ctx, doc, source, out.width, out.height, scale)
+  if (opts.reuse) ctx.drawImage(backdropLayer(doc, source, out.width, out.height, scale), 0, 0)
+  else paintBackdrop(ctx, doc, source, out.width, out.height, scale)
 
   if (!source) {
     if (hasFx(doc.fx)) applyFx(out, doc.fx, scale)
@@ -426,7 +480,14 @@ export function renderAscii(
     cols = Math.round(doc.size.width / px)
     rows = Math.round(doc.size.height / px)
   } else {
-    const grid = paintArt(new CanvasSurface(art.getContext('2d')!), doc, source, out.width, out.height)
+    const grid = paintArt(
+      new CanvasSurface(art.getContext('2d')!),
+      doc,
+      source,
+      out.width,
+      out.height,
+      opts.field,
+    )
     cols = grid.cols
     rows = grid.rows
   }

@@ -80,7 +80,7 @@ export interface ExportProgress {
   total: number
 }
 
-export type AppMode = 'home' | 'studio' | 'shots' | 'draw' | 'ascii' | 'signal'
+export type AppMode = 'home' | 'studio' | 'shots' | 'draw' | 'ascii' | 'signal' | 'invoice'
 
 /** Sections of the left tool rail in Studio; each one opens the panel beside it. */
 export type ToolSection = 'devices' | 'camera' | 'frame' | 'background' | 'add'
@@ -1267,7 +1267,8 @@ export const useStudio = create<StudioState>()(
           savedMode === 'studio' ||
           savedMode === 'draw' ||
           savedMode === 'ascii' ||
-          savedMode === 'signal'
+          savedMode === 'signal' ||
+          savedMode === 'invoice'
             ? savedMode
             : 'home'
         /*

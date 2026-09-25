@@ -11,7 +11,8 @@
     "verify:signal": "node scripts/verify-signal.mjs && node scripts/verify-signal-embed.mjs",
     "verify:sequence": "node scripts/verify-sequence.mjs",
     "verify:overlays": "node scripts/verify-overlays.mjs",
-    "verify": "npm run verify:ascii && npm run verify:signal && npm run verify:sequence && npm run verify:overlays",
+    "verify:invoice": "node scripts/verify-invoice.mjs",
+    "verify": "npm run verify:ascii && npm run verify:signal && npm run verify:sequence && npm run verify:overlays && npm run verify:invoice",
     "preview": "vite preview"
   },
   "dependencies": {

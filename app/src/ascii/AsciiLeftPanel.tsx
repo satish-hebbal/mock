@@ -18,7 +18,7 @@
  */
 
 import { useEffect, useRef, type CSSProperties } from 'react'
-import { Blend, Grid3x3, ImagePlus, RotateCcw, Trash2, Type } from 'lucide-react'
+import { Blend, Grid3x3, ImagePlus, MousePointer2, RotateCcw, Trash2, Type } from 'lucide-react'
 import { pickMediaFile, useStudio } from '../store'
 import {
   ColorRow,
@@ -679,6 +679,59 @@ function EffectsGroup() {
   )
 }
 
+/**
+ * What the pointer does to the preview.
+ *
+ * Last on the page because it changes nothing you export: it is how the
+ * picture behaves under your hand, not what the picture is.
+ */
+function CursorGroup() {
+  const cursor = useAscii((s) => s.doc.cursor)
+  const dither = useAscii((s) => s.doc.style === 'dither')
+  const on = cursor.mode === 'scatter'
+  return (
+    <Section title="Cursor" icon={<MousePointer2 {...iconProps} />} defaultOpen>
+      <Segments
+        options={[
+          { id: 'off', label: 'Off' },
+          { id: 'scatter', label: 'Scatter' },
+        ]}
+        value={cursor.mode}
+        onChange={(mode) => edit('', (d) => void (d.cursor.mode = mode))}
+      />
+      {on && (
+        <>
+          <SliderRow
+            label="Radius"
+            hint="How far from the pointer the cells come loose"
+            value={cursor.radius}
+            min={40}
+            max={600}
+            step={1}
+            format={px}
+            onChange={(v) => edit('ascii-cursor-radius', (d) => void (d.cursor.radius = v))}
+          />
+          <SliderRow
+            label="Strength"
+            hint="How far a cell under the pointer can be thrown"
+            value={cursor.strength}
+            min={0}
+            max={1}
+            step={0.01}
+            format={pct}
+            onChange={(v) => edit('ascii-cursor-strength', (d) => void (d.cursor.strength = v))}
+          />
+        </>
+      )}
+      <p className="mt-1 mb-2 t-caption text-(--tx3)">
+        {on && dither
+          ? 'Dither has no cells to move, so the pointer leaves it alone.'
+          : 'Preview only. Exports stay still.'}
+      </p>
+    </Section>
+  )
+}
+
 // ----- the panel itself -----
 
 const TABS: { id: AsciiSection; label: string }[] = [
@@ -762,6 +815,7 @@ export function AsciiLeftPanel() {
           <ColorGroup />
           <BackdropGroup />
           <EffectsGroup />
+          <CursorGroup />
         </div>
       </div>
     </div>

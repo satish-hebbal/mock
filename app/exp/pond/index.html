@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Koi pond</title>
+    <link rel="icon" href="data:," />
+    <style>
+      :root {
+        --bg: #fafaf9;
+        --ink: #1c1917;
+        --muted: #78716c;
+        --line: #e7e5e4;
+        --chip: #f5f5f4;
+        --ease-smooth: cubic-bezier(0.19, 1, 0.22, 1); /* house token, copied from src/index.css */
+        font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--ink);
+        display: grid;
+        place-items: center;
+        padding: 48px 16px;
+      }
+      main {
+        width: min(660px, 100%);
+        display: grid;
+        gap: 20px;
+      }
+      #pond {
+        position: relative;
+        width: 100%;
+        aspect-ratio: 3 / 2;
+        touch-action: none;
+      }
+      #pond canvas {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        cursor: pointer;
+        -webkit-tap-highlight-color: transparent;
+      }
+      /* the debug views are plain rectangles, so give them a frame */
+      #pond:not([data-view='final']) canvas {
+        border-radius: 12px;
+      }
+      #pond[data-fallback] {
+        background: #6f8f82;
+        border-radius: 24px;
+      }
+      header h1 {
+        margin: 0 0 4px;
+        font-size: 15px;
+        font-weight: 600;
+      }
+      header p,
+      #status {
+        margin: 0;
+        font-size: 14px;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+      #views {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      #views button {
+        font: inherit;
+        font-size: 13px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: var(--chip);
+        color: var(--muted);
+        cursor: pointer;
+        transition: background-color 160ms var(--ease-smooth), color 160ms var(--ease-smooth);
+      }
+      #views button[aria-pressed='true'] {
+        background: var(--ink);
+        border-color: var(--ink);
+        color: var(--bg);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Koi pond</h1>
+        <p>Tap the water to make ripples, drag to stir it, or tap a fish to scare it.</p>
+      </header>
+      <div id="pond" data-view="final">
+        <canvas role="img" aria-label="Koi swimming in a sunlit pond"></canvas>
+      </div>
+      <div id="views" role="group" aria-label="Show a render pass">
+        <button data-view="final" aria-pressed="true">Final</button>
+        <button data-view="caustics" aria-pressed="false">Caustics</button>
+        <button data-view="ripples" aria-pressed="false">Ripples</button>
+        <button data-view="surface" aria-pressed="false">Surface slope</button>
+        <button data-view="bed" aria-pressed="false">Pond bed</button>
+        <button data-view="fish" aria-pressed="false">Fish</button>
+        <button data-view="shadow" aria-pressed="false">Shadow</button>
+      </div>
+      <p id="status"></p>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

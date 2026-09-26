@@ -156,7 +156,7 @@ export function AppSheet() {
                       light. `--tool-copy` is the ink that clears that, so it is
                       the ink all five want.
                     */}
-                    <span className="mt-0.5 block t-caption leading-snug text-(--tool-copy)">
+                    <span className="mt-0.5 block truncate t-caption leading-snug text-(--tool-copy)">
                       {t.tagline}
                     </span>
                   </span>

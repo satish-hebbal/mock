@@ -1,0 +1,575 @@
+﻿<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>Ribbit: Five Tools</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script src="assets/audio-data.js"></script>
+    <style>
+      /* Inter ships with the composition so the render never waits on a network font. */
+      @font-face {
+        font-family: 'Inter';
+        src: url('assets/fonts/inter-400.woff2') format('woff2');
+        font-weight: 400;
+        font-style: normal;
+        font-display: block;
+      }
+      @font-face {
+        font-family: 'Inter';
+        src: url('assets/fonts/inter-600.woff2') format('woff2');
+        font-weight: 600;
+        font-style: normal;
+        font-display: block;
+      }
+      @font-face {
+        font-family: 'Inter';
+        src: url('assets/fonts/inter-800.woff2') format('woff2');
+        font-weight: 800;
+        font-style: normal;
+        font-display: block;
+      }
+
+      /* Ribbit's own tokens, read from src/index.css */
+      :root {
+        --canvas: #08090a;
+        --surface-1: #0f1011;
+        --hairline: #23252a;
+        --ink: #f7f8f8;
+        --ink-subtle: #8a8f98;
+        --primary: #5e6ad2;
+        --primary-hover: #828fff;
+      }
+
+      body {
+        margin: 0;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family: 'Inter', sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      #root {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: var(--canvas);
+      }
+
+      /* The ground and the aurora sit behind every clip and are never timed,
+         so they carry their own absolute box. The aurora is the product's own
+         device: a hue travelling out of the bottom edge, recoloured per tool. */
+      #bg {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        background: var(--canvas);
+        overflow: hidden;
+      }
+      #aurora-wrap {
+        position: absolute;
+        left: -20%;
+        right: -20%;
+        bottom: -22%;
+        height: 104%;
+      }
+      #aurora {
+        position: absolute;
+        inset: 0;
+        transform-origin: 50% 100%;
+        opacity: 0.55;
+        background:
+          radial-gradient(50% 60% at 52% 100%, var(--glow) 0%, rgba(0, 0, 0, 0) 66%),
+          radial-gradient(36% 50% at 22% 100%, var(--accent2) 0%, rgba(0, 0, 0, 0) 64%);
+        filter: blur(44px);
+      }
+      /* A scrim keeps the top of the frame honest black so white type stays crisp. */
+      #scrim {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(to bottom, rgba(8, 9, 10, 0.92) 0%, rgba(8, 9, 10, 0.35) 46%, rgba(8, 9, 10, 0) 100%);
+      }
+
+      .clip {
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+      }
+
+      /* The app window. Every tool scene uses the same box so the tour has one
+         steady frame and only the contents change. */
+      .screen {
+        position: absolute;
+        left: 340px;
+        top: 74px;
+        width: 1240px;
+        height: 775px;
+        border-radius: 16px;
+        overflow: hidden;
+        border: 1px solid var(--hairline);
+        background: var(--surface-1);
+        box-shadow: 0 46px 96px rgba(0, 0, 0, 0.62);
+      }
+      .screen img {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        transform-origin: 50% 46%;
+      }
+
+      .caption {
+        position: absolute;
+        left: 340px;
+        top: 890px;
+        width: 840px;
+      }
+      .title {
+        margin: 0;
+        font-size: 60px;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+        line-height: 1;
+        color: var(--ink);
+      }
+      .tagline {
+        margin: 18px 0 0;
+        font-size: 27px;
+        font-weight: 400;
+        line-height: 1.3;
+        color: var(--ink-subtle);
+      }
+
+      .chip {
+        position: absolute;
+        right: 340px;
+        top: 902px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 13px 20px;
+        border: 1px solid var(--hairline);
+        border-radius: 999px;
+        background: rgba(15, 16, 17, 0.72);
+        font-size: 21px;
+        font-weight: 600;
+        color: var(--ink);
+        white-space: nowrap;
+      }
+      .dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--glow);
+      }
+
+      /* Hook and outro */
+      .centre {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      }
+      .mark {
+        width: 168px;
+        height: 168px;
+      }
+      .wordmark {
+        margin: 0;
+        font-size: 104px;
+        font-weight: 800;
+        letter-spacing: -0.035em;
+        line-height: 1;
+        color: var(--ink);
+      }
+      .sub {
+        margin: 0;
+        font-size: 30px;
+        font-weight: 400;
+        color: var(--ink-subtle);
+      }
+      .count {
+        margin: 0;
+        font-size: 26px;
+        font-weight: 600;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--primary-hover);
+      }
+      .routes {
+        margin: 0;
+        font-family: ui-monospace, monospace;
+        font-size: 24px;
+        font-weight: 400;
+        letter-spacing: 0.04em;
+        color: var(--ink-subtle);
+      }
+
+      /* The launcher's five names, counted in one per beat. */
+      .pills {
+        position: absolute;
+        left: 340px;
+        right: 340px;
+        top: 896px;
+        display: flex;
+        justify-content: space-between;
+        gap: 14px;
+      }
+      .pill {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 11px;
+        padding: 15px 10px;
+        border: 1px solid var(--hairline);
+        border-radius: 12px;
+        background: rgba(15, 16, 17, 0.78);
+        font-size: 23px;
+        font-weight: 600;
+        color: var(--ink);
+        white-space: nowrap;
+      }
+      .pill i {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        flex: none;
+      }
+      .lede {
+        position: absolute;
+        left: 340px;
+        right: 340px;
+        top: 984px;
+        text-align: center;
+        margin: 0;
+        font-size: 25px;
+        font-weight: 400;
+        color: var(--ink-subtle);
+      }
+
+      /* Outro list */
+      .rows {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 252px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 18px;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 22px;
+        width: 720px;
+        padding: 18px 28px;
+        border: 1px solid var(--hairline);
+        border-radius: 14px;
+        background: rgba(15, 16, 17, 0.76);
+      }
+      .row i {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        flex: none;
+      }
+      .row b {
+        font-size: 30px;
+        font-weight: 600;
+        color: var(--ink);
+      }
+      .row span {
+        margin-left: auto;
+        font-family: ui-monospace, monospace;
+        font-size: 24px;
+        color: var(--ink-subtle);
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="brag"
+      data-start="0"
+      data-width="1920"
+      data-height="1080"
+      data-duration="59.904"
+      data-fps="30"
+    >
+      <div id="bg">
+        <!-- The aurora is deliberately larger than the frame: it is a glow thrown
+             from below the bottom edge, exactly as the launcher cards draw it.
+             Decorative only, no foreground content sits inside it. -->
+        <div id="aurora-wrap" data-layout-allow-overflow="true"><div id="aurora"></div></div>
+        <div id="scrim"></div>
+      </div>
+
+      <!-- Scene 1: the mark. 0 to 3.9936 -->
+      <section id="s-hook" class="clip" data-start="0" data-duration="3.9936" data-track-index="0">
+        <div class="centre" style="gap: 26px">
+          <img id="hook-mark" class="mark" src="assets/media/frog-logo.svg" alt="" />
+          <h1 id="hook-word" class="wordmark">Ribbit</h1>
+          <p id="hook-sub" class="sub">A personal toolkit for visual work.</p>
+          <p id="hook-count" class="count">Five tools</p>
+        </div>
+      </section>
+
+      <!-- Scene 2: the launcher. 3.9936 to 9.984 -->
+      <section id="s-home" class="clip" data-start="3.9936" data-duration="5.9904" data-track-index="1">
+        <div id="home-screen" class="screen" data-layout-allow-overflow="true">
+          <img id="home-img" src="assets/media/launcher.png" alt="" />
+        </div>
+        <div class="pills">
+          <div class="pill" id="p0"><i style="background: #6c7eff"></i>3D Studio</div>
+          <div class="pill" id="p1"><i style="background: #e87c3c"></i>Shots</div>
+          <div class="pill" id="p2"><i style="background: #28b494"></i>Draw</div>
+          <div class="pill" id="p3"><i style="background: #a868f0"></i>ASCII</div>
+          <div class="pill" id="p4"><i style="background: #30acdc"></i>Signal</div>
+        </div>
+        <p id="home-lede" class="lede">Five tools. One shell.</p>
+      </section>
+
+      <!-- Scene 3: 3D Studio. 9.984 to 17.9712 -->
+      <section id="s-studio" class="clip" data-start="9.984" data-duration="7.9872" data-track-index="2">
+        <div class="screen tool-screen" data-layout-allow-overflow="true"><img src="assets/media/studio.png" alt="" /></div>
+        <div class="caption">
+          <h2 class="title">3D Studio</h2>
+          <p class="tagline">Put a screen on a 3D device, light it, and export a video.</p>
+        </div>
+        <div class="chip" style="--glow: #6c7eff"><span class="dot"></span>Camera: tilt, 48mm lens, zoom</div>
+      </section>
+
+      <!-- Scene 4: Shots. 17.9712 to 25.9584 -->
+      <section id="s-shots" class="clip" data-start="17.9712" data-duration="7.9872" data-track-index="3">
+        <div class="screen tool-screen" data-layout-allow-overflow="true"><img src="assets/media/shots.png" alt="" /></div>
+        <div class="caption">
+          <h2 class="title">Shots</h2>
+          <p class="tagline">Frame screens on a backdrop worth posting, in seconds.</p>
+        </div>
+        <div class="chip" style="--glow: #e87c3c"><span class="dot"></span>Backdrop read from the image</div>
+      </section>
+
+      <!-- Scene 5: Draw. 25.9584 to 33.9456 -->
+      <section id="s-draw" class="clip" data-start="25.9584" data-duration="7.9872" data-track-index="4">
+        <div class="screen tool-screen" data-layout-allow-overflow="true"><img src="assets/media/draw.png" alt="" /></div>
+        <div class="caption">
+          <h2 class="title">Draw</h2>
+          <p class="tagline">A hand-drawn whiteboard, and a tray of pens that behave like pens.</p>
+        </div>
+        <div class="chip" style="--glow: #28b494"><span class="dot"></span>Eight pens, drawn not iconified</div>
+      </section>
+
+      <!-- Scene 6: ASCII. 33.9456 to 41.9328 -->
+      <section id="s-ascii" class="clip" data-start="33.9456" data-duration="7.9872" data-track-index="5">
+        <div class="screen tool-screen" data-layout-allow-overflow="true"><img src="assets/media/ascii.png" alt="" /></div>
+        <div class="caption">
+          <h2 class="title">ASCII</h2>
+          <p class="tagline">Redraw a picture as characters, tiles or dither, and keep the text.</p>
+        </div>
+        <div class="chip" style="--glow: #a868f0"><span class="dot"></span>145 x 45 cells of real text</div>
+      </section>
+
+      <!-- Scene 7: Signal. 41.9328 to 49.92 -->
+      <section id="s-signal" class="clip" data-start="41.9328" data-duration="7.9872" data-track-index="6">
+        <div class="screen tool-screen" data-layout-allow-overflow="true"><img src="assets/media/signal.png" alt="" /></div>
+        <div class="caption">
+          <h2 class="title">Signal</h2>
+          <p class="tagline">Dithered motion out of nothing. Take it away as a loop.</p>
+        </div>
+        <div class="chip" style="--glow: #30acdc"><span class="dot"></span>1024 x 1024 at 13 fps</div>
+      </section>
+
+      <!-- Scene 8: outro. 49.92 to 59.904 -->
+      <section id="s-outro" class="clip" data-start="49.92" data-duration="9.984" data-track-index="7">
+        <div id="outro-rows" class="rows">
+          <div class="row" id="r0"><i style="background: #6c7eff"></i><b>3D Studio</b><span>/studio</span></div>
+          <div class="row" id="r1"><i style="background: #e87c3c"></i><b>Shots</b><span>/shots</span></div>
+          <div class="row" id="r2"><i style="background: #28b494"></i><b>Draw</b><span>/draw</span></div>
+          <div class="row" id="r3"><i style="background: #a868f0"></i><b>ASCII</b><span>/ascii</span></div>
+          <div class="row" id="r4"><i style="background: #30acdc"></i><b>Signal</b><span>/signal</span></div>
+        </div>
+        <div id="outro-end" class="centre" style="gap: 24px">
+          <!-- a second copy of the mark, so the two uses are distinct media nodes -->
+          <img id="end-mark" class="mark" src="assets/media/frog-logo-end.svg" alt="" />
+          <h1 id="end-word" class="wordmark">Ribbit</h1>
+          <p id="end-line" class="count">Five tools. One frog.</p>
+          <p id="end-routes" class="routes">/studio &nbsp; /shots &nbsp; /draw &nbsp; /ascii &nbsp; /signal</p>
+        </div>
+      </section>
+
+      <audio
+        id="music"
+        data-timeline-role="music"
+        data-start="0"
+        data-duration="59.904"
+        data-media-start="3.02"
+        data-track-index="10"
+        src="assets/music/happy-beats-business-moves-vol-1-by-ende-dot-app.mp3"
+      ></audio>
+
+      <!-- Each accent carries its true media length and its own lane, so nothing
+           layers on a shared track. -->
+      <audio id="sfx-home" data-start="3.9936" data-duration="0.572" data-volume="0.5" data-track-index="11" src="assets/sfx/impact/impactSoft_heavy_001.ogg"></audio>
+
+      <audio id="sfx-n0" data-start="4.4928" data-duration="0.057" data-volume="0.3" data-track-index="12" src="assets/sfx/ui/rollover2.ogg"></audio>
+      <audio id="sfx-n1" data-start="4.992" data-duration="0.057" data-volume="0.3" data-track-index="13" src="assets/sfx/ui/rollover2.ogg"></audio>
+      <audio id="sfx-n2" data-start="5.4912" data-duration="0.057" data-volume="0.3" data-track-index="14" src="assets/sfx/ui/rollover2.ogg"></audio>
+      <audio id="sfx-n3" data-start="5.9904" data-duration="0.057" data-volume="0.3" data-track-index="15" src="assets/sfx/ui/rollover2.ogg"></audio>
+      <audio id="sfx-n4" data-start="6.4896" data-duration="0.057" data-volume="0.3" data-track-index="16" src="assets/sfx/ui/rollover2.ogg"></audio>
+
+      <audio id="sfx-t0" data-start="9.984" data-duration="0.183" data-volume="0.42" data-track-index="17" src="assets/sfx/impact/impactSoft_medium_001.ogg"></audio>
+      <audio id="sfx-t1" data-start="17.9712" data-duration="0.183" data-volume="0.42" data-track-index="18" src="assets/sfx/impact/impactSoft_medium_001.ogg"></audio>
+      <audio id="sfx-t2" data-start="25.9584" data-duration="0.183" data-volume="0.42" data-track-index="19" src="assets/sfx/impact/impactSoft_medium_001.ogg"></audio>
+      <audio id="sfx-t3" data-start="33.9456" data-duration="0.183" data-volume="0.42" data-track-index="20" src="assets/sfx/impact/impactSoft_medium_001.ogg"></audio>
+      <audio id="sfx-t4" data-start="41.9328" data-duration="0.183" data-volume="0.42" data-track-index="21" src="assets/sfx/impact/impactSoft_medium_001.ogg"></audio>
+
+      <!-- lands with the wordmark at outIn + 2.75 bars -->
+      <audio id="sfx-end" data-start="55.4112" data-duration="1.48" data-volume="0.4" data-track-index="22" src="assets/sfx/impact/impactBell_heavy_000.ogg"></audio>
+    </div>
+
+    <script>
+      /*
+       * One paused timeline. Bar length is 1.9968s at the track's 120.19 BPM, and
+       * the music is offset 3.02s into the file so the detected beat grid starts at
+       * composition time zero. Every scene boundary below is a whole number of bars,
+       * so all seven transitions are beat locked by construction.
+       */
+      var BEAT = 0.4992;
+      var BAR = BEAT * 4;
+
+      var SCENES = [
+        { at: 0.0, glow: '#5e6ad2', accent: '#828fff' }, // hook          // beat-locked: 0.00s
+        { at: 2 * BAR, glow: '#5e6ad2', accent: '#828fff' }, // launcher   // beat-locked: 3.99s
+        { at: 5 * BAR, glow: '#6c7eff', accent: '#40c4ff' }, // studio     // beat-locked: 9.98s
+        { at: 9 * BAR, glow: '#e87c3c', accent: '#fac458' }, // shots      // beat-locked: 17.97s
+        { at: 13 * BAR, glow: '#28b494', accent: '#7be3c0' }, // draw      // beat-locked: 25.96s
+        { at: 17 * BAR, glow: '#a868f0', accent: '#d9a8ff' }, // ascii     // beat-locked: 33.95s
+        { at: 21 * BAR, glow: '#30acdc', accent: '#7fe0ff' }, // signal    // beat-locked: 41.93s
+        { at: 25 * BAR, glow: '#5e6ad2', accent: '#828fff' }, // outro     // beat-locked: 49.92s
+      ];
+
+      var tl = gsap.timeline({ paused: true });
+
+      // ---- Scene 1: the mark ----
+      tl.fromTo('#hook-mark', { scale: 0.86, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.75, ease: 'power3.out' }, 0.12);
+      tl.fromTo('#hook-word', { y: 26, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6, ease: 'power3.out' }, 0.55);
+      tl.fromTo('#hook-sub', { y: 18, opacity: 0 }, { y: 0, opacity: 1, duration: 0.55, ease: 'power3.out' }, 0.95);
+      tl.fromTo('#hook-count', { y: 14, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: 'power3.out' }, 1.6);
+      tl.to('#s-hook .centre', { opacity: 0, duration: 0.42, ease: 'power2.in' }, 2 * BAR - 0.5);
+
+      // ---- Scene 2: the launcher ----
+      var homeIn = 2 * BAR; // beat-locked: 3.99s
+      tl.fromTo('#home-screen', { y: 42, opacity: 0 }, { y: 0, opacity: 1, duration: 0.66, ease: 'power3.out' }, homeIn);
+      /* The launcher is mostly generous empty space at 1:1, so this one sits in
+         close on the mascot and the card row and drifts in from there. */
+      tl.fromTo('#home-img', { scale: 1.26 }, { scale: 1.31, duration: 5.4, ease: 'none' }, homeIn);
+      // beat-grid: names at 4.49s, 4.99s, 5.49s, 5.99s, 6.49s (one per beat)
+      for (var i = 0; i < 5; i++) {
+        tl.fromTo('#p' + i, { y: 16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.42, ease: 'power3.out' }, homeIn + BEAT * (i + 1));
+      }
+      tl.fromTo('#home-lede', { opacity: 0 }, { opacity: 1, duration: 0.5, ease: 'power2.out' }, homeIn + BEAT * 7);
+      tl.to(['#home-screen', '.pills', '#home-lede'], { opacity: 0, duration: 0.4, ease: 'power2.in' }, 5 * BAR - 0.46);
+
+      // ---- Scenes 3 to 7: the five tools ----
+      var TOOLS = [
+        { sel: '#s-studio', at: 5 * BAR },
+        { sel: '#s-shots', at: 9 * BAR },
+        { sel: '#s-draw', at: 13 * BAR },
+        { sel: '#s-ascii', at: 17 * BAR },
+        { sel: '#s-signal', at: 21 * BAR },
+      ];
+
+      TOOLS.forEach(function (t) {
+        var at = t.at; // beat-locked to a bar line
+        var screen = t.sel + ' .screen';
+        var img = t.sel + ' .screen img';
+        tl.fromTo(screen, { x: 54, opacity: 0 }, { x: 0, opacity: 1, duration: 0.62, ease: 'power3.out' }, at);
+        /* A slow drift in rather than a real push: the panels carry values right
+           at their edges, and anything past about 5% starts slicing them. */
+        tl.fromTo(img, { scale: 1.0, y: 0 }, { scale: 1.05, y: -8, duration: 7.6, ease: 'none' }, at);
+        tl.fromTo(t.sel + ' .title', { y: 22, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: 'power3.out' }, at + 0.34);
+        tl.fromTo(t.sel + ' .tagline', { y: 16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: 'power3.out' }, at + BEAT + 0.08);
+        tl.fromTo(t.sel + ' .chip', { y: 12, opacity: 0 }, { y: 0, opacity: 1, duration: 0.46, ease: 'power3.out' }, at + BEAT * 3);
+        tl.to([screen, t.sel + ' .caption', t.sel + ' .chip'], { opacity: 0, duration: 0.4, ease: 'power2.in' }, at + 4 * BAR - 0.46);
+      });
+
+      // ---- Scene 8: outro ----
+      var outIn = 25 * BAR; // beat-locked: 49.92s
+      // beat-grid: rows at 50.42s, 50.92s, 51.42s, 51.92s, 52.42s (one per beat)
+      for (var r = 0; r < 5; r++) {
+        tl.fromTo('#r' + r, { y: 22, opacity: 0 }, { y: 0, opacity: 1, duration: 0.44, ease: 'power3.out' }, outIn + BEAT * (r + 1));
+      }
+      /* Pulled half a bar earlier than the obvious placement so the routes line,
+         which is the last thing on screen, still gets about two settled seconds. */
+      tl.to('#outro-rows', { opacity: 0, y: -26, duration: 0.5, ease: 'power2.in' }, outIn + 2.4 * BAR);
+      tl.fromTo('#end-mark', { scale: 0.9, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.6, ease: 'power3.out' }, outIn + 2.75 * BAR - 0.2);
+      tl.fromTo('#end-word', { y: 22, opacity: 0 }, { y: 0, opacity: 1, duration: 0.55, ease: 'power3.out' }, outIn + 2.75 * BAR);
+      tl.fromTo('#end-line', { y: 14, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: 'power3.out' }, outIn + 3.25 * BAR);
+      tl.fromTo('#end-routes', { y: 12, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: 'power3.out' }, outIn + 3.75 * BAR);
+
+      /* The timeline carries the music level on its own rather than splitting it
+         between data-volume and a tween, because a volume tween replaces the clip
+         gain rather than scaling it. The bed sits at 0.62 and fades out under the
+         closing line. */
+      tl.set('#music', { volume: 0.62 }, 0);
+      tl.to('#music', { volume: 0, duration: 1.5, ease: 'power2.in' }, 58.3);
+
+      /*
+       * Audio-reactive pass, sampled once per frame.
+       *
+       * The aurora is the only element driven by the music: its opacity and scale
+       * breathe with overall energy and its colour is the current tool's own
+       * aurora hue, so the background is lit by the product's palette rather than
+       * by a generic visualiser. The window card gets a small shadow lift on bass.
+       * Neither element is touched by GSAP, so these direct style writes cannot
+       * fight a tween.
+       */
+      var aurora = document.getElementById('aurora');
+      var root = document.getElementById('root');
+
+      function sceneAt(t) {
+        var s = SCENES[0];
+        for (var k = 0; k < SCENES.length; k++) {
+          if (t >= SCENES[k].at - 0.0001) s = SCENES[k];
+        }
+        return s;
+      }
+
+      function sampler(frame) {
+        return function () {
+          var t = frame / AUDIO_DATA.fps;
+          var s = sceneAt(t);
+          var bass = AUDIO_DATA.bass[frame] || 0;
+          var energy = AUDIO_DATA.energy[frame] || 0;
+
+          aurora.style.setProperty('--glow', s.glow);
+          aurora.style.setProperty('--accent2', s.accent);
+          aurora.style.opacity = (0.62 + energy * 0.38).toFixed(3);
+          aurora.style.transform = 'scale(' + (1 + bass * 0.07).toFixed(4) + ')';
+
+          // the chips borrow the live tool colour too
+          root.style.setProperty('--glow', s.glow);
+
+          var lift = (0.52 + bass * 0.22).toFixed(3);
+          var spread = (46 + bass * 14).toFixed(1);
+          var screens = document.querySelectorAll('.screen');
+          for (var n = 0; n < screens.length; n++) {
+            screens[n].style.boxShadow = '0 ' + spread + 'px 96px rgba(0,0,0,' + lift + ')';
+          }
+        };
+      }
+
+      for (var f = 0; f < AUDIO_DATA.totalFrames; f++) {
+        tl.call(sampler(f), [], f / AUDIO_DATA.fps);
+      }
+
+      window.__timelines['brag'] = tl;
+    </script>
+  </body>
+</html>

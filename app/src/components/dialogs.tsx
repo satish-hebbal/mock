@@ -12,6 +12,7 @@ import { sequenceDuration } from '../lib/sequence'
 import { SIZE_PRESETS } from '../lib/presets'
 import { TEMPLATES } from '../lib/presets'
 import { SHORTCUT_GROUPS } from '../lib/shortcuts'
+import { TOOLS } from '../lib/tools'
 import { ui } from '../lib/ui'
 import { track } from '../lib/analytics'
 import { Dropdown, MiniButton, Segments, SliderRow } from './controls'
@@ -441,9 +442,15 @@ export function ShortcutsDialog() {
             <p className="mb-1.5 flex items-center gap-2 t-caption text-(--tx2)">
               {g.title}
               {/* the mode a group applies to, so nothing looks broken in the other one */}
+              {/*
+                The tool a group applies to, so nothing looks broken while you
+                are in a different one. The name comes off the tool registry
+                rather than a chain of ternaries: the chain was already one
+                tool short, and every group scoped to ASCII was labelled Draw.
+              */}
               {g.scope !== 'global' && g.scope !== mode && (
                 <span className="rounded-xs bg-(--panel3) px-1.5 py-0.5 t-caption text-(--tx3)">
-                  {g.scope === 'studio' ? '3D Studio' : g.scope === 'shots' ? 'Shots' : 'Draw'}
+                  {TOOLS.find((t) => t.id === g.scope)?.name ?? g.scope}
                 </span>
               )}
             </p>

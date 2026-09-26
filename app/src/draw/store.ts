@@ -259,7 +259,8 @@ export const useDraw = create<DrawState>()(
     past: [],
     future: [],
 
-    tool: 'select',
+    // a whiteboard opens with a pen in hand, since drawing is why you came
+    tool: 'freedraw',
     toolLocked: false,
     pen: 'pen',
     style: { ...DEFAULT_STYLE },

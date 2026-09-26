@@ -4,7 +4,7 @@
  * (or miss one we do) as long as both sides are edited together.
  */
 
-export type ShortcutScope = 'global' | 'studio' | 'shots' | 'draw' | 'ascii'
+export type ShortcutScope = 'global' | 'studio' | 'shots' | 'draw' | 'ascii' | 'invoice'
 
 export interface Shortcut {
   /** key combo, or a mouse gesture written out */
@@ -27,6 +27,8 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { keys: 'Alt+2', desc: 'Switch to Shots' },
       { keys: 'Alt+3', desc: 'Switch to Draw' },
       { keys: 'Alt+4', desc: 'Switch to ASCII' },
+      { keys: 'Alt+5', desc: 'Switch to Signal' },
+      { keys: 'Alt+6', desc: 'Switch to Invoice' },
       { keys: 'Ctrl+Z', desc: 'Undo' },
       { keys: 'Ctrl+Shift+Z / Ctrl+Y', desc: 'Redo' },
       { keys: 'E', desc: 'Export dialog' },
@@ -152,6 +154,27 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { keys: 'R', desc: 'Reroll the look' },
       { keys: 'I', desc: 'Invert' },
       { keys: 'E', desc: 'Export' },
+    ],
+  },
+  {
+    title: 'Invoice',
+    scope: 'invoice',
+    items: [
+      { keys: 'Ctrl+Z', desc: 'Undo' },
+      { keys: 'Ctrl+Shift+Z / Ctrl+Y', desc: 'Redo' },
+      { keys: 'M', desc: 'Mark the invoice: the date roller and the stamp' },
+      { keys: 'N', desc: 'Add a line' },
+      { keys: 'Enter (in a description)', desc: 'Finish the line and start the next one' },
+      { keys: 'E', desc: 'Export: PDF, or the invoice file' },
+      { keys: 'Ctrl+P', desc: 'Print the page, or save it as a PDF' },
+      { keys: 'Ctrl+S', desc: 'Save a .invoice.json beside the PDF' },
+      { keys: 'Ctrl+O', desc: 'Open a .invoice.json (or drop one on the window)' },
+      { keys: 'Alt+N', desc: 'Start the next invoice: the number rolls on, the stamp clears' },
+      { keys: '+ / −', desc: 'Zoom the page' },
+      { keys: '0', desc: 'Fit the page to the window' },
+      { keys: 'Ctrl + wheel', desc: 'Zoom about the pointer' },
+      { keys: 'Click the page', desc: 'Open the fields behind whatever you clicked' },
+      { keys: 'Drag a grip', desc: 'Reorder the lines' },
     ],
   },
 ]

@@ -1,7 +1,7 @@
 {
   "name": "app",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.6.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,7 +11,8 @@
     "verify:signal": "node scripts/verify-signal.mjs && node scripts/verify-signal-embed.mjs",
     "verify:sequence": "node scripts/verify-sequence.mjs",
     "verify:overlays": "node scripts/verify-overlays.mjs",
-    "verify": "npm run verify:ascii && npm run verify:signal && npm run verify:sequence && npm run verify:overlays",
+    "verify:invoice": "node scripts/verify-invoice.mjs",
+    "verify": "npm run verify:ascii && npm run verify:signal && npm run verify:sequence && npm run verify:overlays && npm run verify:invoice",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -19,8 +20,10 @@
     "@react-three/fiber": "^9.6.1",
     "@react-three/postprocessing": "^3.0.4",
     "@rive-app/react-canvas": "^4.32.1",
+    "html-to-image": "^1.11.13",
     "idb": "^8.0.3",
     "immer": "^11.1.11",
+    "jspdf": "^4.2.1",
     "lucide-react": "^1.23.0",
     "mediabunny": "^1.50.6",
     "posthog-js": "^1.422.1",

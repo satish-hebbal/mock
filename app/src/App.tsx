@@ -9,8 +9,11 @@ import { DrawEditor } from './draw/DrawEditor'
 import { useDraw } from './draw/store'
 import { AsciiEditor } from './ascii/AsciiEditor'
 import { SignalEditor } from './signal/SignalEditor'
+import { InvoiceEditor } from './invoice/InvoiceEditor'
 import { useAscii } from './ascii/store'
 import { useSignal } from './signal/store'
+import { useInvoice } from './invoice/store'
+import { downloadJSON, pickInvoiceFile, printInvoice, readInvoiceFile } from './invoice/export'
 import { RECIPES } from './ascii/presets'
 import { PENS, PEN_ORDER } from './draw/pens'
 import { SHAPE_TOOLS } from './draw/shapeTools'
@@ -34,6 +37,7 @@ import { SmallScreen } from './components/SmallScreen'
 import { UploadPrompt } from './components/UploadPrompt'
 import { useIsDesktop } from './lib/breakpoint'
 import { modeFromLocation } from './lib/routes'
+import { ui } from './lib/ui'
 
 /**
  * rAF playback driver (PRD §5.4).
@@ -171,8 +175,15 @@ function useGlobalShortcuts() {
       const key = keyOf(e)
 
       // Alt, not Ctrl: Ctrl+1/2/3 are browser tab switches and can't be cancelled
-      if (e.altKey && key >= '1' && key <= '5') {
-        const MODES = { '1': 'studio', '2': 'shots', '3': 'draw', '4': 'ascii', '5': 'signal' } as const
+      if (e.altKey && key >= '1' && key <= '6') {
+        const MODES = {
+          '1': 'studio',
+          '2': 'shots',
+          '3': 'draw',
+          '4': 'ascii',
+          '5': 'signal',
+          '6': 'invoice',
+        } as const
         s.setMode(MODES[key as keyof typeof MODES])
         return true
       }
@@ -328,6 +339,62 @@ function useGlobalShortcuts() {
         g.swapInk()
       } else if (key === '0') {
         g.restart()
+      }
+    }
+
+    /**
+     * The invoice's keyboard.
+     *
+     * The only one in the app that claims Ctrl+P, and it earns it: this is the
+     * one document in the suite that is genuinely printed, and the browser's
+     * own print would hand the user a screenshot of the editor, panels and all.
+     * Taking it means Ctrl+P does what the user meant by it.
+     *
+     * Ctrl+S and Ctrl+O follow the studio's reading of those keys, a file out
+     * and a file in, rather than the browser's. Everything single-key is a
+     * verb of the document: mark it, add a line, fit the page.
+     */
+    const handleInvoice = (e: KeyboardEvent) => {
+      const inv = useInvoice.getState()
+      const mod = e.ctrlKey || e.metaKey
+      const key = keyOf(e)
+
+      if (mod && key === 'z') {
+        e.preventDefault()
+        if (e.shiftKey) inv.redo()
+        else inv.undo()
+      } else if (mod && key === 'y') {
+        e.preventDefault()
+        inv.redo()
+      } else if (mod && key === 'p') {
+        e.preventDefault()
+        void printInvoice(inv.doc)
+      } else if (mod && key === 's') {
+        e.preventDefault()
+        downloadJSON(inv.doc)
+      } else if (mod && key === 'o') {
+        e.preventDefault()
+        pickInvoiceFile((doc) => useInvoice.getState().load(doc))
+      } else if (mod) {
+        return // every other Ctrl combo is the browser's
+      } else if (e.altKey && key === 'n') {
+        // Alt, because Ctrl+N opens a browser window and cannot be cancelled
+        e.preventDefault()
+        inv.nextInvoice()
+      } else if (e.altKey) {
+        return
+      } else if (key === 'e') {
+        inv.setDialog(inv.dialog === 'export' ? null : 'export')
+      } else if (key === 'm') {
+        inv.setDialog(inv.dialog === 'stamp' ? null : 'stamp')
+      } else if (key === 'n') {
+        inv.addItem()
+      } else if (key === '0') {
+        inv.setZoom(0)
+      } else if (key === '=' || key === '+' || key === '-') {
+        inv.setZoom(Math.min(2, Math.max(0.25, (inv.zoom || 0.6) + (key === '-' ? -0.1 : 0.1))))
+      } else if (e.key === 'Escape') {
+        inv.setDialog(null)
       }
     }
 
@@ -556,7 +623,17 @@ function useGlobalShortcuts() {
       }
 
       const st = useStudio.getState()
-      const dialogOpen = !!st.dialog || !!useShots.getState().dialog || !!useDraw.getState().dialog
+      const dialogOpen =
+        !!st.dialog ||
+        !!useShots.getState().dialog ||
+        !!useDraw.getState().dialog ||
+        /*
+         * The invoice's two dialogs are modal like the rest, and the stamp one
+         * is the reason this list had to grow: it is a form with its own
+         * Enter, and behind it N adds a line and E opens Export on a document
+         * the user cannot currently see.
+         */
+        !!useInvoice.getState().dialog
 
       /*
        * The shortcut guide closes with the same key that opened it, so it has
@@ -596,6 +673,7 @@ function useGlobalShortcuts() {
       else if (st.mode === 'draw') handleDraw(e)
       else if (st.mode === 'ascii') handleAscii(e)
       else if (st.mode === 'signal') handleSignal(e)
+      else if (st.mode === 'invoice') handleInvoice(e)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -610,6 +688,8 @@ function useMediaDropPaste() {
       if (mode === 'shots') void useShots.getState().importMedia(file)
       else if (mode === 'draw') void useDraw.getState().importImage(file)
       else if (mode === 'ascii') void useAscii.getState().importImage(file)
+      // the invoice has exactly one place a picture can go, and it is the mark
+      else if (mode === 'invoice') void useInvoice.getState().importLogo(file)
       else void useStudio.getState().importMedia(file)
     }
     /*
@@ -630,10 +710,33 @@ function useMediaDropPaste() {
     }
     const onDrop = (e: DragEvent) => {
       e.preventDefault()
+      const dropped = Array.from(e.dataTransfer?.files ?? [])
+
+      /*
+       * A dropped invoice file opens as the document.
+       *
+       * This is the one tool whose save format is a file the user is invited to
+       * keep, edit and generate, so dragging one back in has to be the obvious
+       * way to reopen it. It is checked before the media filter below, which
+       * would otherwise discard a .json without a word, and it is deliberately
+       * scoped to this editor: a JSON dropped on the 3D studio is a project
+       * file and belongs to Ctrl+O over there.
+       */
+      if (useStudio.getState().mode === 'invoice') {
+        const file = dropped.find((f) => f.type === 'application/json' || /\.json$/i.test(f.name))
+        if (file) {
+          void readInvoiceFile(file).then((doc) => {
+            if (doc) {
+              useInvoice.getState().load(doc)
+              ui.toast(`Opened ${doc.number}`)
+            }
+          })
+          return
+        }
+      }
+
       importAll(
-        Array.from(e.dataTransfer?.files ?? []).filter(
-          (f) => f.type.startsWith('image/') || f.type.startsWith('video/'),
-        ),
+        dropped.filter((f) => f.type.startsWith('image/') || f.type.startsWith('video/')),
       )
     }
     const onPaste = (e: ClipboardEvent) => {
@@ -780,6 +883,8 @@ function Editor() {
           <AsciiEditor />
         ) : mode === 'signal' ? (
           <SignalEditor />
+        ) : mode === 'invoice' ? (
+          <InvoiceEditor />
         ) : (
           <ShotsEditor />
         )}

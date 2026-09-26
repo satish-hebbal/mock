@@ -82,7 +82,7 @@ export function AppSheet() {
         onMouseDown={(e) => e.stopPropagation()}
         className="absolute inset-x-0 top-0 animate-[sheet-drop_240ms_cubic-bezier(0.2,0.85,0.25,1)] border-b border-(--line) bg-(--raised)/72 px-6 pt-5 pb-6 backdrop-blur-2xl backdrop-saturate-150"
       >
-        <div className="mx-auto max-w-5xl">
+        <div className="mx-auto max-w-5xl xl:max-w-6xl">
           <div className="mb-4 flex items-center gap-2.5">
             <img src="/frog-logo.svg" alt="" width={22} height={22} />
             <span className="t-body font-semibold text-(--tx)">Ribbit</span>
@@ -93,7 +93,7 @@ export function AppSheet() {
             Tools
           </p>
           <div
-            className="tool-row grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5"
+            className="tool-row grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6"
             style={SHEET_SEAM.row}
           >
             {TOOLS.map((t, i) => {
@@ -140,6 +140,11 @@ export function AppSheet() {
                           Soon
                         </span>
                       )}
+                      {t.beta && (
+                        <span className="tool-card-chip">
+                          Beta
+                        </span>
+                      )}
                     </span>
                     {/*
                       One ink for every card, where this used to brighten the
@@ -151,7 +156,7 @@ export function AppSheet() {
                       light. `--tool-copy` is the ink that clears that, so it is
                       the ink all five want.
                     */}
-                    <span className="mt-0.5 block t-caption leading-snug text-(--tool-copy)">
+                    <span className="mt-0.5 block truncate t-caption leading-snug text-(--tool-copy)">
                       {t.tagline}
                     </span>
                   </span>

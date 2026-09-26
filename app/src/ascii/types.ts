@@ -201,6 +201,26 @@ export interface AsciiFx {
   glitch: number
 }
 
+/**
+ * What the pointer does to the preview.
+ *
+ * Preview only. None of the exporters read this: a PNG has no cursor, and
+ * baking one pointer position into a still would be a different feature. It
+ * lives on the document anyway so a look that depends on it travels with the
+ * look, through undo, presets and the saved file.
+ */
+export interface AsciiCursor {
+  mode: 'off' | 'scatter'
+  /** reach of the disturbance, in document pixels */
+  radius: number
+  /** 0..1, how far a cell at the centre can be thrown, as a share of the radius */
+  strength: number
+}
+
+export function defaultCursor(): AsciiCursor {
+  return { mode: 'off', radius: 180, strength: 0.5 }
+}
+
 export interface AsciiDoc {
   version: 1
   name: string
@@ -225,6 +245,7 @@ export interface AsciiDoc {
   dither: AsciiDither
   backdrop: AsciiBackdrop
   fx: AsciiFx
+  cursor: AsciiCursor
 }
 
 export function defaultAsciiDoc(): AsciiDoc {
@@ -280,6 +301,7 @@ export function defaultAsciiDoc(): AsciiDoc {
      */
     backdrop: { mode: 'source', blur: 24, opacity: 0.3, color: '#08090a', mesh: defaultMesh() },
     fx: { vignette: 0, scanlines: 0, curvature: 0, bloom: 0, chromatic: 0, grain: 0, glitch: 0 },
+    cursor: defaultCursor(),
   }
 }
 

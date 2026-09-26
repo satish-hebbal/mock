@@ -23,7 +23,7 @@ import { getPresetPhoto, loadPresetPhotoBlob } from '../lib/presetPhotos'
 import { ui } from '../lib/ui'
 import { applyRecipe, RECIPES, type DeepPatch } from './presets'
 import { getStyle } from './styles'
-import { defaultAsciiDoc, type AsciiDoc } from './types'
+import { defaultAsciiDoc, defaultCursor, type AsciiDoc } from './types'
 
 const DOC_KEY = 'ascii-current'
 const uid = () => crypto.randomUUID()
@@ -350,6 +350,8 @@ export const useAscii = create<AsciiState>()(
           let url: string | null = null
           // written before presets existed: absent means "not from one"
           doc.presetId = doc.presetId ?? null
+          // and before the cursor did anything
+          doc.cursor = doc.cursor ?? defaultCursor()
           if (doc.assetId) {
             const blob = await loadAsset(doc.assetId)
             if (blob) {

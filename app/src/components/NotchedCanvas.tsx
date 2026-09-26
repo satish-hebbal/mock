@@ -22,10 +22,17 @@ export function NotchedFrame({
   notch = NOTCH,
   bar,
   overlay,
+  surface = 'bg-(--raised)',
 }: {
   children: ReactNode
   /** sizing for the outer box; it is `relative` and full-bleed already */
   className?: string
+  /**
+   * The panel's fill. `--raised` for a panel among panels; a frame sitting
+   * inside a dialog, which is itself `--raised`, needs a step off it or the
+   * shape and its notch vanish into the dialog.
+   */
+  surface?: string
   /** the hole to cut, sized around whatever is going in it */
   notch?: NotchGeom
   /** what sits in the hole */
@@ -54,7 +61,7 @@ export function NotchedFrame({
   return (
     <div ref={ref} className={`relative ${className}`}>
       <div
-        className="absolute inset-0 overflow-hidden bg-(--raised)"
+        className={`absolute inset-0 overflow-hidden ${surface}`}
         style={{
           borderRadius: FRAME_RADIUS,
           // before the first measurement there is no path to clip to; the

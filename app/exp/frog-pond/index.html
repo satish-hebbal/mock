@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Frog pond</title>
+    <link rel="icon" href="data:," />
+    <!-- the app's own tokens, fonts and card styles arrive with src/index.css, imported by home-overlay.tsx -->
+    <style>
+      /* stretched up from a reduced resolution; smooth scaling suits the soft water */
+      #pond {
+        position: fixed;
+        inset: 0;
+        width: 100vw;
+        height: 100vh;
+        display: block;
+        touch-action: none;
+      }
+      /* the still stand-in when nothing runs */
+      body[data-poster] #pond {
+        display: none;
+      }
+      body[data-poster] {
+        background:
+          radial-gradient(60% 50% at 80% 20%, rgb(120 150 180 / 0.12), transparent 70%),
+          radial-gradient(90% 80% at 50% 55%, #0f2522, #08090a 75%);
+      }
+      :root.light body[data-poster] {
+        background: radial-gradient(90% 80% at 50% 45%, #9fb8ac, #f5f6f6 75%);
+      }
+
+      /* the half layout's solid shore: in the page colour for the theme, crisp at full resolution */
+      #shore {
+        position: fixed;
+        inset: 0;
+        width: 100vw;
+        height: 100vh;
+        pointer-events: none;
+        fill: var(--panel2);
+        opacity: 0;
+        transition: opacity 500ms var(--ease-smooth);
+      }
+      #shore.on {
+        opacity: 1;
+      }
+      /* the steel rim: a dark seat, the steel itself, and a moving glint on top */
+      #shore .rim-base,
+      #shore .rim,
+      #shore .rim-glint {
+        fill: none;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      #shore .rim-base {
+        stroke: rgb(0 0 0 / 0.45);
+        stroke-width: 2.8;
+      }
+      :root.light #shore .rim-base {
+        stroke: rgb(0 0 0 / 0.22);
+      }
+      #shore .rim {
+        stroke: url(#steel);
+        stroke-width: 1.2;
+      }
+      #shore .rim-glint {
+        stroke: url(#glint);
+        stroke-width: 1;
+      }
+
+      /* the title and tagline sit on the water on both themes, so on the light theme they keep light
+         ink instead of the page's dark ink, with a soft shadow to lift them off busy pads; the hint
+         does the same whenever the pond runs under it (the full layout) */
+      :root.light .pond-brand h1,
+      :root.light body[data-frame='full'] .pond-hint {
+        color: #fff;
+        text-shadow:
+          0 1px 2px rgb(0 0 0 / 0.45),
+          0 0 18px rgb(0 0 0 / 0.35);
+      }
+      :root.light .pond-brand p {
+        color: rgb(255 255 255 / 0.9);
+        text-shadow:
+          0 1px 2px rgb(0 0 0 / 0.5),
+          0 0 14px rgb(0 0 0 / 0.35);
+      }
+      :root.light body[data-frame='full'] .pond-hint {
+        color: rgb(255 255 255 / 0.8);
+      }
+
+      /* Light theme cards, livelier than the app's: its light cards run the aurora at a third strength
+         under a heavy white veil, which is right on a flat page but goes pale beside the pond. Here the
+         glow is near full strength under a thinner veil, peaks in the vivid mid colour, the hairline
+         takes the tool's hue, and the tagline ink is a step stronger to hold over the brighter glow.
+         Scoped to this page; move into src/index.css if it should ship. */
+      :root.light .tool-card {
+        --au-scrim-a: 0.16;
+        --au-hot: var(--au-accent);
+        --tool-copy: rgb(0 0 0 / 0.8);
+        background: color-mix(in srgb, rgb(var(--au-mid)) 55%, #d2d4d8);
+      }
+      /* the resting glow is set per card, so lift the light theme's glow at its opacity */
+      :root.light .tool-card-aurora {
+        opacity: min(1, calc(var(--glow) * 1.45));
+      }
+      :root.light .tool-card-fill {
+        background: color-mix(in srgb, rgb(var(--au-core)) 35%, #fff);
+      }
+
+      /* the home page content, rendered by React over the water */
+      #ui {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+      }
+      #ui[hidden] {
+        display: none;
+      }
+
+      #hud {
+        --hud-ink: rgb(255 255 255 / 0.55);
+        --hud-ink-strong: #f7f8f8;
+        --hud-faint: rgb(255 255 255 / 0.38);
+        --hud-line: rgb(255 255 255 / 0.08);
+        position: fixed;
+        top: 12px;
+        right: 12px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        background: rgb(0 0 0 / 0.62);
+        border: 1px solid var(--hud-line);
+        font: 12px/1.5 ui-monospace, 'SF Mono', Menlo, monospace;
+        color: var(--hud-ink);
+        max-width: calc(100vw - 24px);
+      }
+      #hud pre {
+        margin: 0 0 8px;
+        font: inherit;
+        white-space: pre-wrap;
+      }
+      #hud .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+      }
+      #hud .weather {
+        margin-top: 6px;
+      }
+      #hud button {
+        font: inherit;
+        padding: 2px 8px;
+        border-radius: 6px;
+        border: 1px solid var(--hud-line);
+        background: rgb(255 255 255 / 0.06);
+        color: var(--hud-ink);
+        cursor: pointer;
+      }
+      #hud button[aria-pressed='true'] {
+        background: rgb(255 255 255 / 0.16);
+        color: var(--hud-ink-strong);
+      }
+      #hud small {
+        display: block;
+        margin-top: 6px;
+        color: var(--hud-faint);
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="pond" role="img" aria-label="Frogs on lily pads in a pond"></canvas>
+
+    <svg id="shore" aria-hidden="true">
+      <defs>
+        <!-- matte brushed steel: low contrast grey bands along the rim's length -->
+        <linearGradient id="steel" x1="0" x2="1" y1="0" y2="0">
+          <stop offset="0" stop-color="#3b3f44" />
+          <stop offset="0.15" stop-color="#5c6167" />
+          <stop offset="0.3" stop-color="#44484d" />
+          <stop offset="0.45" stop-color="#666b71" />
+          <stop offset="0.6" stop-color="#474b50" />
+          <stop offset="0.75" stop-color="#5e6369" />
+          <stop offset="0.9" stop-color="#42464b" />
+          <stop offset="1" stop-color="#3b3f44" />
+        </linearGradient>
+        <linearGradient id="glint" gradientUnits="userSpaceOnUse" x1="-440" x2="0" y1="0" y2="0">
+          <stop offset="0" stop-color="#fff" stop-opacity="0" />
+          <stop offset="0.5" stop-color="#fff" stop-opacity="0.28" />
+          <stop offset="1" stop-color="#fff" stop-opacity="0" />
+        </linearGradient>
+      </defs>
+      <path class="shore-fill" />
+      <path class="rim-base" />
+      <path class="rim" />
+      <path class="rim-glint" />
+    </svg>
+
+    <main id="ui"></main>
+
+    <div id="hud">
+      <pre></pre>
+      <div class="row">
+        <button data-act="up" title="Higher quality">quality +</button>
+        <button data-act="down" title="Lower quality">quality -</button>
+        <button data-act="auto">auto</button>
+        <button data-act="koi" aria-pressed="true">koi</button>
+        <button data-act="ui" aria-pressed="true">ui</button>
+        <button data-act="view">view: final</button>
+      </div>
+      <div class="row weather" role="group" aria-label="Weather">
+        <button data-env="overcast">1 overcast</button>
+        <button data-env="rain">2 rain</button>
+        <button data-env="sunset">3 sunset</button>
+        <button data-env="midday">4 midday</button>
+      </div>
+      <div class="row weather" role="group" aria-label="Layout">
+        <button data-frame="full">full pond</button>
+        <button data-frame="half">half pond</button>
+        <button data-theme="dark">dark</button>
+        <button data-theme="light">light</button>
+      </div>
+      <small>H hides this. 1-4 change the weather. Tap water, pads, frogs, fish. URL: ?env=rain, ?frame=half, ?theme=light, ?tier=0-5 or poster, ?koi=0, ?seed=n</small>
+    </div>
+
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

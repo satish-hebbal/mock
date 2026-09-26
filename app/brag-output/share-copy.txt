@@ -1,0 +1,17 @@
+Five tools. One frog.
+
+Ribbit is a personal toolkit for visual work: put a screen on a 3D device and export a video, frame a screenshot on a backdrop worth posting, sketch on a whiteboard with pens that behave like pens, redraw a picture as ASCII and keep the text, or generate dithered motion out of nothing and take it away as a loop.
+
+Each one lives at its own URL: /studio /shots /draw /ascii /signal
+
+---
+
+Short version (X / Discord):
+
+Five tools. One frog. Ribbit does 3D device mockups, posted screenshots, hand drawing, ASCII conversion and generative dithered loops, each at its own URL.
+
+---
+
+LinkedIn version:
+
+I built Ribbit, a personal toolkit for visual work. It is five finished tools behind one shell: 3D Studio for putting a screen on a device and exporting a video, Shots for framing screenshots on a generated backdrop, Draw for whiteboarding with pens that behave like pens, ASCII for redrawing a picture as characters while keeping the text, and Signal for generative dithered loops. Every tool has its own URL, so a link can name the tool it opens.

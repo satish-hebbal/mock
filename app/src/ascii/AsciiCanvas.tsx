@@ -19,6 +19,7 @@ import { pickMediaFile } from '../store'
 import { ALPHA_CHECKER } from '../lib/checker'
 import { useAscii } from './store'
 import { renderAscii } from './render'
+import { CursorTrail } from './cursor'
 import { ASCII_NOTCH } from './notch'
 import { StarterRow } from './AsciiPresets'
 
@@ -71,26 +72,70 @@ export function AsciiCanvas() {
   const dispW = Math.max(1, Math.min(boxW, boxH * aspect))
   const dispH = Math.max(1, dispW / aspect)
 
+  /*
+   * One paint function for both reasons to draw: the document changed, or the
+   * cursor is disturbing the grid. It reads everything from a ref so a frame
+   * scheduled by the pointer draws the current document rather than whichever
+   * one was around when the handler was made.
+   */
+  const trail = useRef<CursorTrail | null>(null)
+  trail.current ??= new CursorTrail()
+  const latest = useRef({ doc, bitmap, dispW, dispH })
+  latest.current = { doc, bitmap, dispW, dispH }
+  const scatter = doc.cursor.mode === 'scatter' && doc.style !== 'dither'
+
+  const paint = useRef(() => {})
+  paint.current = () => {
+    const { doc, bitmap, dispW, dispH } = latest.current
+    const canvas = canvasRef.current
+    if (!canvas || !bitmap) return
+    /*
+     * Capped at 2. Above that the effect passes that walk pixels (curvature,
+     * grain) cost four times as much for a difference nobody has ever been
+     * able to point to on a screen.
+     */
+    const dpr = Math.min(2, window.devicePixelRatio || 1)
+    const outW = Math.round(dispW * dpr)
+    const now = performance.now()
+    const t = trail.current!
+    const live = doc.cursor.mode === 'scatter' && doc.style !== 'dither'
+    const field = live ? t.field(now, outW / Math.max(1, doc.size.width), doc.cursor) : undefined
+    const out = renderAscii(doc, bitmap, outW, Math.round(dispH * dpr), { field, reuse: true })
+    canvas.width = out.canvas.width
+    canvas.height = out.canvas.height
+    canvas.getContext('2d')!.drawImage(out.canvas, 0, 0)
+    setGrid((g) => (g.cols === out.cols && g.rows === out.rows ? g : { cols: out.cols, rows: out.rows }))
+    // keep going only while the next frame would differ, so a resting pointer costs nothing
+    if (live && t.animating(now)) frame.current = requestAnimationFrame(() => paint.current())
+  }
+
+  const schedule = () => {
+    cancelAnimationFrame(frame.current)
+    frame.current = requestAnimationFrame(() => paint.current())
+  }
+
   useEffect(() => {
     if (!bitmap || boxW <= 0) return
-    cancelAnimationFrame(frame.current)
-    frame.current = requestAnimationFrame(() => {
-      const canvas = canvasRef.current
-      if (!canvas) return
-      /*
-       * Capped at 2. Above that the effect passes that walk pixels (curvature,
-       * grain) cost four times as much for a difference nobody has ever been
-       * able to point to on a screen.
-       */
-      const dpr = Math.min(2, window.devicePixelRatio || 1)
-      const out = renderAscii(doc, bitmap, Math.round(dispW * dpr), Math.round(dispH * dpr))
-      canvas.width = out.canvas.width
-      canvas.height = out.canvas.height
-      canvas.getContext('2d')!.drawImage(out.canvas, 0, 0)
-      setGrid({ cols: out.cols, rows: out.rows })
-    })
+    schedule()
     return () => cancelAnimationFrame(frame.current)
   }, [doc, bitmap, dispW, dispH, boxW])
+
+  const toDoc = (e: React.PointerEvent<HTMLDivElement>) => {
+    const r = e.currentTarget.getBoundingClientRect()
+    return {
+      x: ((e.clientX - r.left) / Math.max(1, r.width)) * doc.size.width,
+      y: ((e.clientY - r.top) / Math.max(1, r.height)) * doc.size.height,
+    }
+  }
+  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const p = toDoc(e)
+    trail.current!.move(p.x, p.y, doc.cursor.radius, performance.now())
+    schedule()
+  }
+  const onPointerLeave = () => {
+    trail.current!.leave(performance.now())
+    schedule()
+  }
 
   return (
     /* no border, radius or shadow of its own any more: the frame around this is
@@ -119,6 +164,8 @@ export function AsciiCanvas() {
           */}
           <div
             className="relative overflow-hidden rounded-md"
+            onPointerMove={scatter ? onPointerMove : undefined}
+            onPointerLeave={scatter ? onPointerLeave : undefined}
             style={{
               width: dispW,
               height: dispH,

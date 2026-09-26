@@ -20,44 +20,15 @@ import { Check, ChevronDown, Search } from 'lucide-react'
 import { CURRENCIES, currencySymbol } from './money'
 
 /**
- * The colour each currency's notes are best known in, so the picker can be
- * read by colour before it is read by symbol: the greenback, the blue fifty,
- * the violet five hundred. Approximate on purpose, since every one of these
- * currencies prints in several colours, and anything not listed gets a neutral
- * slate rather than a guess.
+ * A currency as a small gold coin: a milled rim, a sunken face, and the symbol
+ * struck into it. Every coin is the same gold, so the list reads as one set and
+ * the symbol is the only thing that tells them apart.
  */
-const NOTE_COLORS: Record<string, string> = {
-  USD: '#4f7d4c',
-  EUR: '#3f6fb0',
-  GBP: '#7a4f9a',
-  AUD: '#c88a2a',
-  CAD: '#b0453e',
-  NZD: '#2f8f8a',
-  INR: '#8a5aa8',
-  SGD: '#c0564a',
-  AED: '#6c7a3e',
-  CHF: '#c94f3d',
-  SEK: '#4d7fa8',
-  ZAR: '#6b8f3a',
-  BRL: '#3f8f6a',
-  JPY: '#8a7a5a',
-}
-
-/**
- * A currency as a tiny banknote rather than a glyph in a box: the note's own
- * colour, an engraved inner frame, the two corner dots every note has, and the
- * symbol in an oval medallion where the portrait would be.
- */
-export function CurrencyNote({ code }: { code: string }) {
+export function CurrencyCoin({ code }: { code: string }) {
   const symbol = currencySymbol(code)
   return (
-    <span
-      className="inv-note"
-      data-long={symbol.length > 1 ? symbol.length : undefined}
-      style={{ ['--note' as string]: NOTE_COLORS[code] ?? '#5f6570' }}
-      aria-hidden
-    >
-      <span className="inv-note-medal">{symbol}</span>
+    <span className="inv-coin" data-long={symbol.length > 1 ? symbol.length : undefined} aria-hidden>
+      <span className="inv-coin-face">{symbol}</span>
     </span>
   )
 }
@@ -158,7 +129,7 @@ export function CurrencyPicker({ value, onChange }: { value: string; onChange: (
         onClick={() => (at ? setAt(null) : open())}
         className="flex h-8 w-full items-center gap-2 rounded-sm bg-(--field) pr-2 pl-1.5 text-left transition-colors hover:bg-(--field-h)"
       >
-        <CurrencyNote code={value} />
+        <CurrencyCoin code={value} />
         <span className="t-body-sm font-semibold tabular-nums text-(--tx)">{value}</span>
         <span className="min-w-0 flex-1 truncate t-body-sm text-(--tx2)">{current?.name ?? ''}</span>
         <ChevronDown
@@ -217,7 +188,7 @@ export function CurrencyPicker({ value, onChange }: { value: string; onChange: (
                       i === active ? 'bg-(--panel3)' : ''
                     }`}
                   >
-                    <CurrencyNote code={c.code} />
+                    <CurrencyCoin code={c.code} />
                     <span
                       className={`w-9 t-body-sm font-semibold tabular-nums ${on ? 'text-(--tx)' : 'text-(--tx2)'}`}
                     >

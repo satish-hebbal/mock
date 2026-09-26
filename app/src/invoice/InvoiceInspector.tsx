@@ -13,9 +13,11 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
+  CalendarCheck,
   CalendarDays,
   Check,
   ClipboardCopy,
+  Clock,
   Download,
   Eraser,
   FileDown,
@@ -39,6 +41,7 @@ import {
   SquarePen,
   Trash2,
   Undo2,
+  Zap,
   type LucideIcon,
 } from 'lucide-react'
 import { useStudio } from '../store'
@@ -46,13 +49,14 @@ import { ui } from '../lib/ui'
 import { pickMediaFile } from '../store'
 import { HoldButton } from '../components/HoldButton'
 import { FeedbackDialog } from '../components/FeedbackDialog'
-import { InfoTip, Section, SubHeading } from '../components/controls'
+import { InfoTip, Section, Segments, SubHeading } from '../components/controls'
 import { TextRow } from './fields'
 import { fromISO, money, stampDate, totals } from './money'
 import { CurrencyPicker } from './CurrencyPicker'
 import { persistInvoice, termsId, useInvoice } from './store'
 import { washColors } from './palette'
-import { copyJSON, downloadJSON, pickInvoiceFile, printInvoice } from './export'
+import { copyJSON, downloadJSON, pickInvoiceFile } from './export'
+import { downloadInvoicePDF } from './pdf'
 import {
   ACCENTS,
   PAGE_SIZE,
@@ -123,7 +127,7 @@ function useActions() {
     undo: () => st().undo(),
     redo: () => st().redo(),
     stamp: () => st().setDialog('stamp'),
-    pdf: () => void printInvoice(st().doc),
+    pdf: () => void downloadInvoicePDF(st().doc),
     saveJSON: () => downloadJSON(st().doc),
     openJSON: () => pickInvoiceFile((doc) => st().load(doc)),
     copy: () =>
@@ -241,7 +245,7 @@ function InspectorHeader() {
         </button>
         <button
           onClick={a.pdf}
-          title="Print or save as PDF (E)"
+          title="Download the PDF"
           className="flex h-9 items-center justify-center gap-1.5 rounded-md bg-(--accent-fill) t-button text-(--accent-tx) hover:bg-(--accent-fill-hover)"
         >
           <Download size={15} strokeWidth={1.9} />
@@ -718,44 +722,46 @@ function DetailsGroup() {
       {/*
         "Terms" meant nothing to anyone who has not sent a hundred invoices, so
         the control says what it is: how long the client has to pay. Picking
-        one moves the due date on the page, and the line under it says where
-        to. The date stays editable on the page: these are a shortcut to a
-        date, not a lock on one, which is why a date picked by hand leaves all
-        five unselected rather than snapping back.
+        one moves the due date on the page, and the date it lands on sits
+        beside the heading, a glyph and a date rather than a sentence. The
+        date stays editable on the page: these are a shortcut to a date, not a
+        lock on one, which is why a date picked by hand leaves all five
+        unselected (the pen says so) rather than snapping back.
       */}
-      <div className="mt-3">
+      <div className="mt-3 flex items-baseline justify-between">
         <SubHeading>Pay within</SubHeading>
+        <span
+          className="flex items-center gap-1 t-caption text-(--tx2)"
+          title={
+            current
+              ? due > 0
+                ? `Due ${due} days after it is issued`
+                : 'Due the day it is issued'
+              : 'Due date picked by hand on the page'
+          }
+        >
+          {current ? (
+            <CalendarCheck size={12} strokeWidth={1.9} className="text-(--tx3)" />
+          ) : (
+            <PenLine size={12} strokeWidth={1.9} className="text-(--tx3)" />
+          )}
+          {dayMonth(doc.dueDate)}
+        </span>
       </div>
-      <div className="grid grid-cols-5 gap-1">
-        {TERMS.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => useInvoice.getState().setTerms(t.id)}
-            aria-pressed={current === t.id}
-            title={t.label}
-            className={`inv-choice flex h-11 flex-col items-center justify-center rounded-md border transition-colors ${
-              current === t.id
-                ? 'is-picked text-(--tx)'
-                : 'border-(--line) text-(--tx2) hover:border-(--line2) hover:text-(--tx)'
-            }`}
-          >
-            <span className="t-body-sm leading-none font-semibold tabular-nums">
-              {t.days === 0 ? 'Now' : t.days}
-            </span>
-            <span className="mt-1 text-[10px] leading-none text-(--tx3)">
-              {t.days === 0 ? 'on receipt' : 'days'}
-            </span>
-          </button>
-        ))}
-      </div>
-      <p className="mt-1.5 mb-1 t-caption text-(--tx3)">
-        Due <span className="text-(--tx2)">{dayMonth(doc.dueDate)}</span>
-        {current
-          ? due > 0
-            ? `, ${due} days after it is issued`
-            : ', the day it is issued'
-          : ', picked by hand on the page'}
-      </p>
+      <Segments
+        options={TERMS.map((t) => ({
+          id: t.id,
+          label: t.label,
+          icon:
+            t.days === 0 ? (
+              <Zap size={12} strokeWidth={2} />
+            ) : (
+              <span className="tabular-nums">{t.days}d</span>
+            ),
+        }))}
+        value={current ?? ''}
+        onChange={(id) => useInvoice.getState().setTerms(id)}
+      />
 
     </Section>
   )
@@ -809,17 +815,33 @@ function StatusGroup() {
         </>
       ) : (
         <>
+          {/*
+            The figure is the point, so it gets the card. How long is left is
+            a chip beside the label rather than a sentence under the figure:
+            the date itself is already in Details, and the sentence is only
+            a hover away for anyone who wants it.
+          */}
           <div className="mb-2 rounded-md bg-(--field) px-3 py-2.5">
-            <div className="t-caption text-(--tx3)">Outstanding</div>
+            <div className="flex items-center justify-between">
+              <span className="t-caption text-(--tx3)">Outstanding</span>
+              <span
+                title={
+                  left < 0
+                    ? `${-left} ${-left === 1 ? 'day' : 'days'} overdue, due ${dayMonth(doc.dueDate)}`
+                    : left === 0
+                      ? 'Due today'
+                      : `Due ${dayMonth(doc.dueDate)}, in ${left} ${left === 1 ? 'day' : 'days'}`
+                }
+                className={`flex items-center gap-1 t-caption tabular-nums ${
+                  left < 0 ? 'text-(--danger)' : 'text-(--tx2)'
+                }`}
+              >
+                <Clock size={12} strokeWidth={1.9} />
+                {left < 0 ? `${-left}d late` : left === 0 ? 'Today' : `${left}d`}
+              </span>
+            </div>
             <div className="mt-0.5 t-headline font-semibold tabular-nums text-(--tx)">
               {money(t.due, doc.currency)}
-            </div>
-            <div className={`mt-0.5 t-caption ${left < 0 ? 'text-(--danger)' : 'text-(--tx2)'}`}>
-              {left < 0
-                ? `${-left} ${-left === 1 ? 'day' : 'days'} overdue`
-                : left === 0
-                  ? 'Due today'
-                  : `Due ${dayMonth(doc.dueDate)}, in ${left} ${left === 1 ? 'day' : 'days'}`}
             </div>
           </div>
           <button
@@ -849,8 +871,8 @@ function CollapsedRail() {
       <span className="my-1 h-px w-6 shrink-0 bg-(--line)" />
       <button
         onClick={a.pdf}
-        title="Print or save as PDF (E)"
-        aria-label="Print or save as PDF"
+        title="Download the PDF"
+        aria-label="Download the PDF"
         className="flex h-8 w-8 items-center justify-center rounded-md bg-(--accent-fill) text-(--accent-tx) hover:bg-(--accent-fill-hover)"
       >
         <Download size={15} strokeWidth={2} />

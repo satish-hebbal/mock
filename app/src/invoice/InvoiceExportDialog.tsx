@@ -7,17 +7,19 @@
  * to a document whose size is a page and whose format is decided by what it is
  * for, so this dialog is short on purpose.
  *
- * The header already prints in one click, the way Quick Snap does elsewhere.
- * This is the considered path: it says what the file will be called, what is in
- * it, and why the print dialog is about to appear.
+ * The header already downloads the PDF in one click, the way Quick Snap does
+ * elsewhere. This is the considered path: it says what the file will be called
+ * and what is in it, and it keeps the browser's print view one click away for
+ * anyone sending the page to a real printer.
  */
 
 import { useState } from 'react'
-import { ClipboardCopy, Download, FileDown, FileText } from 'lucide-react'
+import { ClipboardCopy, Download, FileDown, FileText, Printer } from 'lucide-react'
 import { Dialog } from '../components/Overlay'
 import { Segments } from '../components/controls'
 import { ui } from '../lib/ui'
 import { copyJSON, docJSON, downloadJSON, fileStem, printInvoice } from './export'
+import { downloadInvoicePDF } from './pdf'
 import { money, totals } from './money'
 import { useInvoice } from './store'
 import { PAGE_SIZE } from './types'
@@ -57,36 +59,38 @@ export function InvoiceExportDialog() {
               </span>
             </div>
             <p className="mt-1 t-caption text-(--tx3)">
-              {page.label}, one page, live text. {doc.stamp.on ? 'Stamped.' : 'Unstamped.'}
+              {fileStem(doc)}.pdf · {page.label}, searchable text.{' '}
+              {doc.stamp.on ? 'Stamped.' : 'Unstamped.'}
             </p>
           </div>
 
-          {/*
-            Saying where the file comes from, before the system dialog appears
-            unannounced. It is the browser's own print view rather than a
-            generated picture of the page, which is what keeps the text
-            selectable and the rules vector.
-          */}
-          <p className="mb-4 t-body-sm leading-relaxed text-(--tx2)">
-            This opens your browser's print view. Choose{' '}
-            <span className="text-(--tx)">Save as PDF</span> as the destination, and leave margins
-            at their default: the page already carries its own.
-          </p>
-
-          <button
-            disabled={busy}
-            onClick={() => {
-              setBusy(true)
-              void printInvoice(doc).finally(() => {
-                setBusy(false)
+          <div className="mt-4 grid grid-cols-[auto_1fr] gap-2">
+            <button
+              onClick={() => {
+                void printInvoice(doc)
                 close()
-              })
-            }}
-            className="flex h-10 w-full items-center justify-center gap-2 rounded-md bg-(--accent-fill) t-button text-(--accent-tx) hover:bg-(--accent-fill-hover) disabled:opacity-50"
-          >
-            <Download size={15} strokeWidth={1.9} />
-            {busy ? 'Preparing the page…' : 'Open the print view'}
-          </button>
+              }}
+              title="Open the browser's print view (Ctrl+P)"
+              className="flex h-10 items-center justify-center gap-2 rounded-md bg-(--field) px-4 t-button text-(--tx2) transition-colors hover:bg-(--field-h) hover:text-(--tx)"
+            >
+              <Printer size={15} strokeWidth={1.9} />
+              Print
+            </button>
+            <button
+              disabled={busy}
+              onClick={() => {
+                setBusy(true)
+                void downloadInvoicePDF(doc).finally(() => {
+                  setBusy(false)
+                  close()
+                })
+              }}
+              className="flex h-10 items-center justify-center gap-2 rounded-md bg-(--accent-fill) t-button text-(--accent-tx) hover:bg-(--accent-fill-hover) disabled:opacity-50"
+            >
+              <Download size={15} strokeWidth={1.9} />
+              {busy ? 'Making the PDF…' : 'Download PDF'}
+            </button>
+          </div>
         </>
       ) : (
         <>

@@ -532,17 +532,21 @@ const morphGrid: FigureFn = (ctx, w, h, t, intensity, scale, ink) => {
   ctx.fillRect(0, 0, w, h)
 
   const cols = Math.max(3, Math.floor(scale * 1.5))
-  const pad = 20
+  // capped as a share of the frame, which only bites below about 500px: at a
+  // thumbnail's size the fixed 20px margin and 4px gutters left every cell a
+  // negative width, and `roundRect` throws on the negative radius that follows
+  const pad = Math.min(20, Math.min(w, h) * 0.04)
   const cellW = (w - pad * 2) / cols
   const cellH = (h - pad * 2) / cols
+  const gap = Math.min(4, Math.min(cellW, cellH) * 0.1)
   const amp = intensity / 50
 
   for (let r = 0; r < cols; r++) {
     for (let c = 0; c < cols; c++) {
-      const x = pad + c * cellW + 4
-      const y = pad + r * cellH + 4
-      const bw = cellW - 8
-      const bh = cellH - 8
+      const x = pad + c * cellW + gap
+      const y = pad + r * cellH + gap
+      const bw = cellW - gap * 2
+      const bh = cellH - gap * 2
       const morph = Math.sin(t * 1.5 * amp + r * 0.7 + c * 0.5) * 0.5 + 0.5
       const k = 0.6 + morph * 0.4
       const fw = bw * k

@@ -28,8 +28,10 @@ import {
 import { NotchedFrame } from '../components/NotchedCanvas'
 import { NOTCH_PAD, notchForPill } from '../lib/notch'
 import { PRESETS, PRESET_GROUPS } from './presets'
+import { LookArt, SourceArt, Tile, TileGrid } from './SignalTiles'
 import { firstOf, groupsOf, paramsFor, sourcesOf, sourceUses } from './sources'
 import { useSignal } from './store'
+import { lookLive, sourceLive } from './thumbs'
 import type { SignalDoc, SourceKind } from './types'
 
 const iconProps = { size: 15, strokeWidth: 1.75 } as const
@@ -40,22 +42,13 @@ const deg = (v: number) => `${Math.round(v)}°`
 /** Every write goes through here, so labels (and so undo grouping) stay consistent. */
 const edit = (label: string, fn: (d: SignalDoc) => void) => useSignal.getState().patch(fn, label)
 
-/** The three colours a preset is built from, which label it better than words. */
-function PresetSwatch({ ink, paper, accent }: { ink: string; paper: string; accent: string }) {
-  return (
-    <span
-      aria-hidden
-      className="flex h-3.5 w-3.5 shrink-0 overflow-hidden rounded-full border border-(--line)"
-    >
-      <span className="h-full w-1/3" style={{ background: paper }} />
-      <span className="h-full w-1/3" style={{ background: ink }} />
-      <span className="h-full w-1/3" style={{ background: accent }} />
-    </span>
-  )
-}
+const sourceLabel = (kind: SourceKind, id: string) =>
+  sourcesOf(kind).find((s) => s.id === id)?.label ?? id
 
 function LooksGroup() {
   const source = useSignal((s) => s.doc.source.id)
+  const ink = useSignal((s) => s.doc.ink.ink)
+  const paper = useSignal((s) => s.doc.ink.paper)
   const [group, setGroup] = useState<string>('House')
   const items = PRESETS.filter((p) => p.group === group)
 
@@ -85,21 +78,31 @@ function LooksGroup() {
         ))}
       </div>
 
-      <div className="grid grid-cols-2 gap-1">
-        {items.map((p) => (
-          <button
+      {/*
+       * Each look is shown as itself: the preset rendered, colours, mask,
+       * finish and all, by the renderer the canvas uses. A name like "Marble"
+       * or "Aperiodic" was a guess at what you would get; the tile is what you
+       * get, and it plays under the pointer.
+       *
+       * A look counts as the one you are on while its generator and its two
+       * colours are still in place, which is what a person would say too: move
+       * a slider and it is still Marble, change the paper and it is not.
+       */}
+      <TileGrid cols={4}>
+        {items.map((p, i) => (
+          <Tile
             key={p.id}
-            onClick={() => useSignal.getState().applyLook(p.id)}
-            title={p.name}
-            className={`flex items-center gap-2 rounded-sm px-2 py-1.5 text-left transition-colors ${
-              source === p.source ? 'bg-(--sel)' : 'bg-(--field) hover:bg-(--field-h)'
-            }`}
-          >
-            <PresetSwatch ink={p.ink} paper={p.paper} accent={p.accent} />
-            <span className="truncate t-body-sm text-(--tx2)">{p.name}</span>
-          </button>
+            index={i}
+            cols={4}
+            label={p.name}
+            hint={sourceLabel(p.kind, p.source)}
+            on={source === p.source && ink === p.ink && paper === p.paper}
+            onPick={() => useSignal.getState().applyLook(p.id)}
+            art={<LookArt id={p.id} />}
+            live={lookLive(p.id)}
+          />
         ))}
-      </div>
+      </TileGrid>
     </Section>
   )
 }
@@ -137,24 +140,33 @@ function GeneratorGroup() {
         onChange={setKind}
       />
 
+      {/*
+       * The generators are drawn bare, with none of a look's finish, in the
+       * document's own paper and ink: each tile answers "what would my picture
+       * be on this one", and recolours with the document rather than showing
+       * sixty-eight pictures in somebody else's colours.
+       */}
       {groupsOf(kind).map((group) => {
         const items = sourcesOf(kind).filter((s) => s.group === group)
         if (!items.length) return null
         return (
-          <div key={group} className="mb-2 last:mb-0">
+          <div key={group} className="mb-3 last:mb-0">
             <SubHeading>{group}</SubHeading>
-            <div className="flex flex-wrap gap-1">
-              {items.map((s) => (
-                <MiniButton
+            <TileGrid cols={5}>
+              {items.map((s, i) => (
+                <Tile
                   key={s.id}
-                  active={id === s.id}
-                  title={s.hint}
-                  onClick={() => useSignal.getState().setSource(kind, s.id)}
-                >
-                  {s.label}
-                </MiniButton>
+                  index={i}
+                  cols={5}
+                  label={s.label}
+                  hint={s.hint}
+                  on={id === s.id}
+                  onPick={() => useSignal.getState().setSource(kind, s.id)}
+                  art={<SourceArt kind={kind} id={s.id} />}
+                  live={sourceLive(kind, s.id)}
+                />
               ))}
-            </div>
+            </TileGrid>
           </div>
         )
       })}

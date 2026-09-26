@@ -20,9 +20,33 @@ import type { MaskId, SignalInk, SignalQuantize } from './types'
 
 let ditherBuf = new Uint8Array(0)
 let blockBuf = new Uint8Array(0)
-let imageData: ImageData | null = null
-let imageW = 0
-let imageH = 0
+
+/**
+ * A buffer per frame size, remembering the last two sizes asked for.
+ *
+ * Two because the preview and the panel's thumbnails draw at different sizes
+ * in the same second; a third size evicts the one used longest ago, which is
+ * what a document resize does to the old preview size.
+ */
+export function sizedCache<T>() {
+  const held: { key: string; value: T }[] = []
+  return (w: number, h: number, make: () => T): T => {
+    const key = `${w}x${h}`
+    const at = held.findIndex((e) => e.key === key)
+    if (at === 0) return held[0].value
+    if (at > 0) {
+      const [hit] = held.splice(at, 1)
+      held.unshift(hit)
+      return hit.value
+    }
+    const value = make()
+    held.unshift({ key, value })
+    if (held.length > 2) held.pop()
+    return value
+  }
+}
+
+const images = sizedCache<ImageData>()
 
 function outBuffer(len: number) {
   if (ditherBuf.length < len) ditherBuf = new Uint8Array(len)
@@ -35,21 +59,7 @@ function blocks(len: number) {
 }
 
 function frameData(w: number, h: number) {
-  if (!imageData || imageW !== w || imageH !== h) {
-    imageData = new ImageData(w, h)
-    imageW = w
-    imageH = h
-  }
-  return imageData
-}
-
-/** Discard the cached buffers. Called when a document changes size. */
-export function releaseBuffers() {
-  ditherBuf = new Uint8Array(0)
-  blockBuf = new Uint8Array(0)
-  imageData = null
-  imageW = 0
-  imageH = 0
+  return images(w, h, () => new ImageData(w, h))
 }
 
 // ----- the ordered masks -----

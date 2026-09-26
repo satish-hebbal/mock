@@ -3510,6 +3510,305 @@ button:hover > .inv-coin {
 }
 
 /*
+ * ----- The pattern panel's pictures -----
+ *
+ * Tiles for the looks, generators, masks and effects (SignalTiles.tsx). The
+ * picture is the whole tile. The chosen one wears a ring set a hair outside
+ * it, with the panel showing through the gap, so the ring never covers any of
+ * the picture it is marking; the grid's gap is wide enough that two rings can
+ * never touch.
+ */
+.sg-grid {
+  display: grid;
+  gap: 6px;
+}
+.sg-tile {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 6px;
+  background: var(--field);
+  transition: transform var(--dur-out) var(--ease-snappy);
+}
+.sg-tile:hover {
+  transform: translateY(-1px);
+  transition-duration: var(--dur-in);
+}
+.sg-tile:active {
+  transform: scale(0.96);
+}
+.sg-tile-art {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+}
+/* a hairline inside the edge, over the picture, so a tile whose paper is the
+   panel's own colour still has one */
+.sg-tile-art::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px var(--line);
+  pointer-events: none;
+}
+.sg-tile-img,
+.sg-tile-live,
+.sg-tile-fill {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.sg-tile-fill {
+  -webkit-mask-size: cover;
+  mask-size: cover;
+}
+.sg-pixelated {
+  image-rendering: pixelated;
+}
+.sg-tile::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 8px;
+  box-shadow: 0 0 0 1.5px transparent;
+  pointer-events: none;
+  transition: box-shadow var(--dur-out) var(--ease-settle);
+}
+.sg-tile:hover::after {
+  box-shadow: 0 0 0 1.5px var(--line2);
+  transition-duration: var(--dur-in);
+}
+.sg-tile[data-on]::after {
+  box-shadow: 0 0 0 1.5px var(--tx);
+}
+.sg-tile:focus-visible {
+  outline: none;
+}
+.sg-tile:focus-visible::after {
+  box-shadow: 0 0 0 1.5px var(--accent, #5e6ad2);
+}
+
+/* a corner badge, for an effect that is on */
+.sg-tile-mark {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: var(--inverse-canvas);
+  color: var(--canvas);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.35);
+}
+
+/*
+ * The name, above the tile under the pointer. Inverted like Surprise me, so it
+ * reads as the panel talking rather than as one more control, and opened inward
+ * on the end columns so it never runs off the side of the panel.
+ */
+.sg-tip {
+  position: absolute;
+  bottom: calc(100% + 7px);
+  left: 50%;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: max-content;
+  max-width: 196px;
+  padding: 5px 8px 6px;
+  border-radius: 7px;
+  background: var(--inverse-canvas);
+  color: var(--canvas);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.28);
+  text-align: left;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, 3px);
+  transition:
+    opacity var(--dur-out) var(--ease-settle),
+    transform var(--dur-out) var(--ease-settle);
+}
+.sg-tile[data-edge='start'] .sg-tip {
+  left: 0;
+  transform: translate(0, 3px);
+}
+.sg-tile[data-edge='end'] .sg-tip {
+  left: auto;
+  right: 0;
+  transform: translate(0, 3px);
+}
+.sg-tile:hover .sg-tip,
+.sg-tile:focus-visible .sg-tip {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  transition-duration: var(--dur-in);
+}
+.sg-tile[data-edge]:hover .sg-tip,
+.sg-tile[data-edge]:focus-visible .sg-tip {
+  transform: translate(0, 0);
+}
+.sg-tip-name {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+  white-space: nowrap;
+}
+.sg-tip-hint {
+  font-size: 11px;
+  line-height: 14px;
+  opacity: 0.66;
+}
+
+/* the invoice's picture-over-name cards, for the settings with only a few options */
+.sg-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 8px 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  transition:
+    background var(--dur-out) var(--ease-settle),
+    border-color var(--dur-out) var(--ease-settle);
+}
+.sg-option:not(.is-picked):hover {
+  border-color: var(--line2);
+  background: color-mix(in srgb, var(--panel3) 45%, transparent);
+}
+.sg-option.is-picked {
+  border-color: var(--tx2);
+  background: var(--field);
+}
+.sg-option-art {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 26px;
+}
+
+/*
+ * The three colours as one strip of paint. Each chip is its own colour picker,
+ * and says its hex in its own colour's contrast; the swap between paper and ink
+ * sits on the seam between them, because that is the pair it trades.
+ */
+.sg-inks {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr 0.72fr;
+  gap: 4px;
+}
+.sg-ink {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  height: 52px;
+  padding: 5px 7px;
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px var(--line);
+  cursor: pointer;
+  transition: transform var(--dur-out) var(--ease-snappy);
+}
+.sg-ink:hover {
+  transform: translateY(-1px);
+  transition-duration: var(--dur-in);
+}
+.sg-ink > input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+.sg-ink-role {
+  font-size: 11px;
+  line-height: 13px;
+  opacity: 0.72;
+}
+.sg-ink-hex {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  line-height: 14px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.sg-swap {
+  position: absolute;
+  /* astride the strip's top edge, clear of the names and hexes along the bottom */
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 9999px;
+  background: var(--raised);
+  color: var(--tx2);
+  box-shadow:
+    0 0 0 3px var(--raised),
+    0 0 0 4px var(--line);
+  transform: translate(-50%, -50%);
+  transition:
+    color var(--dur-out) var(--ease-settle),
+    transform var(--dur-out) var(--ease-snappy);
+}
+.sg-swap:hover {
+  color: var(--tx);
+  transform: translate(-50%, -50%) rotate(180deg);
+}
+
+/* the small pictures inside the option cards */
+.sg-glyphs {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  white-space: pre;
+}
+.sg-glyph-dots {
+  width: 22px;
+  height: 14px;
+  background: radial-gradient(circle, currentColor 0 0.9px, transparent 1.2px) 0 0 / 3px 3px;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000);
+  mask-image: linear-gradient(90deg, transparent, #000);
+}
+.sg-ramp {
+  width: 60px;
+  height: 14px;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.sg-sheet {
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0.85;
+}
+.sg-option.is-picked .sg-sheet {
+  opacity: 1;
+}
+
+/* the fill bar behind an effect's slider row: its own picture, small */
+.sg-fx-chip {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  overflow: hidden;
+  border-radius: 5px;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+/*
  * ----- Reduced motion, as a floor rather than a checklist -----
  *
  * There were five `prefers-reduced-motion` blocks in this file, each written

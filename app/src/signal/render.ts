@@ -21,38 +21,27 @@
 import { applyFx, type FxContext } from '../lib/postfx'
 import { FIELD_BY_ID, resolveParams, type FieldFn } from './fields'
 import { FIGURE_BY_ID, figureInk } from './figures'
-import { ditherAndPaint, paintGlyphs, releaseBuffers } from './quantize'
+import { ditherAndPaint, paintGlyphs, sizedCache } from './quantize'
 import type { SignalDoc } from './types'
 
-let field = new Float32Array(0)
-let fieldW = 0
-let fieldH = 0
+/*
+ * Two sizes are kept rather than one, because two sizes are drawn at once: the
+ * preview, and the panel's thumbnails (see thumbs.ts), which render between
+ * preview frames at a fraction of the size. With a single slot each would evict
+ * the other every frame and the preview would reallocate megabytes sixty times
+ * a second for the privilege of showing a picture of itself in the panel.
+ */
+const fields = sizedCache<Float32Array>()
+const coarses = sizedCache<Float32Array>()
 
 /** The full-size luminance buffer the dither reads. */
 function fieldBuffer(w: number, h: number) {
-  if (fieldW !== w || fieldH !== h) {
-    field = new Float32Array(w * h)
-    fieldW = w
-    fieldH = h
-    // the dither and image buffers next door are sized to the same frame, so
-    // they are stale for exactly the same reason
-    releaseBuffers()
-  }
-  return field
+  return fields(w, h, () => new Float32Array(w * h))
 }
-
-let coarse = new Float32Array(0)
-let coarseW = 0
-let coarseH = 0
 
 /** The reduced buffer a field is actually generated into when detail > 1. */
 function coarseBuffer(w: number, h: number) {
-  if (coarseW !== w || coarseH !== h) {
-    coarse = new Float32Array(w * h)
-    coarseW = w
-    coarseH = h
-  }
-  return coarse
+  return coarses(w, h, () => new Float32Array(w * h))
 }
 
 /**

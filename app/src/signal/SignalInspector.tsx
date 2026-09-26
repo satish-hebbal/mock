@@ -13,20 +13,22 @@
 
 import { useState } from 'react'
 import {
-  Blend,
+  ArrowLeftRight,
+  Check,
   Dices,
   Grid3x3,
+  Minimize2,
   Monitor,
   Palette,
   RotateCcw,
   Save,
+  Scan,
   Sparkles,
   Trash2,
   Type,
   X,
 } from 'lucide-react'
 import {
-  ColorRow,
   Disclosure,
   Dropdown,
   InfoTip,
@@ -38,9 +40,11 @@ import {
 } from '../components/controls'
 import { FX_ORDER, pixelPasses, type FxId } from '../lib/postfx'
 import { ui } from '../lib/ui'
-import { MASK_LIST } from './quantize'
+import { MASK_LIST, hexRgb } from './quantize'
 import { PALETTES, PALETTE_GROUPS } from './palettes'
+import { FxArt, MaskArt, Option, SlotArt, Tile, TileGrid } from './SignalTiles'
 import { useSignal } from './store'
+import { fxLive } from './thumbs'
 import { CANVAS_PRESETS, type AccentMode, type SignalDoc } from './types'
 
 const iconProps = { size: 15, strokeWidth: 1.75 } as const
@@ -51,6 +55,78 @@ const secs = (v: number) => `${v.toFixed(1)}s`
 const int = (v: number) => `${Math.round(v)}`
 
 const edit = (label: string, fn: (d: SignalDoc) => void) => useSignal.getState().patch(fn, label)
+
+/** Five characters from a ramp, spread from its light end to its dark one, spaces dropped. */
+function glyphSample(ramp: string) {
+  const chars = [...ramp.replace(/\s/g, '')]
+  if (chars.length <= 5) return chars.join('') || '?'
+  return Array.from({ length: 5 }, (_, i) => chars[Math.round((i * (chars.length - 1)) / 4)]).join('')
+}
+
+/** Ink that reads on a chip of `hex`, by its perceived lightness. */
+function inkOn(hex: string) {
+  const [r, g, b] = hexRgb(hex)
+  return 0.299 * r + 0.587 * g + 0.114 * b > 150 ? 'rgb(0 0 0 / 0.78)' : 'rgb(255 255 255 / 0.9)'
+}
+
+/** One colour of the three, as a chip of itself that opens the picker. */
+function InkChip({
+  role,
+  value,
+  onChange,
+}: {
+  role: string
+  value: string
+  onChange: (v: string) => void
+}) {
+  return (
+    <label className="sg-ink" title={`${role}: pick a colour`} style={{ background: value, color: inkOn(value) }}>
+      <input
+        type="color"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        aria-label={role}
+      />
+      <span className="sg-ink-role">{role}</span>
+      <span className="sg-ink-hex">{value.replace('#', '')}</span>
+    </label>
+  )
+}
+
+const ACCENT_MODES: { id: AccentMode; label: string; hint: string }[] = [
+  { id: 'blend', label: 'Blend', hint: 'The accent fades in and out through the midtones.' },
+  { id: 'hard', label: 'Hard', hint: 'The midtones become flat accent, posterised.' },
+  { id: 'pattern', label: 'Pattern', hint: 'Only the lit dither pixels in the midtones take the accent.' },
+]
+
+/**
+ * A run of tone from paper to ink, with the accent where each mode puts it.
+ *
+ * Drawn with CSS stops rather than rendered, because what differs between the
+ * three is only the shape of the band: a soft hump, a flat block, or a stripe
+ * of accent with the paper showing between.
+ */
+function accentRamp(mode: AccentMode, paper: string, ink: string, accent: string) {
+  if (mode === 'blend') return `linear-gradient(90deg, ${paper} 12%, ${accent} 50%, ${ink} 88%)`
+  if (mode === 'hard') return `linear-gradient(90deg, ${paper} 0 33%, ${accent} 33% 67%, ${ink} 67%)`
+  const stripes: string[] = []
+  for (let at = 33; at < 67; at += 4) {
+    stripes.push(`${accent} ${at}% ${at + 2}%`, `${paper} ${at + 2}% ${at + 4}%`)
+  }
+  return `linear-gradient(90deg, ${paper} 0 33%, ${stripes.join(', ')}, ${ink} 67%)`
+}
+
+/**
+ * A sheet at a canvas's proportions, and at its size relative to the others:
+ * the long side grows with the pixel count, so 512 and 1024 are both square
+ * and plainly not the same square.
+ */
+function sheetSize(w: number, h: number) {
+  const long = 12 + 14 * (Math.max(w, h) / 1920)
+  return w >= h
+    ? { width: long, height: (long * h) / w }
+    : { width: (long * w) / h, height: long }
+}
 
 function DitherGroup() {
   const kind = useSignal((s) => s.doc.source.kind)
@@ -75,17 +151,24 @@ function DitherGroup() {
       defaultOpen
       actions={<InfoTip>{mask?.hint}</InfoTip>}
     >
-      <div className="mb-2 flex flex-wrap gap-1">
-        {MASK_LIST.map((m) => (
-          <MiniButton
-            key={m.id}
-            active={q.mask === m.id}
-            title={m.hint}
-            onClick={() => edit('signal-mask', (d) => void (d.quantize.mask = m.id))}
-          >
-            {m.label}
-          </MiniButton>
-        ))}
+      {/* each mask on the same lit sphere, in the document's colours: the
+          difference between Bayer 8 and blue noise is a texture, and a texture
+          is the one thing its name cannot tell you */}
+      <div className="mb-3">
+        <TileGrid cols={5}>
+          {MASK_LIST.map((m, i) => (
+            <Tile
+              key={m.id}
+              index={i}
+              cols={5}
+              label={m.label}
+              hint={m.hint}
+              on={q.mask === m.id}
+              onPick={() => edit('signal-mask', (d) => void (d.quantize.mask = m.id))}
+              art={<MaskArt mask={m.id} />}
+            />
+          ))}
+        </TileGrid>
       </div>
 
       <SliderRow label="Threshold" hint="The level a pixel has to beat to light up."
@@ -106,16 +189,29 @@ function DitherGroup() {
         onChange={(v) => edit('signal-detail', (d) => void (d.quantize.detail = v))} />
 
       <SubHeading icon={<Type size={11} strokeWidth={2} />}>Characters</SubHeading>
-      <Segments
-        compact
-        options={[
-          { id: 'off', label: 'Pixels' },
-          { id: 'ramp', label: 'Ramp' },
-          { id: 'custom', label: 'Custom' },
-        ]}
-        value={q.glyphs}
-        onChange={(v) => edit('signal-glyphs', (d) => void (d.quantize.glyphs = v))}
-      />
+      {/* each set shown as what it prints: dots, the stock ramp, or yours */}
+      <div className="mb-2 grid grid-cols-3 gap-1.5">
+        {(
+          [
+            { id: 'off', label: 'Pixels', art: <span className="sg-glyph-dots" /> },
+            { id: 'ramp', label: 'Ramp', art: <span className="sg-glyphs">.:+#@</span> },
+            {
+              id: 'custom',
+              label: 'Custom',
+              art: <span className="sg-glyphs">{glyphSample(q.ramp)}</span>,
+            },
+          ] as const
+        ).map((o) => (
+          <Option
+            key={o.id}
+            on={q.glyphs === o.id}
+            label={o.label}
+            onClick={() => edit('signal-glyphs', (d) => void (d.quantize.glyphs = o.id))}
+          >
+            {o.art}
+          </Option>
+        ))}
+      </div>
       {q.glyphs === 'custom' && (
         <input
           value={q.ramp}
@@ -209,15 +305,25 @@ function ColourGroup() {
       defaultOpen
       actions={<InfoTip>Three colours, always: lit, unlit, and the accent that occupies the band between.</InfoTip>}
     >
-      <ColorRow label="Ink" value={ink.ink} onChange={setColour('ink')} />
-      <ColorRow label="Paper" value={ink.paper} onChange={setColour('paper')} />
-      <ColorRow label="Accent" value={ink.accent} onChange={setColour('accent')} />
-
-      <div className="mt-1 mb-2">
-        <MiniButton onClick={() => useSignal.getState().swapInk()} title="Trade ink and paper (I)">
-          <Blend size={13} strokeWidth={1.9} />
-          Swap
-        </MiniButton>
+      {/*
+       * The three colours as chips of themselves, in the order they sit in the
+       * picture: paper under everything, ink on it, the accent between. The
+       * swap is on the seam it trades across.
+       */}
+      <div className="sg-inks mb-3">
+        <InkChip role="Paper" value={ink.paper} onChange={setColour('paper')} />
+        <InkChip role="Ink" value={ink.ink} onChange={setColour('ink')} />
+        <InkChip role="Accent" value={ink.accent} onChange={setColour('accent')} />
+        <button
+          onClick={() => useSignal.getState().swapInk()}
+          title="Trade ink and paper (I)"
+          aria-label="Trade ink and paper"
+          className="sg-swap"
+          // the seam between the first two chips of a 1fr 1fr 0.72fr strip
+          style={{ left: 'calc((100% - 8px) / 2.72 + 2px)' }}
+        >
+          <ArrowLeftRight size={11} strokeWidth={2.2} />
+        </button>
       </div>
 
       {/* folded by default: a wall of swatches is worth having and worth hiding */}
@@ -273,17 +379,25 @@ function ColourGroup() {
           <SliderRow label="Accent mix" hint="Width of the midtone band the accent occupies. At 0 the picture is two colours."
             value={ink.mix} min={0} max={100} step={1} format={int}
             onChange={(v) => edit('signal-mix', (d) => void (d.ink.mix = v))} />
+          {/* each mode as the run of tone it paints, dark to light, in the
+              document's own three colours */}
           {ink.mix > 0 && (
-            <Segments
-              compact
-              options={[
-                { id: 'blend', label: 'Blend' },
-                { id: 'hard', label: 'Hard' },
-                { id: 'pattern', label: 'Pattern' },
-              ]}
-              value={ink.mode}
-              onChange={(v: AccentMode) => edit('signal-accent-mode', (d) => void (d.ink.mode = v))}
-            />
+            <div className="mt-1 grid grid-cols-3 gap-1.5">
+              {ACCENT_MODES.map((m) => (
+                <Option
+                  key={m.id}
+                  on={ink.mode === m.id}
+                  label={m.label}
+                  hint={m.hint}
+                  onClick={() => edit('signal-accent-mode', (d) => void (d.ink.mode = m.id))}
+                >
+                  <span
+                    className="sg-ramp"
+                    style={{ background: accentRamp(m.id, ink.paper, ink.ink, ink.accent) }}
+                  />
+                </Option>
+              ))}
+            </div>
           )}
         </>
       )}
@@ -294,16 +408,15 @@ function ColourGroup() {
 /**
  * The finishing chain.
  *
- * Twenty-six effects is too many for twenty-six always-visible sliders, so a
- * row is a chip until it is on and a slider once it is. The ones already on
- * float to the top, because the chain you are working on should not be
- * scattered through a list of the twenty you are not.
+ * Twenty-six effects is too many for twenty-six always-visible sliders, so an
+ * effect is a picture in the library until it is on, and a slider led by that
+ * picture once it is. The ones on sit above the library, because the chain you
+ * are working on should not be scattered through the twenty you are not.
  */
 function FinishGroup() {
   const fx = useSignal((s) => s.doc.fx)
   const big = useSignal((s) => s.doc.canvas.width * s.doc.canvas.height) > 1_200_000
   const active = FX_ORDER.filter((f) => (fx[f.id]?.amount ?? 0) > 0)
-  const rest = FX_ORDER.filter((f) => (fx[f.id]?.amount ?? 0) <= 0)
   const passes = pixelPasses(fx)
 
   /*
@@ -340,6 +453,9 @@ function FinishGroup() {
     >
       {active.map((spec) => (
         <div key={spec.id} className="mb-1.5 flex items-center gap-1">
+          <span className="sg-fx-chip" aria-hidden>
+            <FxArt id={spec.id} />
+          </span>
           <div className="min-w-0 flex-1">
             <SliderRow
               label={spec.label}
@@ -381,14 +497,32 @@ function FinishGroup() {
         </div>
       ))}
 
-      {active.length > 0 && rest.length > 0 && <SubHeading>Add</SubHeading>}
-      <div className="flex flex-wrap gap-1">
-        {rest.map((spec) => (
-          <MiniButton key={spec.id} title={spec.hint} onClick={() => toggle(spec.id, true)}>
-            {spec.label}
-          </MiniButton>
-        ))}
-      </div>
+      {/*
+       * The whole library as pictures, every effect shown on the same sample,
+       * so what differs from tile to tile is only the effect. The ones already
+       * on stay in the grid with a check rather than vanishing from it, so the
+       * library keeps its shape and a second press takes one off again.
+       */}
+      {active.length > 0 && <SubHeading>Add</SubHeading>}
+      <TileGrid cols={5}>
+        {FX_ORDER.map((spec, i) => {
+          const on = (fx[spec.id]?.amount ?? 0) > 0
+          return (
+            <Tile
+              key={spec.id}
+              index={i}
+              cols={5}
+              label={spec.label}
+              hint={spec.hint}
+              on={on}
+              onPick={() => toggle(spec.id, !on)}
+              art={<FxArt id={spec.id} />}
+              live={fxLive(spec.id)}
+              mark={on ? <Check size={9} strokeWidth={3.4} /> : undefined}
+            />
+          )
+        })}
+      </TileGrid>
 
       {/* said only when it is true, and as a thing to do rather than a scolding */}
       {passes >= 3 && big && (
@@ -418,11 +552,15 @@ function CanvasGroup() {
         </InfoTip>
       }
     >
-      <div className="mb-2 flex flex-wrap gap-1">
+      {/* each size as a sheet of its own proportions, which is how a size is
+          actually chosen: square, wide or tall first, then how many pixels */}
+      <div className="mb-3 grid grid-cols-3 gap-1.5">
         {CANVAS_PRESETS.map((p) => (
-          <MiniButton
+          <Option
             key={p.id}
-            active={match?.id === p.id}
+            on={match?.id === p.id}
+            label={p.width === p.height ? `${p.width}` : `${p.width}×${p.height}`}
+            hint={p.label}
             onClick={() =>
               edit('signal-canvas', (d) => {
                 d.canvas.width = p.width
@@ -430,8 +568,11 @@ function CanvasGroup() {
               })
             }
           >
-            {p.label}
-          </MiniButton>
+            <span
+              className="sg-sheet"
+              style={sheetSize(p.width, p.height)}
+            />
+          </Option>
         ))}
       </div>
 
@@ -447,8 +588,8 @@ function CanvasGroup() {
       <Segments
         compact
         options={[
-          { id: 'fit', label: 'Fit' },
-          { id: 'exact', label: 'Exact' },
+          { id: 'fit', label: 'Fit', icon: <><Minimize2 size={11} strokeWidth={2} />Fit</> },
+          { id: 'exact', label: 'Exact', icon: <><Scan size={11} strokeWidth={2} />Exact</> },
         ]}
         value={canvas.preview}
         onChange={(v) => edit('signal-preview', (d) => void (d.canvas.preview = v))}
@@ -504,14 +645,17 @@ function SavedGroup() {
           <div key={slot.id} className="flex items-center gap-1">
             <button
               onClick={() => useSignal.getState().loadSlot(slot.id)}
-              className="flex h-7 min-w-0 flex-1 items-center rounded-sm bg-(--field) px-2 text-left t-body-sm text-(--tx2) hover:bg-(--field-h) hover:text-(--tx)"
+              className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-sm bg-(--field) pr-2 pl-1 text-left t-body-sm text-(--tx2) hover:bg-(--field-h) hover:text-(--tx)"
             >
+              <span className="sg-fx-chip" aria-hidden>
+                <SlotArt id={slot.id} doc={slot.doc} />
+              </span>
               <span className="truncate">{slot.name}</span>
             </button>
             <button
               onClick={() => useSignal.getState().deleteSlot(slot.id)}
               aria-label={`Delete ${slot.name}`}
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-sm text-(--tx3) hover:bg-(--panel3) hover:text-(--tx)"
+              className="flex h-9 w-7 shrink-0 items-center justify-center rounded-sm text-(--tx3) hover:bg-(--panel3) hover:text-(--tx)"
             >
               <Trash2 size={13} strokeWidth={1.9} />
             </button>

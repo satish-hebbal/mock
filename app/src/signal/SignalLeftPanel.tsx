@@ -318,7 +318,7 @@ function MotionGroup() {
 }
 
 /*
- * Surprise me, cut into the panel rather than laid on it.
+ * Remix (it used to say Surprise me), cut into the panel rather than laid on it.
  *
  * It is the one control here worth pressing before you understand anything
  * else, and it used to be buried under a hundred and five preset buttons,
@@ -332,7 +332,8 @@ function MotionGroup() {
  * not a coincidence to preserve by hand: 32 of button and six of air either
  * side is what `h-11` already was.
  */
-const SURPRISE_W = 116
+// sized to the shorter label, so the pocket does not leave air either side of it
+const SURPRISE_W = 92
 const SURPRISE_H = 32
 const SURPRISE_NOTCH = notchForPill(SURPRISE_W, SURPRISE_H, 'corner')
 
@@ -386,7 +387,7 @@ function SurpriseButton({ notched, centerX }: { notched: boolean; centerX: numbe
         }}
       />
       <Shuffle size={13} strokeWidth={2} className="relative" />
-      <span className="relative">Surprise me</span>
+      <span className="relative">Remix</span>
     </button>
   )
 }

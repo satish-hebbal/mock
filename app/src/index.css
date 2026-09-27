@@ -3695,6 +3695,222 @@ button:hover > .inv-coin {
 }
 
 /*
+ * ----- The device catalog -----
+ *
+ * Studio's Devices panel, drawn the way the pattern panels are: each device is
+ * a still of the model itself (public/device-thumbs, rendered from the same
+ * .glb the scene loads), so an iPad and a MacBook are told apart at a glance
+ * instead of by reading down a list. The chosen ring and the hover lift are
+ * the pattern tiles' own, so the two tools feel like one app.
+ */
+.dv-pic {
+  width: 80%;
+  height: 80%;
+  object-fit: contain;
+  filter: drop-shadow(0 3px 5px rgb(0 0 0 / 0.35));
+  transition: transform var(--dur-out) var(--ease-snappy);
+  pointer-events: none;
+}
+
+/* what's in the scene: one small tile per device, the picked one ringed */
+.dv-scene {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.dv-chip {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  background: var(--field);
+  transition:
+    transform var(--dur-out) var(--ease-snappy),
+    background var(--dur-out) var(--ease-settle);
+}
+.dv-chip:hover {
+  background: var(--field-h);
+  transform: translateY(-1px);
+  transition-duration: var(--dur-in);
+}
+.dv-chip:active {
+  transform: scale(0.94);
+}
+.dv-chip::after,
+.dv-tile-art::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 10px;
+  box-shadow: 0 0 0 1.5px transparent;
+  pointer-events: none;
+  transition: box-shadow var(--dur-out) var(--ease-settle);
+}
+.dv-chip[data-on]::after {
+  box-shadow: 0 0 0 1.5px var(--tx);
+}
+.dv-chip:focus-visible,
+.dv-tile:focus-visible {
+  outline: none;
+}
+.dv-chip:focus-visible::after,
+.dv-tile:focus-visible .dv-tile-art::after {
+  box-shadow: 0 0 0 1.5px var(--accent, #5e6ad2);
+}
+.dv-chip-n {
+  position: absolute;
+  right: 3px;
+  bottom: 2px;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--tx2);
+}
+/* the strip sits at the top of the panel, so its name opens below rather than
+   into the header */
+.dv-chip .sg-tip {
+  top: calc(100% + 7px);
+  bottom: auto;
+  transform: translate(-50%, -3px);
+}
+.dv-chip[data-edge='start'] .sg-tip {
+  left: 0;
+  transform: translate(0, -3px);
+}
+.dv-chip[data-edge='end'] .sg-tip {
+  left: auto;
+  right: 0;
+  transform: translate(0, -3px);
+}
+.dv-chip:hover .sg-tip,
+.dv-chip:focus-visible .sg-tip {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  transition-duration: var(--dur-in);
+}
+.dv-chip[data-edge]:hover .sg-tip,
+.dv-chip[data-edge]:focus-visible .sg-tip {
+  transform: translate(0, 0);
+}
+
+/* the catalog: picture over name, three across */
+.dv-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px 6px;
+}
+.dv-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  color: var(--tx2);
+  text-align: center;
+}
+.dv-tile-art {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  background: var(--field);
+  transition:
+    transform var(--dur-out) var(--ease-snappy),
+    background var(--dur-out) var(--ease-settle);
+}
+.dv-tile:hover .dv-tile-art {
+  background: var(--field-h);
+  transform: translateY(-1px);
+  transition-duration: var(--dur-in);
+}
+.dv-tile:hover .dv-pic {
+  transform: scale(1.06);
+  transition-duration: var(--dur-in);
+}
+.dv-tile:active .dv-tile-art {
+  transform: scale(0.95);
+}
+.dv-tile:hover .dv-tile-art::after {
+  box-shadow: 0 0 0 1.5px var(--line2);
+  transition-duration: var(--dur-in);
+}
+.dv-tile-name {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 11px;
+  line-height: 13px;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  transition: color var(--dur-out) var(--ease-settle);
+}
+.dv-tile:hover .dv-tile-name {
+  color: var(--tx);
+  transition-duration: var(--dur-in);
+}
+/* the verb, arriving with the pointer: clicking a tile adds that device */
+.dv-tile-add {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  background: var(--inverse-canvas);
+  color: var(--canvas);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.35);
+  opacity: 0;
+  transform: scale(0.7);
+  transition:
+    opacity var(--dur-out) var(--ease-settle),
+    transform var(--dur-out) var(--ease-snappy);
+}
+.dv-tile:hover .dv-tile-add,
+.dv-tile:focus-visible .dv-tile-add {
+  opacity: 1;
+  transform: scale(1);
+  transition-duration: var(--dur-in);
+}
+/* a dot for a model that's already in the scene */
+.dv-tile-in {
+  position: absolute;
+  bottom: 5px;
+  left: 5px;
+  width: 5px;
+  height: 5px;
+  border-radius: 9999px;
+  background: var(--accent, #5e6ad2);
+}
+.dv-tile-request .dv-tile-art {
+  background: transparent;
+  color: var(--tx3);
+  border: 1px dashed var(--line2);
+}
+.dv-tile-request:hover .dv-tile-art {
+  background: var(--field);
+  color: var(--tx2);
+}
+.dv-tile-request .dv-tile-name {
+  color: var(--tx3);
+}
+@media (prefers-reduced-motion: reduce) {
+  .dv-chip,
+  .dv-tile-art,
+  .dv-pic,
+  .dv-tile-add {
+    transition: none;
+    transform: none !important;
+  }
+}
+
+/*
  * The three colours as one strip of paint. Each chip is its own colour picker,
  * and says its hex in its own colour's contrast; the swap between paper and ink
  * sits on the seam between them, because that is the pair it trades.

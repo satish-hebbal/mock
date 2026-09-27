@@ -22,6 +22,17 @@ export interface Dims {
 }
 
 export function dimsFor(spec: DeviceSpec, orientation: 'portrait' | 'landscape'): Dims {
+  const d = kindDims(spec, orientation)
+  // A .glb is fitted to its own screen height and never turns with the
+  // orientation toggle, so its box follows the model rather than the kind:
+  // an open Fold is a landscape screen at its own size, not a phone on its side.
+  if (!spec.model) return d
+  const screenH = spec.model.fitHeight
+  const screenW = screenH * spec.screenAspect
+  return { ...d, screenW, screenH, bodyW: screenW + (d.bodyW - d.screenW), bodyH: screenH + (d.bodyH - d.screenH) }
+}
+
+function kindDims(spec: DeviceSpec, orientation: 'portrait' | 'landscape'): Dims {
   const aspect = screenAspectFor(spec, orientation)
   switch (spec.kind) {
     case 'phone': {

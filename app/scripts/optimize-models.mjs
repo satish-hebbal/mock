@@ -57,6 +57,8 @@ for (const file of files) {
   // material names differ, so resolve through the mesh the node points at.
   const screenMats = new Set()
   if (entry) {
+    // the manifest may name the material itself (obfuscated exports)
+    for (const m of doc.getRoot().listMaterials()) if (m.getName() === entry.screenMesh) screenMats.add(m)
     for (const node of doc.getRoot().listNodes()) {
       const mesh = node.getMesh()
       if (!mesh) continue
@@ -69,21 +71,53 @@ for (const file of files) {
     }
   }
 
+  // 0. Some exports carry a second copy of the device (the Z Flip ships open
+  //    and folded side by side). The manifest names the extras to cut.
+  for (const name of entry?.dropNodes ?? []) {
+    const node = doc.getRoot().listNodes().find((n) => n.getName() === name)
+    if (!node) throw new Error(`${file}: dropNodes names "${name}", which isn't in the model`)
+    node.dispose()
+  }
+
   // 1. Drop textures from screen materials — we always paint over them.
   let stripped = 0
   for (const mat of doc.getRoot().listMaterials()) {
-    if (!screenMats.has(mat) && !SCREEN_MATERIAL.test(mat.getName())) continue
+    const isScreen = screenMats.has(mat)
+    if (!isScreen && !SCREEN_MATERIAL.test(mat.getName())) continue
+    let had = false
     if (mat.getBaseColorTexture()) {
       mat.setBaseColorTexture(null)
       stripped++
+      had = true
     }
     if (mat.getEmissiveTexture()) {
       mat.setEmissiveTexture(null)
       mat.setEmissiveFactor([0, 0, 0])
       stripped++
+      had = true
     }
-    // a plain dark base so an un-textured screen still reads as "off", not white
-    mat.setBaseColorFactor([0.04, 0.04, 0.05, 1])
+    // A plain dark base so an un-textured screen still reads as "off", not
+    // white. Only for a display that lost its picture: a name match alone also
+    // catches the cover glass over the screen, and making that opaque would
+    // hide the screenshot underneath it.
+    if (isScreen || had) mat.setBaseColorFactor([0.04, 0.04, 0.05, 1])
+  }
+
+  // Nothing plays these (the Fold ships an open/close clip), and a clip keeps
+  // every node it drives alive through prune.
+  for (const anim of doc.getRoot().listAnimations()) anim.dispose()
+  // With nothing to play, a skin is only a way to get the screen wrong: three
+  // poses skinned vertices through the bones, while the screen's UVs are laid
+  // out from the raw positions. The raw positions are the rest pose, so drop
+  // the skin and ship the mesh as it sits.
+  for (const node of doc.getRoot().listNodes()) {
+    if (!node.getSkin()) continue
+    node.setSkin(null)
+    for (const prim of node.getMesh()?.listPrimitives() ?? []) {
+      for (const sem of prim.listSemantics()) {
+        if (/^(JOINTS|WEIGHTS)_/.test(sem)) prim.setAttribute(sem, null)
+      }
+    }
   }
 
   await doc.transform(

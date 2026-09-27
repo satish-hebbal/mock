@@ -9,6 +9,7 @@ import {
   ImagePlus,
   Link2,
   Laptop,
+  LayoutGrid,
   Monitor,
   Plus,
   Shuffle,
@@ -23,7 +24,14 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { pickMediaFile, useStudio } from '../store'
-import { DEVICE_CATEGORIES, PICKABLE_DEVICES, getDevice, type DeviceKind } from '../lib/registry'
+import {
+  DEVICE_CATEGORIES,
+  PICKABLE_DEVICES,
+  deviceThumb,
+  getDevice,
+  type DeviceKind,
+  type DeviceSpec,
+} from '../lib/registry'
 import {
   ASPECT_PRESETS,
   CAMERA_PRESETS,
@@ -41,7 +49,7 @@ import { MESH_PRESETS, meshCss, reshuffleMesh } from '../lib/meshGradient'
 import { SOLID_COLORS, WALLPAPERS, getWallpaper, gradientCss } from '../lib/wallpapers'
 import { PRESET_PHOTO_CATEGORIES, presetPhotosByCategory } from '../lib/presetPhotos'
 import { STUDIO_LOOKS, SWEEP_PAPERS, focalFromFov, lookSwatch } from '../lib/studio'
-import { SegmentThumb, SliderRow } from './controls'
+import { SegmentThumb, Segments, SliderRow } from './controls'
 import { MoreGrid, Swatch } from './catalog'
 import { cssBackground } from '../lib/backgroundCss'
 import { CameraStage } from './CameraStage'
@@ -142,11 +150,6 @@ function Chip({
   )
 }
 
-/** Chips that wrap onto as many lines as they need. */
-function Wrap({ children }: { children: ReactNode }) {
-  return <div className="flex flex-wrap gap-1.5">{children}</div>
-}
-
 /** Full-width catalog row: glyph, name, and an optional trailing note. */
 function ListRow({
   icon: Icon,
@@ -183,6 +186,71 @@ function ListRow({
 
 // ----- sections -----
 
+const CATEGORY_ICON: Record<(typeof DEVICE_CATEGORIES)[number], LucideIcon> = {
+  Phones: Smartphone,
+  Tablets: Tablet,
+  Laptops: Laptop,
+  Desktops: Monitor,
+  TV: Tv,
+  Watches: Watch,
+  Frames: AppWindow,
+}
+
+/** A device as its catalog still, or its kind's glyph where there is no still. */
+function DevicePic({ spec }: { spec: DeviceSpec }) {
+  const [broken, setBroken] = useState(false)
+  const src = deviceThumb(spec)
+  const Icon = KIND_ICON[spec.kind]
+  if (!src || broken) return <Icon size={18} strokeWidth={1.6} className="text-(--tx3)" />
+  return (
+    <img src={src} alt="" draggable={false} loading="lazy" onError={() => setBroken(true)} className="dv-pic" />
+  )
+}
+
+/**
+ * Row, fan and stack drawn as what they do to three devices, so the choice is
+ * made by looking rather than by imagining what "fan" means.
+ */
+function ArrangeGlyph({ mode }: { mode: 'row' | 'fan' | 'stack' }) {
+  const slab = (x: number, y: number, extra: Record<string, string | number> = {}) => (
+    <rect x={x} y={y} width="7" height="13" rx="1.6" fill="currentColor" {...extra} />
+  )
+  return (
+    <svg width="30" height="18" viewBox="0 0 30 18" aria-hidden>
+      {mode === 'row' && (
+        <>
+          {slab(2.5, 2.5)}
+          {slab(11.5, 2.5)}
+          {slab(20.5, 2.5)}
+        </>
+      )}
+      {mode === 'fan' && (
+        <>
+          {slab(11.5, 3, { transform: 'rotate(-24 15 17)', opacity: 0.5 })}
+          {slab(11.5, 3, { transform: 'rotate(24 15 17)', opacity: 0.5 })}
+          {slab(11.5, 2)}
+        </>
+      )}
+      {mode === 'stack' && (
+        <>
+          {slab(17, 1, { opacity: 0.35 })}
+          {slab(13, 2.5, { opacity: 0.6 })}
+          {slab(9, 4)}
+        </>
+      )}
+    </svg>
+  )
+}
+
+const ARRANGE = [
+  { id: 'row', label: 'Row' },
+  { id: 'fan', label: 'Fan' },
+  { id: 'stack', label: 'Stack' },
+] as const
+
+/** How many devices share a row of the scene strip, so a tip can open inward. */
+const SCENE_COLS = 5
+
 function DevicesSection() {
   const devices = useStudio((s) => activeShot(s.project).scene.devices)
   const selectedId = useStudio((s) => s.selectedDeviceId)
@@ -190,91 +258,134 @@ function DevicesSection() {
   const st = useStudio.getState
 
   const selected = devices.find((d) => d.id === selectedId) ?? devices[0]
+  const selectedName = selected ? getDevice(selected.modelId).name : ''
   const cats = DEVICE_CATEGORIES.filter((c) => PICKABLE_DEVICES.some((d) => d.category === c))
   const list = cat === 'All' ? PICKABLE_DEVICES : PICKABLE_DEVICES.filter((d) => d.category === cat)
+  const inScene = new Set(devices.map((d) => d.modelId))
+
+  const iconBtn =
+    'flex h-6 w-6 items-center justify-center rounded-xs text-(--tx3) transition-colors hover:bg-(--field) '
 
   return (
     <>
-      <Group label="In scene">
-        <div className="flex flex-col gap-0.5">
-          {devices.map((d, i) => {
-            const active = d.id === selected?.id
-            return (
-              <div
-                key={d.id}
-                className={`flex h-8 items-center rounded-sm pr-1 transition-colors ${
-                  active ? 'bg-(--sel) text-(--tx)' : 'text-(--tx2) hover:bg-(--field)'
-                }`}
+      {/*
+       * What's in the scene, as the devices themselves. The name is there on
+       * the tip for the one you point at, and the two things you do to a
+       * device from here sit on the heading and act on the picked one.
+       */}
+      <Group
+        label="In scene"
+        action={
+          selected && (
+            <div className="-my-1 flex items-center gap-0.5">
+              <button
+                title={`Duplicate ${selectedName}`}
+                aria-label={`Duplicate ${selectedName}`}
+                onClick={() => st().duplicateDevice(selected.id)}
+                className={`${iconBtn} hover:text-(--tx)`}
               >
+                <Copy size={12} strokeWidth={1.9} />
+              </button>
+              {devices.length > 1 && (
                 <button
-                  onClick={() => st().selectDevice(d.id)}
-                  className="min-w-0 flex-1 truncate px-2 text-left t-body-sm"
+                  title={`Remove ${selectedName}`}
+                  aria-label={`Remove ${selectedName}`}
+                  onClick={() => st().removeDevice(selected.id)}
+                  className={`${iconBtn} hover:text-(--danger)`}
                 >
-                  {i + 1} · {getDevice(d.modelId).name}
+                  <CircleMinus size={13} strokeWidth={1.9} />
                 </button>
-                <button
-                  title="Duplicate"
-                  aria-label="Duplicate device"
-                  onClick={() => st().duplicateDevice(d.id)}
-                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-xs text-(--tx3) hover:text-(--tx)"
-                >
-                  <Copy size={12} strokeWidth={1.9} />
-                </button>
-                {devices.length > 1 && (
-                  <button
-                    title="Remove device"
-                    aria-label="Remove device"
-                    onClick={() => st().removeDevice(d.id)}
-                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-xs text-(--tx3) hover:text-(--danger)"
-                  >
-                    <CircleMinus size={13} strokeWidth={1.9} />
-                  </button>
-                )}
-              </div>
+              )}
+            </div>
+          )
+        }
+      >
+        <div className="dv-scene">
+          {devices.map((d, i) => {
+            const spec = getDevice(d.modelId)
+            const col = i % SCENE_COLS
+            return (
+              <button
+                key={d.id}
+                onClick={() => st().selectDevice(d.id)}
+                aria-pressed={d.id === selected?.id}
+                aria-label={`${i + 1}. ${spec.name}`}
+                data-on={d.id === selected?.id || undefined}
+                data-edge={col === 0 ? 'start' : col >= SCENE_COLS - 2 ? 'end' : undefined}
+                className="dv-chip"
+              >
+                <DevicePic spec={spec} />
+                {devices.length > 1 && <span className="dv-chip-n">{i + 1}</span>}
+                <span className="sg-tip" aria-hidden>
+                  <span className="sg-tip-name">{spec.name}</span>
+                </span>
+              </button>
             )
           })}
         </div>
 
         {devices.length > 1 && (
-          <div className="mt-2 grid grid-cols-3 gap-1.5">
-            {(['row', 'fan', 'stack'] as const).map((m) => (
-              <Chip key={m} full title={`Arrange in a ${m}`} onClick={() => st().arrangeDevices(m)}>
-                <span className="capitalize">{m}</span>
-              </Chip>
+          <div className="mt-2.5 grid grid-cols-3 gap-1.5">
+            {ARRANGE.map((m) => (
+              <button
+                key={m.id}
+                onClick={() => st().arrangeDevices(m.id)}
+                title={`Arrange in a ${m.id}`}
+                className="sg-option t-caption text-(--tx2) hover:text-(--tx)"
+              >
+                <span className="sg-option-art">
+                  <ArrangeGlyph mode={m.id} />
+                </span>
+                <span>{m.label}</span>
+              </button>
             ))}
           </div>
         )}
       </Group>
 
       <Group label="Add a device">
-        <Wrap>
-          <Chip active={cat === 'All'} onClick={() => setCat('All')}>
-            All
-          </Chip>
-          {cats.map((c) => (
-            <Chip key={c} active={cat === c} onClick={() => setCat(c)}>
-              {c}
-            </Chip>
-          ))}
-        </Wrap>
-        <div className="mt-2 flex flex-col gap-0.5">
+        <Segments
+          compact
+          value={cat}
+          onChange={setCat}
+          options={[
+            { id: 'All' as const, label: 'All devices', icon: <LayoutGrid size={13} strokeWidth={1.8} /> },
+            ...cats.map((c) => {
+              const Icon = CATEGORY_ICON[c]
+              return { id: c, label: c, icon: <Icon size={13} strokeWidth={1.8} /> }
+            }),
+          ]}
+        />
+        <div className="dv-grid">
           {list.map((d) => (
-            <ListRow
+            <button
               key={d.id}
-              icon={KIND_ICON[d.kind]}
-              label={d.name}
-              title={`Add ${d.name}`}
               onClick={() => st().addDevice(d.id)}
-            />
+              title={`Add ${d.name}`}
+              data-in={inScene.has(d.id) || undefined}
+              className="dv-tile"
+            >
+              <span className="dv-tile-art">
+                <DevicePic spec={d} />
+                <span className="dv-tile-add" aria-hidden>
+                  <Plus size={10} strokeWidth={2.6} />
+                </span>
+                {inScene.has(d.id) && <span className="dv-tile-in" aria-label="In the scene" />}
+              </span>
+              <span className="dv-tile-name">{d.name}</span>
+            </button>
           ))}
+          <button
+            onClick={() => void requestDevice()}
+            title="Tell us which device to add next"
+            className="dv-tile dv-tile-request"
+          >
+            <span className="dv-tile-art">
+              <Plus size={16} strokeWidth={1.8} />
+            </span>
+            <span className="dv-tile-name">Request one</span>
+          </button>
         </div>
-        <button
-          onClick={() => void requestDevice()}
-          title="Tell us which device to add next"
-          className="mt-2 flex h-7 w-full items-center justify-center gap-1.5 rounded-sm border border-dashed border-(--line2) t-body-sm text-(--tx3) transition-colors hover:border-(--line2) hover:text-(--tx2)"
-        >
-          <Plus size={12} /> Request a device
-        </button>
       </Group>
     </>
   )

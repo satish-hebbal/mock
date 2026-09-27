@@ -1,5 +1,5 @@
 {
-  "_comment": "Screen-mesh manifest. `screenMesh` matches a three.js node name OR a material name. Chosen from scripts/detect-screens.mjs output, then confirmed by rendering. fitHeight is the on-screen HEIGHT of the display in scene units (matches the procedural devices), not the whole model. Shared by optimize-models.mjs (to strip replaceable screen textures) and the device registry.",
+  "_comment": "Screen-mesh manifest. `screenMesh` matches a three.js node name OR a material name. Chosen from scripts/detect-screens.mjs output, then confirmed by rendering. fitHeight is the on-screen HEIGHT of the display in scene units (matches the procedural devices), not the whole model. Shared by optimize-models.mjs (to strip replaceable screen textures) and the device registry. Optional: screenInset [top,right,bottom,left] for a display mesh that also carries its bezel; dropNodes names extra copies of the device in the export for the optimizer to cut. Laptops (kind laptop) face in over their base and only turn about the vertical. After verifying a model, run scripts/render-device-thumbs.mjs for its catalog picture.",
   "models": [
     {
       "file": "nothing_phone_2a.glb",
@@ -62,13 +62,73 @@
       "verified": true
     },
     {
+      "file": "samsung_galaxy_z_flip_7.glb",
+      "id": "galaxy_z_flip_7",
+      "name": "Galaxy Z Flip7",
+      "kind": "phone",
+      "screenMesh": "Object_37",
+      "screenAspect": 0.4297,
+      "fitHeight": 2.04,
+      "dropNodes": [
+        "SAMSUNG Galaxy Z Flip 7.001_37"
+      ],
+      "verified": true
+    },
+    {
+      "file": "apple_iphone_duo_fold_star_white_2026_animated.glb",
+      "id": "iphone_fold",
+      "name": "iPhone Fold",
+      "kind": "phone",
+      "screenMesh": "Object_106",
+      "screenAspect": 1.4297,
+      "fitHeight": 1.42,
+      "verified": true
+    },
+    {
       "file": "macbook_pro_m5_max_16_inch_2026.glb",
       "id": "macbook_pro_16",
-      "name": "MacBook Pro 16\u2033",
+      "name": "MacBook Pro 16″",
       "kind": "laptop",
-      "screenMesh": "Object_23",
+      "screenMesh": "sfCQkHOWyrsLmor",
       "screenAspect": 1.5434,
-      "fitHeight": 1.75
+      "fitHeight": 1.75,
+      "verified": true
+    },
+    {
+      "file": "macbook_pro_14-inch_m5.glb",
+      "id": "macbook_pro_14",
+      "name": "MacBook Pro 14″",
+      "kind": "laptop",
+      "screenMesh": "HlQwFCAPWzetDQy",
+      "screenAspect": 1.5397,
+      "fitHeight": 1.75,
+      "verified": true
+    },
+    {
+      "file": "apple_macbook_neo_2026.glb",
+      "id": "macbook_neo",
+      "name": "MacBook Neo",
+      "kind": "laptop",
+      "screenMesh": "Object_10",
+      "screenAspect": 1.5989,
+      "fitHeight": 1.69,
+      "screenInset": [
+        0.0419,
+        0.0263,
+        0.0317,
+        0.0259
+      ],
+      "verified": true
+    },
+    {
+      "file": "silver_apple_ipad_13_pro_m4.glb",
+      "id": "ipad_pro_13",
+      "name": "iPad Pro 13″",
+      "kind": "tablet",
+      "screenMesh": "Object_10",
+      "screenAspect": 0.752,
+      "fitHeight": 2.13,
+      "verified": true
     },
     {
       "file": "samsung_galaxy_watch_7.glb",

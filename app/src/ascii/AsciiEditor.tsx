@@ -15,7 +15,7 @@
  */
 
 import { useEffect, type ComponentType } from 'react'
-import { Download, Redo2, RotateCcw, Undo2 } from 'lucide-react'
+import { Dices, Download, Redo2, RotateCcw, Undo2 } from 'lucide-react'
 import { useStudio } from '../store'
 import { HoldButton } from '../components/HoldButton'
 import { NotchedFrame } from '../components/NotchedCanvas'
@@ -76,6 +76,7 @@ function ExportButton() {
 function CanvasRow() {
   const canUndo = useAscii((s) => s.past.length > 0)
   const canRedo = useAscii((s) => s.future.length > 0)
+  const ready = useAscii((s) => s.bitmap !== null)
   const st = useAscii.getState
 
   return (
@@ -91,6 +92,12 @@ function CanvasRow() {
         label="Redo (Ctrl+Shift+Z)"
         onClick={() => st().redo()}
         disabled={!canRedo}
+      />
+      <NotchButton
+        icon={Dices}
+        label="Shuffle: roll a new look (R)"
+        onClick={() => st().shuffle()}
+        disabled={!ready}
       />
       {/*
         Held rather than clicked, the same as every other editor's Start over:

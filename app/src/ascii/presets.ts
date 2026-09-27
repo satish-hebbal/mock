@@ -12,6 +12,12 @@
  */
 
 import {
+  CloudRain,
+  Gem,
+  PenTool,
+  Shirt,
+  Stamp,
+  Thermometer,
   Contrast,
   DraftingCompass,
   Gamepad2,
@@ -224,6 +230,99 @@ export const RECIPES: Recipe[] = [
       fx: { vignette: 0.2, scanlines: 0, curvature: 0, bloom: 0.15, chromatic: 0, grain: 0, glitch: 0 },
     },
   },
+  {
+    id: 'zine',
+    label: 'Zine',
+    hint: 'Two riso inks, grainy and out of register, on cheap paper.',
+    icon: Stamp,
+    tint: '255, 72, 176',
+    patch: {
+      style: 'riso',
+      tone: { brightness: 4, contrast: 118, gamma: 1, coverage: 1, density: 0, edge: 0, invert: false },
+      color: { mode: 'source', saturation: 1, grayscale: 0, tintOpacity: 0, opacity: 1, preset: 'none' },
+      backdrop: { mode: 'paper', color: '#f4efe6', opacity: 1, blur: 24 },
+      styleParams: { riso: { inkA: '#ff48b0', inkB: '#0078bf', paper: '#f4efe6', grain: 3, shift: 5 } },
+      fx: { vignette: 0, scanlines: 0, curvature: 0, bloom: 0, chromatic: 0, grain: 0.1, glitch: 0 },
+      finish: { filmDust: { amount: 0.25 } },
+    },
+  },
+  {
+    id: 'rain',
+    label: 'Mainframe',
+    hint: 'Falling katakana in phosphor green, glowing.',
+    icon: CloudRain,
+    tint: '61, 220, 132',
+    patch: {
+      style: 'rain',
+      ramp: 'katakana',
+      grid: { cell: 11, aspect: 1.8, jitter: 0, gap: 0 },
+      tone: { brightness: 0, contrast: 124, gamma: 1, coverage: 1, density: 0.04, edge: 0.2, invert: false },
+      color: { mode: 'ink', ink: '#4dff88', saturation: 1, grayscale: 0, tintOpacity: 0, opacity: 1, preset: 'none' },
+      backdrop: { mode: 'paper', color: '#010a04', opacity: 1, blur: 24 },
+      styleParams: { rain: { trail: 18 } },
+      fx: { vignette: 0.4, scanlines: 0.2, curvature: 0, bloom: 0.55, chromatic: 0, grain: 0.04, glitch: 0 },
+    },
+  },
+  {
+    id: 'cathedral',
+    label: 'Cathedral',
+    hint: 'Stained glass in dark lead, lit from behind.',
+    icon: Gem,
+    tint: '120, 160, 255',
+    patch: {
+      style: 'leadlight',
+      grid: { cell: 20, aspect: 1, jitter: 0, gap: 0.12 },
+      tone: { brightness: 6, contrast: 118, gamma: 1, coverage: 1, density: 0, edge: 0, invert: false },
+      color: { mode: 'source', saturation: 1.2, grayscale: 0, tintOpacity: 0, opacity: 1, preset: 'none' },
+      backdrop: { mode: 'paper', color: '#141414', opacity: 1, blur: 24 },
+      fx: { vignette: 0.35, scanlines: 0, curvature: 0, bloom: 0.35, chromatic: 0, grain: 0, glitch: 0 },
+    },
+  },
+  {
+    id: 'heat',
+    label: 'Heat',
+    hint: 'A thermal camera, iron palette and sensor noise.',
+    icon: Thermometer,
+    tint: '252, 165, 10',
+    patch: {
+      style: 'thermal',
+      tone: { brightness: 0, contrast: 110, gamma: 1, coverage: 1, density: 0, edge: 0, invert: false },
+      color: { mode: 'source', saturation: 1, grayscale: 0, tintOpacity: 0, opacity: 1, preset: 'none' },
+      backdrop: { mode: 'paper', color: '#000004', opacity: 1, blur: 24 },
+      styleParams: { thermal: { palette: 'thermal', soften: 3, noise: 0.2 } },
+      fx: { vignette: 0.25, scanlines: 0.15, curvature: 0, bloom: 0.2, chromatic: 0, grain: 0.05, glitch: 0 },
+    },
+  },
+  {
+    id: 'etching',
+    label: 'Etching',
+    hint: 'Banknote engraving, lines swelling over the form.',
+    icon: PenTool,
+    tint: '176, 160, 128',
+    patch: {
+      style: 'engrave',
+      tone: { brightness: 4, contrast: 120, gamma: 1, coverage: 1, density: 0, edge: 0, invert: false },
+      color: { mode: 'source', saturation: 1, grayscale: 0, tintOpacity: 0, opacity: 1, preset: 'none' },
+      backdrop: { mode: 'paper', color: '#f1ede2', opacity: 1, blur: 24 },
+      styleParams: { engrave: { spacing: 5, angle: 30, bend: 0.6, ink: '#1b1f2a', paper: '#f1ede2' } },
+      fx: { vignette: 0.15, scanlines: 0, curvature: 0, bloom: 0, chromatic: 0, grain: 0.08, glitch: 0 },
+    },
+  },
+  {
+    id: 'jumper',
+    label: 'Jumper',
+    hint: 'Knitted in the photograph’s own colours.',
+    icon: Shirt,
+    tint: '236, 120, 120',
+    patch: {
+      style: 'knit',
+      grid: { cell: 18, aspect: 1, jitter: 0, gap: 0 },
+      tone: { brightness: 6, contrast: 112, gamma: 1, coverage: 1, density: 0, edge: 0, invert: false },
+      color: { mode: 'source', saturation: 1.15, grayscale: 0, tintOpacity: 0, opacity: 1, preset: 'none' },
+      backdrop: { mode: 'paper', color: '#2a2320', opacity: 1, blur: 24 },
+      fx: { vignette: 0.2, scanlines: 0, curvature: 0, bloom: 0, chromatic: 0, grain: 0.05, glitch: 0 },
+    },
+  },
 ]
 
 /**
@@ -249,4 +348,10 @@ export function applyRecipe(doc: AsciiDoc, patch: DeepPatch): void {
   Object.assign(doc.dither, patch.dither)
   Object.assign(doc.backdrop, patch.backdrop)
   Object.assign(doc.fx, patch.fx)
+  // a look owns the whole finish: effects from the last look do not linger
+  doc.finish = JSON.parse(JSON.stringify(patch.finish ?? {}))
+  for (const [id, bag] of Object.entries(patch.styleParams ?? {})) {
+    doc.styleParams[id as keyof AsciiDoc['styleParams']] = { ...bag }
+  }
+  if (!patch.color?.composite) doc.color.composite = 'source-over'
 }

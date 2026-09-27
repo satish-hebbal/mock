@@ -39,6 +39,10 @@ export interface Surface {
   arc(cx: number, cy: number, r: number, from: number, to: number, width: number, stroke: string): void
   /** one glyph, centred on (cx, cy) */
   text(cx: number, cy: number, ch: string, fill: string): void
+  /** an open stroke through the points, round-capped */
+  polyline(points: [number, number][], width: number, stroke: string): void
+  /** a circle outline */
+  ring(cx: number, cy: number, r: number, width: number, stroke: string): void
 }
 
 // ----- canvas -----
@@ -100,6 +104,28 @@ export class CanvasSurface implements Surface {
   text(cx: number, cy: number, ch: string, fill: string) {
     this.ctx.fillStyle = fill
     this.ctx.fillText(ch, cx, cy)
+  }
+
+  polyline(points: [number, number][], width: number, stroke: string) {
+    if (points.length < 2) return
+    const ctx = this.ctx
+    ctx.strokeStyle = stroke
+    ctx.lineWidth = width
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
+    ctx.beginPath()
+    ctx.moveTo(points[0][0], points[0][1])
+    for (let i = 1; i < points.length; i++) ctx.lineTo(points[i][0], points[i][1])
+    ctx.stroke()
+    ctx.lineCap = 'butt'
+  }
+
+  ring(cx: number, cy: number, r: number, width: number, stroke: string) {
+    this.ctx.strokeStyle = stroke
+    this.ctx.lineWidth = width
+    this.ctx.beginPath()
+    this.ctx.arc(cx, cy, r, 0, Math.PI * 2)
+    this.ctx.stroke()
   }
 }
 
@@ -236,6 +262,22 @@ export class SvgSurface implements Surface {
     }
     this.flush()
     this.run = { y: cy, x: cx - this.cellW / 2, nextX: cx + this.cellW, fill, text: ch }
+  }
+
+  polyline(points: [number, number][], width: number, stroke: string) {
+    if (points.length < 2) return
+    this.flush()
+    const pts = points.map(([x, y]) => `${n(x)},${n(y)}`).join(' ')
+    this.parts.push(
+      `<polyline points="${pts}" fill="none" stroke="${stroke}" stroke-width="${n(width)}" stroke-linecap="round" stroke-linejoin="round"/>`,
+    )
+  }
+
+  ring(cx: number, cy: number, r: number, width: number, stroke: string) {
+    this.flush()
+    this.parts.push(
+      `<circle cx="${n(cx)}" cy="${n(cy)}" r="${n(r)}" fill="none" stroke="${stroke}" stroke-width="${n(width)}"/>`,
+    )
   }
 
   /** Everything drawn, as markup. */

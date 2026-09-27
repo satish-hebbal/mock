@@ -15,6 +15,8 @@
  */
 
 import { defaultMesh, type MeshSpec } from '../lib/meshGradient'
+import type { FxChain } from '../lib/postfx'
+import type { ParamBag } from './params'
 
 /**
  * What a cell becomes.
@@ -41,8 +43,75 @@ export type AsciiStyleId =
   | 'lego'
   | 'voxel'
   | 'dither'
+  // type
+  | 'contour'
+  | 'rain'
+  | 'typeset'
+  // marks
+  | 'rings'
+  | 'hexes'
+  | 'triangles'
+  | 'stipple'
+  | 'hatch'
+  | 'waves'
+  | 'strokes'
+  | 'weave'
+  | 'stars'
+  | 'hearts'
+  | 'bars'
+  // tiles
+  | 'honeycomb'
+  | 'led'
+  | 'facets'
+  | 'leadlight'
+  | 'neon'
+  | 'knit'
+  | 'beads'
+  | 'terrace'
+  // print and paint, whole-frame
+  | 'halftone'
+  | 'riso'
+  | 'mezzotint'
+  | 'engrave'
+  | 'woodcut'
+  | 'sketch'
+  | 'comic'
+  | 'oil'
+  | 'watercolor'
+  | 'crystal'
+  | 'topo'
+  | 'pointil'
+  | 'popart'
+  | 'poster'
+  | 'thermal'
+  | 'cyanotype'
+  | 'pixelsort'
+  | 'relief'
+  | 'glowedge'
+  | 'anaglyph'
+  | 'blueprint'
 
-export type RampId = 'standard' | 'detailed' | 'minimal' | 'blocks' | 'shades' | 'binary' | 'custom'
+export type RampId =
+  | 'standard'
+  | 'detailed'
+  | 'minimal'
+  | 'blocks'
+  | 'shades'
+  | 'binary'
+  | 'ink'
+  | 'dots'
+  | 'bars'
+  | 'numeric'
+  | 'alpha'
+  | 'hacker'
+  | 'math'
+  | 'arrows'
+  | 'geometric'
+  | 'box'
+  | 'stars'
+  | 'katakana'
+  | 'runes'
+  | 'custom'
 
 /**
  * Where a cell's colour comes from.
@@ -52,7 +121,25 @@ export type RampId = 'standard' | 'detailed' | 'minimal' | 'blocks' | 'shades' |
  * own average, which is what makes a photograph still read as that photograph.
  * 'duotone' ramps between two colours by brightness, which is the poster look.
  */
-export type ColorMode = 'ink' | 'source' | 'duotone'
+export type ColorMode = 'ink' | 'source' | 'duotone' | 'gradient' | 'spectrum'
+
+/**
+ * How the finished marks land on the backdrop.
+ *
+ * Distinct from the tint's blend, which colours the marks themselves. This is
+ * the marks *against* what is behind them, which is where "glowing type on a
+ * photograph" comes from: screen them and the dark cells vanish into the
+ * picture instead of sitting on it.
+ */
+export type CompositeId =
+  | 'source-over'
+  | 'screen'
+  | 'lighter'
+  | 'overlay'
+  | 'soft-light'
+  | 'multiply'
+  | 'color-dodge'
+  | 'difference'
 
 /** What sits behind the art. */
 export type BackdropMode = 'paper' | 'source' | 'blurred' | 'mesh' | 'transparent'
@@ -82,6 +169,14 @@ export type PaletteId =
   | 'amber'
   | 'phosphor'
   | 'gray4'
+  | 'gray8'
+  | 'rgb8'
+  | 'cga1'
+  | 'arcade'
+  | 'vapor'
+  | 'sepia'
+  | 'ice'
+  | 'ember'
   | 'source'
 
 /**
@@ -161,6 +256,12 @@ export interface AsciiColor {
   opacity: number
   /** id into COLOR_PRESETS, or 'none' */
   preset: string
+  /** id into GRADIENTS, for the 'gradient' mode */
+  gradient: string
+  /** 0..360, where the spectrum mode starts its wheel */
+  hue: number
+  /** how the art layer composites over the backdrop */
+  composite: CompositeId
 }
 
 export interface AsciiDither {
@@ -221,6 +322,48 @@ export function defaultCursor(): AsciiCursor {
   return { mode: 'off', radius: 180, strength: 0.5 }
 }
 
+/**
+ * One filter in the stack run over the source before the style sees it.
+ *
+ * The reference tools make every treatment a style of its own, so a twirl and a
+ * halftone can never meet. Here they are layers: warp the photograph, blur its
+ * background, grade it, and *then* cut it into characters. `uid` is the layer's
+ * identity for reordering and for React, not the filter; two twirls are fine.
+ */
+export interface AsciiLayer {
+  uid: string
+  /** id into FILTERS */
+  kind: string
+  on: boolean
+  params: ParamBag
+}
+
+/**
+ * Where the treatment shows.
+ *
+ * 'spot' is a circle you drag round the picture, 'split' a straight wipe, and
+ * 'band' a strip across it. Outside the region the untreated photograph shows
+ * through, which is how a before-and-after is made in one frame, and `invert`
+ * swaps which side is which.
+ */
+export interface AsciiReveal {
+  mode: 'off' | 'spot' | 'split' | 'band'
+  /** 0..1 of the frame */
+  x: number
+  y: number
+  /** 0..1 of the frame's diagonal; the spot's radius or the band's half width */
+  size: number
+  /** 0..1 of `size`, how soft the boundary is */
+  feather: number
+  /** degrees, for split and band */
+  angle: number
+  invert: boolean
+}
+
+export function defaultReveal(): AsciiReveal {
+  return { mode: 'off', x: 0.5, y: 0.5, size: 0.28, feather: 0.35, angle: 0, invert: false }
+}
+
 export interface AsciiDoc {
   version: 1
   name: string
@@ -246,6 +389,13 @@ export interface AsciiDoc {
   backdrop: AsciiBackdrop
   fx: AsciiFx
   cursor: AsciiCursor
+  /** settings for styles that have more than the shared grid, keyed by style */
+  styleParams: Partial<Record<AsciiStyleId, ParamBag>>
+  /** filters over the source, run top to bottom before the style */
+  layers: AsciiLayer[]
+  /** the rest of the shared finishing chain, beyond the seven named in `fx` */
+  finish: FxChain
+  reveal: AsciiReveal
 }
 
 export function defaultAsciiDoc(): AsciiDoc {
@@ -280,6 +430,9 @@ export function defaultAsciiDoc(): AsciiDoc {
       grayscale: 0,
       opacity: 1,
       preset: 'none',
+      gradient: 'thermal',
+      hue: 0,
+      composite: 'source-over',
     },
     dither: {
       algo: 'floyd-steinberg',
@@ -302,7 +455,30 @@ export function defaultAsciiDoc(): AsciiDoc {
     backdrop: { mode: 'source', blur: 24, opacity: 0.3, color: '#08090a', mesh: defaultMesh() },
     fx: { vignette: 0, scanlines: 0, curvature: 0, bloom: 0, chromatic: 0, grain: 0, glitch: 0 },
     cursor: defaultCursor(),
+    styleParams: {},
+    layers: [],
+    finish: {},
+    reveal: defaultReveal(),
   }
+}
+
+/**
+ * Bring a saved or shared document up to the current shape.
+ *
+ * Every field added since version 1 is optional on the way in and filled here,
+ * so a document from before layers existed opens as the same picture with an
+ * empty stack rather than failing a type check nobody can see.
+ */
+export function normalizeDoc(doc: AsciiDoc): AsciiDoc {
+  const base = defaultAsciiDoc()
+  doc.presetId = doc.presetId ?? null
+  doc.cursor = doc.cursor ?? defaultCursor()
+  doc.color = { ...base.color, ...doc.color }
+  doc.styleParams = doc.styleParams ?? {}
+  doc.layers = Array.isArray(doc.layers) ? doc.layers : []
+  doc.finish = doc.finish ?? {}
+  doc.reveal = { ...defaultReveal(), ...doc.reveal }
+  return doc
 }
 
 /**

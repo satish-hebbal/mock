@@ -1,16 +1,20 @@
 /**
  * The renderer.
  *
- * `paintArt` is the one description of what a document looks like, and it draws
- * onto a `Surface` rather than onto a canvas. Everything else here is the canvas
- * path: `renderAscii` gives it a canvas backend and gets pixels, and `svg.ts`
- * gives it a vector backend and gets elements. Neither knows anything the other
- * does not.
+ * `paintArt` is the one description of what a cell style looks like, and it
+ * draws onto a `Surface` rather than onto a canvas. Everything else here is the
+ * canvas path: `renderAscii` gives it a canvas backend and gets pixels, and
+ * `svg.ts` gives it a vector backend and gets elements. Neither knows anything
+ * the other does not.
  *
- * That is the whole parity story, and it now covers three outputs rather than
- * two: the canvas on screen, the exported PNG and the exported SVG are the same
- * function called three times, and the only thing that differs between the
- * first two is the number handed in as the output width.
+ * The pipeline, in order, and the order is the result:
+ *
+ *   layers    the filter stack over the photograph (`layers.ts`)
+ *   style     cells through a painter, or the whole frame through a process
+ *   colour    saturation, grayscale and tint, on the art layer alone
+ *   composite the art over the backdrop, in the chosen blend
+ *   reveal    the untreated photograph shown back through outside a region
+ *   finish    the shared post chain, over everything
  *
  * Everything positional is derived from `scale`, the ratio of output width to
  * document width, so a blur radius, a scan line gap and a stud highlight all
@@ -20,10 +24,15 @@
 
 import { paintMeshGradient } from '../lib/meshGradient'
 import { ditherImage } from './dither'
+import { gradientLut, hsl } from './gradients'
+import { prepareSource } from './layers'
 import { paletteRGB, type RGB } from './palettes'
 import { PAINTERS, type CellCtx, type PainterEnv } from './painters'
 import type { CellField } from './cursor'
+import { resolve } from './params'
+import { cover } from './pixels'
 import { applyFx, hasFx } from './postfx'
+import { PROCESSES } from './process'
 import { rampChars, getRamp } from './ramps'
 import { applyToneToPixels, sampleGrid, toInk, type CellGrid, type Levels } from './sample'
 import { getStyle } from './styles'
@@ -46,8 +55,9 @@ export function makeCanvas(w: number, h: number) {
 
 /** Draw `src` filling `w` x `h`, cropping the overflow. The CSS `cover` rule. */
 function drawCover(ctx: CanvasRenderingContext2D, src: CanvasImageSource, w: number, h: number) {
-  const sw = 'videoWidth' in src ? (src.videoWidth as number) : ((src as HTMLImageElement).width ?? w)
-  const sh = 'videoHeight' in src ? (src.videoHeight as number) : ((src as HTMLImageElement).height ?? h)
+  const s = src as { videoWidth?: number; videoHeight?: number; width?: number; height?: number }
+  const sw = s.videoWidth || (s.width as number) || w
+  const sh = s.videoHeight || (s.height as number) || h
   if (!sw || !sh) return
   const k = Math.max(w / sw, h / sh)
   const dw = sw * k
@@ -160,6 +170,59 @@ function renderDither(doc: AsciiDoc, source: CanvasImageSource, w: number, h: nu
   return art
 }
 
+// ----- whole-frame styles -----
+
+/** Working-resolution ceilings for the whole-frame styles. */
+const PROCESS_CAP = { preview: 1400, export: 3200 }
+
+const processCache: { source: CanvasImageSource; key: string; canvas: HTMLCanvasElement }[] = []
+
+/**
+ * The process path.
+ *
+ * Run at a working width rather than at the output width, capped, and then
+ * scaled: an oil painting at 6400px would take most of a minute and look the
+ * same as one at 3200 enlarged. The tone curve goes on first, the same as it
+ * does for dither, so brightness and contrast mean the same thing on every
+ * style in the tool.
+ */
+export function renderProcess(
+  doc: AsciiDoc,
+  source: CanvasImageSource,
+  outW: number,
+  outH: number,
+  quality: 'preview' | 'export' = 'export',
+) {
+  const spec = getStyle(doc.style)
+  const fn = PROCESSES[doc.style]
+  const cap = PROCESS_CAP[quality]
+  const k0 = Math.min(1, cap / Math.max(outW, outH))
+  const ww = Math.max(1, Math.round(outW * k0))
+  const wh = Math.max(1, Math.round(outH * k0))
+  const params = resolve(spec.params ?? [], doc.styleParams[doc.style])
+  const key = JSON.stringify([doc.style, params, doc.tone, ww, wh, doc.size.width])
+
+  let art = processCache.find((e) => e.source === source && e.key === key)?.canvas
+  if (!art) {
+    const work = cover(source, ww, wh)
+    const wctx = work.getContext('2d', { willReadFrequently: true })!
+    const img = wctx.getImageData(0, 0, ww, wh)
+    applyToneToPixels(img, doc.tone)
+    wctx.putImageData(img, 0, 0)
+    art = fn ? fn(work, { k: ww / Math.max(1, doc.size.width), p: params }) : work
+    processCache.unshift({ source, key, canvas: art })
+    if (processCache.length > 3) processCache.length = 3
+  }
+
+  const out = makeCanvas(outW, outH)
+  const ctx = out.getContext('2d')!
+  ctx.imageSmoothingQuality = 'high'
+  ctx.drawImage(art, 0, 0, out.width, out.height)
+  return out
+}
+
+// ----- colour -----
+
 /** Re-light a source colour to a target luminance, keeping its hue and saturation. */
 function relight(r: number, g: number, b: number, from: number, to: number): [number, number, number] {
   if (from < 0.004) {
@@ -169,11 +232,6 @@ function relight(r: number, g: number, b: number, from: number, to: number): [nu
   }
   const k = to / from
   return [Math.min(255, r * k), Math.min(255, g * k), Math.min(255, b * k)]
-}
-
-function mix(a: RGB, b: RGB, t: number): string {
-  const c = (i: number) => Math.round(a[i] + (b[i] - a[i]) * t)
-  return `rgb(${c(0)}, ${c(1)}, ${c(2)})`
 }
 
 export function hexRGB(hex: string): RGB {
@@ -245,19 +303,22 @@ export interface GridResult {
  */
 export function buildGrid(doc: AsciiDoc, source: CanvasImageSource): GridResult {
   /*
-   * Remembered for the last document and source. The cursor redraws the
+   * Remembered for the last few documents and sources. The cursor redraws the
    * preview every frame while nothing about the picture has changed, and
    * resampling the source sixty times a second for the same answer was most of
-   * the cost of a frame.
+   * the cost of a frame. A few rather than one, because the style thumbnails
+   * cut their own small grids between preview frames.
    */
   const key = JSON.stringify([doc.style, doc.size, doc.grid.cell, doc.grid.aspect, doc.tone])
-  if (gridCache && gridCache.source === source && gridCache.key === key) return gridCache.result
+  const hit = gridCache.find((e) => e.source === source && e.key === key)
+  if (hit) return hit.result
   const result = cutGrid(doc, source)
-  gridCache = { source, key, result }
+  gridCache.unshift({ source, key, result })
+  if (gridCache.length > 4) gridCache.length = 4
   return result
 }
 
-let gridCache: { source: CanvasImageSource; key: string; result: GridResult } | null = null
+const gridCache: { source: CanvasImageSource; key: string; result: GridResult }[] = []
 
 function cutGrid(doc: AsciiDoc, source: CanvasImageSource): GridResult {
   const spec = getStyle(doc.style)
@@ -311,13 +372,24 @@ export function glyphFontSize(doc: AsciiDoc, cw: number, ch: number): number {
   return fontPx
 }
 
+/** The characters a glyph style draws from, lightest first. */
+export function styleChars(doc: AsciiDoc): string {
+  return doc.style === 'blocks' ? getRamp('blocks').chars : rampChars(doc.ramp, doc.customRamp)
+}
+
+/** The style's own settings, resolved against its specs. */
+export function styleParams(doc: AsciiDoc) {
+  const spec = getStyle(doc.style)
+  return spec.params ? resolve(spec.params, doc.styleParams[doc.style]) : {}
+}
+
 /**
  * Draw the document's cells onto a surface.
  *
- * The single description of what every style looks like. Called once with a
- * canvas backend for the preview and the raster exports, and once with a vector
- * backend for SVG, which is why there is no separate SVG idea of a mosaic tile
- * to fall out of step with this one.
+ * The single description of what every cell style looks like. Called once with
+ * a canvas backend for the preview and the raster exports, and once with a
+ * vector backend for SVG, which is why there is no separate SVG idea of a
+ * mosaic tile to fall out of step with this one.
  */
 export function paintArt(
   surface: Surface,
@@ -328,19 +400,29 @@ export function paintArt(
   field?: CellField,
 ): { cols: number; rows: number } {
   const spec = getStyle(doc.style)
+  const painter = PAINTERS[doc.style]
   const { grid, levels, fine, cols, rows } = buildGrid(doc, source)
+  if (!painter) return { cols, rows }
 
   const cw = outW / cols
   const ch = outH / rows
-  const chars = doc.style === 'blocks' ? getRamp('blocks').chars : rampChars(doc.ramp, doc.customRamp)
+  const chars = styleChars(doc)
 
   if (spec.glyph) surface.font(glyphFontSize(doc, cw, ch))
 
-  const painter = PAINTERS[doc.style as Exclude<AsciiDoc['style'], 'dither'>]
   const paintsEveryCell = spec.group === 'raster'
-  const env: PainterEnv = { chars, jitter: doc.grid.jitter, gap: doc.grid.gap, fine }
+  const env: PainterEnv = {
+    chars,
+    jitter: doc.grid.jitter,
+    gap: doc.grid.gap,
+    fine,
+    p: styleParams(doc),
+    cols,
+  }
+  const mode = doc.color.mode
   const inkHex = hexRGB(doc.color.ink)
   const ink2Hex = hexRGB(doc.color.ink2)
+  const lut = mode === 'gradient' ? gradientLut(doc.color.gradient) : null
   const cell: CellCtx = {
     s: surface,
     x: 0,
@@ -350,6 +432,9 @@ export function paintArt(
     col: 0,
     row: 0,
     ink: 0,
+    edge: 0,
+    angle: 0,
+    lum: 0,
     color: doc.color.ink,
     r: 0,
     g: 0,
@@ -374,29 +459,36 @@ export function paintArt(
       const sr = grid.rgb[i * 3]
       const sg = grid.rgb[i * 3 + 1]
       const sb = grid.rgb[i * 3 + 2]
+      const lum = levels.lum[i]
 
       let r = sr
       let g = sg
       let b = sb
-      let color: string
 
-      if (doc.color.mode === 'ink') {
-        color = doc.color.ink
+      if (mode === 'ink') {
         r = inkHex[0]
         g = inkHex[1]
         b = inkHex[2]
-      } else if (doc.color.mode === 'duotone') {
-        color = mix(ink2Hex, inkHex, ink)
+      } else if (mode === 'duotone') {
         const t = ink
         r = ink2Hex[0] + (inkHex[0] - ink2Hex[0]) * t
         g = ink2Hex[1] + (inkHex[1] - ink2Hex[1]) * t
         b = ink2Hex[2] + (inkHex[2] - ink2Hex[2]) * t
+      } else if (lut) {
+        const li = Math.round(Math.min(1, Math.max(0, lum)) * 255) * 3
+        r = lut[li]
+        g = lut[li + 1]
+        b = lut[li + 2]
+      } else if (mode === 'spectrum') {
+        /*
+         * A rainbow laid diagonally across the grid, lit by the cell's own
+         * brightness. Position rather than the source hue, so a grey
+         * photograph still comes out in colour, which is the point of it.
+         */
+        const hue = doc.color.hue + ((col + row) / Math.max(1, cols + rows)) * 360
+        ;[r, g, b] = hsl(hue, 0.9, 0.3 + lum * 0.45)
       } else {
-        const lit = relight(sr, sg, sb, grid.lum[i], levels.lum[i])
-        r = lit[0]
-        g = lit[1]
-        b = lit[2]
-        color = `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`
+        ;[r, g, b] = relight(sr, sg, sb, grid.lum[i], lum)
       }
 
       cell.x = col * cw
@@ -404,7 +496,11 @@ export function paintArt(
       cell.col = col
       cell.row = row
       cell.ink = ink
-      cell.color = color
+      cell.edge = grid.edge[i]
+      cell.angle = grid.angle[i]
+      cell.lum = lum
+      cell.color =
+        mode === 'ink' ? doc.color.ink : `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`
       cell.r = r
       cell.g = g
       cell.b = b
@@ -417,13 +513,13 @@ export function paintArt(
 }
 
 /**
- * The last backdrop the preview painted.
+ * The last few backdrops the preview painted.
  *
- * Only the preview asks for it. A blurred backdrop is the costliest thing in a
+ * Only the preview asks for them. A blurred backdrop is the costliest thing in a
  * frame and the cursor never changes it, but holding an export-sized copy of
  * one would pin a hundred megabytes for a picture already downloaded.
  */
-let backdropCache: { source: CanvasImageSource | null; key: string; canvas: HTMLCanvasElement } | null = null
+const backdropCache: { source: CanvasImageSource | null; key: string; canvas: HTMLCanvasElement }[] = []
 
 function backdropLayer(
   doc: AsciiDoc,
@@ -433,13 +529,71 @@ function backdropLayer(
   scale: number,
 ): HTMLCanvasElement {
   const key = JSON.stringify([doc.backdrop, w, h])
-  if (backdropCache && backdropCache.source === source && backdropCache.key === key) {
-    return backdropCache.canvas
-  }
+  const hit = backdropCache.find((e) => e.source === source && e.key === key)
+  if (hit) return hit.canvas
   const canvas = makeCanvas(w, h)
   paintBackdrop(canvas.getContext('2d')!, doc, source, w, h, scale)
-  backdropCache = { source, key, canvas }
+  backdropCache.unshift({ source, key, canvas })
+  if (backdropCache.length > 2) backdropCache.length = 2
   return canvas
+}
+
+// ----- reveal -----
+
+/**
+ * The untreated photograph, drawn back over the frame outside the reveal.
+ *
+ * Built as a mask rather than a clip, so the boundary can be feathered: the
+ * photograph is drawn whole, then intersected with a gradient that is opaque
+ * where the plain picture should show and clear where the art should.
+ */
+function applyReveal(out: HTMLCanvasElement, doc: AsciiDoc, raw: CanvasImageSource) {
+  const rv = doc.reveal
+  if (rv.mode === 'off') return
+  const w = out.width
+  const h = out.height
+  const plain = makeCanvas(w, h)
+  const pc = plain.getContext('2d')!
+  drawCover(pc, raw, w, h)
+
+  const diag = Math.hypot(w, h)
+  const size = Math.max(1, rv.size * diag)
+  const soft = Math.min(0.999, Math.max(0.001, rv.feather))
+  const show = 'rgba(0,0,0,1)'
+  const hide = 'rgba(0,0,0,0)'
+  const [inside, outside] = rv.invert ? [show, hide] : [hide, show]
+
+  let fill: CanvasGradient
+  if (rv.mode === 'spot') {
+    fill = pc.createRadialGradient(rv.x * w, rv.y * h, size * (1 - soft), rv.x * w, rv.y * h, size)
+    fill.addColorStop(0, inside)
+    fill.addColorStop(1, outside)
+  } else {
+    const a = (rv.angle * Math.PI) / 180
+    const nx = Math.cos(a)
+    const ny = Math.sin(a)
+    const cx = rv.x * w
+    const cy = rv.y * h
+    if (rv.mode === 'split') {
+      const f = Math.max(1, soft * size)
+      fill = pc.createLinearGradient(cx - nx * f, cy - ny * f, cx + nx * f, cy + ny * f)
+      fill.addColorStop(0, inside)
+      fill.addColorStop(1, outside)
+    } else {
+      // a strip `size` either side of the line through the centre, softened
+      // over `feather` of its width at each edge
+      fill = pc.createLinearGradient(cx - nx * size, cy - ny * size, cx + nx * size, cy + ny * size)
+      const ramp = Math.min(0.49, soft / 2)
+      fill.addColorStop(0, outside)
+      fill.addColorStop(ramp, inside)
+      fill.addColorStop(1 - ramp, inside)
+      fill.addColorStop(1, outside)
+    }
+  }
+  pc.globalCompositeOperation = 'destination-in'
+  pc.fillStyle = fill
+  pc.fillRect(0, 0, w, h)
+  out.getContext('2d')!.drawImage(plain, 0, 0)
 }
 
 export interface RenderOptions {
@@ -447,11 +601,23 @@ export interface RenderOptions {
   field?: CellField
   /** keep the backdrop between calls, for a preview redrawn every frame */
   reuse?: boolean
+  /** seconds, for the finishing effects that move */
+  time?: number
+  /** how hard the whole-frame styles may work */
+  quality?: 'preview' | 'export'
+  /**
+   * Document pixels per layer pixel, for callers drawing a document at a
+   * different size from the one its settings were written against. The style
+   * thumbnails pass their own shrink here so a 48px ripple stays a ripple.
+   */
+  layerScale?: number
+  /** leave out the reveal, for callers that want the treatment everywhere */
+  noReveal?: boolean
 }
 
 export function renderAscii(
   doc: AsciiDoc,
-  source: CanvasImageSource | null,
+  rawSource: CanvasImageSource | null,
   outW: number,
   outH: number,
   opts: RenderOptions = {},
@@ -459,27 +625,30 @@ export function renderAscii(
   const out = makeCanvas(outW, outH)
   const ctx = out.getContext('2d')!
   const scale = outW / Math.max(1, doc.size.width)
+  const source = rawSource ? prepareSource(doc, rawSource, opts.layerScale ?? 1) : null
 
   if (opts.reuse) ctx.drawImage(backdropLayer(doc, source, out.width, out.height, scale), 0, 0)
   else paintBackdrop(ctx, doc, source, out.width, out.height, scale)
 
   if (!source) {
-    if (hasFx(doc.fx)) applyFx(out, doc.fx, scale)
+    if (hasFx(doc)) applyFx(out, doc, scale, opts.time ?? 0)
     return { canvas: out, cols: 0, rows: 0 }
   }
 
-  const art =
-    doc.style === 'dither'
-      ? renderDither(doc, source, out.width, out.height)
-      : makeCanvas(out.width, out.height)
-
+  const spec = getStyle(doc.style)
+  let art: HTMLCanvasElement
   let cols = 0
   let rows = 0
   if (doc.style === 'dither') {
+    art = renderDither(doc, source, out.width, out.height)
     const px = Math.max(1, doc.dither.scale)
     cols = Math.round(doc.size.width / px)
     rows = Math.round(doc.size.height / px)
+  } else if (spec.group === 'process') {
+    // a whole-frame style has no grid, so it reports none
+    art = renderProcess(doc, source, out.width, out.height, opts.quality ?? 'export')
   } else {
+    art = makeCanvas(out.width, out.height)
     const grid = paintArt(
       new CanvasSurface(art.getContext('2d')!),
       doc,
@@ -496,10 +665,13 @@ export function renderAscii(
 
   ctx.save()
   ctx.globalAlpha = doc.color.opacity
+  ctx.globalCompositeOperation = doc.color.composite ?? 'source-over'
   ctx.drawImage(art, 0, 0)
   ctx.restore()
 
-  if (hasFx(doc.fx)) applyFx(out, doc.fx, scale)
+  if (!opts.noReveal && rawSource) applyReveal(out, doc, rawSource)
+
+  if (hasFx(doc)) applyFx(out, doc, scale, opts.time ?? 0)
 
   return { canvas: out, cols, rows }
 }

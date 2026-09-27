@@ -23,9 +23,11 @@
  * export ever found it.
  */
 
-import { brailleFor, glyphFor } from './painters'
-import { rampChars, getRamp } from './ramps'
-import { buildGrid } from './render'
+import { gradientLut, hsl } from './gradients'
+import { prepareSource } from './layers'
+import { brailleFor, contourGlyph, glyphFor, typesetGlyph } from './painters'
+import { buildGrid, styleChars, styleParams } from './render'
+import { hash2 } from './sample'
 import { getStyle } from './styles'
 import type { AsciiDoc } from './types'
 
@@ -52,9 +54,23 @@ export function canExportText(doc: AsciiDoc): boolean {
  * three of the four formats want the two separated, and the one that does not
  * (ANSI) has to walk them in lockstep anyway to coalesce runs.
  */
-export function textGrid(doc: AsciiDoc, source: CanvasImageSource): TextGrid {
+export function textGrid(doc: AsciiDoc, rawSource: CanvasImageSource): TextGrid {
+  const source = prepareSource(doc, rawSource)
   const { grid, levels, fine, cols, rows } = buildGrid(doc, source)
-  const chars = doc.style === 'blocks' ? getRamp('blocks').chars : rampChars(doc.ramp, doc.customRamp)
+  const chars = styleChars(doc)
+  const p = styleParams(doc)
+  const lut = doc.color.mode === 'gradient' ? gradientLut(doc.color.gradient) : null
+  /** the character the canvas drew in this cell, by the same rule the painter used */
+  const glyphAt = (i: number, col: number, row: number, ink: number) => {
+    if (doc.style === 'braille') return brailleFor(col, row, fine)
+    if (ink <= 0) return ' '
+    if (doc.style === 'contour') {
+      return contourGlyph(chars, ink, grid.edge[i], grid.angle[i], p.threshold as number, p.fill !== false)
+    }
+    if (doc.style === 'typeset') return typesetGlyph(String(p.text ?? ''), col, row, cols)
+    if (doc.style === 'rain') return glyphFor(chars, Math.max(ink, hash2(col, row, 43)), col, row, 0)
+    return glyphFor(chars, ink, col, row, doc.grid.jitter)
+  }
   const wantsColor = doc.color.mode !== 'ink'
 
   const lines: string[] = []
@@ -67,15 +83,18 @@ export function textGrid(doc: AsciiDoc, source: CanvasImageSource): TextGrid {
       const ink = levels.ink[i]
       const blank = grid.alpha[i] <= 0.004
 
-      line += blank
-        ? ' '
-        : doc.style === 'braille'
-          ? brailleFor(col, row, fine)
-          : glyphFor(chars, ink, col, row, doc.grid.jitter)
+      line += blank ? ' ' : glyphAt(i, col, row, ink)
 
       if (colors) {
         if (blank) {
           colors.push('')
+        } else if (lut) {
+          const li = Math.round(Math.min(1, Math.max(0, levels.lum[i])) * 255) * 3
+          colors.push(`${lut[li]},${lut[li + 1]},${lut[li + 2]}`)
+        } else if (doc.color.mode === 'spectrum') {
+          const hue = doc.color.hue + ((col + row) / Math.max(1, cols + rows)) * 360
+          const [r, g, b] = hsl(hue, 0.9, 0.3 + levels.lum[i] * 0.45)
+          colors.push(`${Math.round(r)},${Math.round(g)},${Math.round(b)}`)
         } else if (doc.color.mode === 'duotone') {
           const t = ink
           const a = hex(doc.color.ink2)

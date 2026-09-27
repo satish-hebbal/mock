@@ -15,7 +15,7 @@
  */
 
 import { useState } from 'react'
-import { Layers, RotateCcw, Shuffle, Sparkles, Sliders, Waves } from 'lucide-react'
+import { Dices, Layers, RotateCcw, Shuffle, Sparkles, Sliders, Waves } from 'lucide-react'
 import { useStudio } from '../store'
 import {
   InfoTip,
@@ -29,7 +29,7 @@ import { NotchedFrame } from '../components/NotchedCanvas'
 import { NOTCH_PAD, notchForPill } from '../lib/notch'
 import { PRESETS, PRESET_GROUPS } from './presets'
 import { LookArt, SourceArt, Tile, TileGrid } from './SignalTiles'
-import { firstOf, groupsOf, paramsFor, sourcesOf, sourceUses } from './sources'
+import { firstOf, groupsOf, paramsFor, sourcesOf, sourceUses, type ParamSpec } from './sources'
 import { useSignal } from './store'
 import { lookLive, sourceLive } from './thumbs'
 import type { SignalDoc, SourceKind } from './types'
@@ -242,30 +242,103 @@ function ShapeGroup() {
 
       {own.length > 0 && (
         <>
-          <SubHeading>{spec?.label}</SubHeading>
-          {own.map((ps) => (
-            <SliderRow
-              key={ps.key}
-              label={ps.label}
-              hint={ps.hint}
-              value={values[ps.key]}
-              min={ps.min}
-              max={ps.max}
-              step={ps.step}
-              format={
-                ps.integer
-                  ? (v) => `${Math.round(v)}`
-                  : ps.step < 0.01
-                    ? (v) => v.toFixed(3)
-                    : (v) => v.toFixed(2)
-              }
-              onChange={(v) => useSignal.getState().setParam(ps.key, v)}
-            />
-          ))}
+          {/*
+           * A generator with a long list names its own sections, and each one
+           * gets a heading where it starts; the rest keep the one heading with
+           * the generator's name. Remix shape sits on the first heading when
+           * the generator marks anything as rollable.
+           */}
+          {own.map((ps, i) => {
+            const heading =
+              i === 0 ? (ps.section ?? spec?.label) : ps.section !== own[i - 1].section ? ps.section : undefined
+            return (
+              <div key={ps.key}>
+                {heading && (
+                  <div className="mt-2.5 flex items-center justify-between">
+                    <SubHeading>{heading}</SubHeading>
+                    {i === 0 && own.some((o) => o.remix) && (
+                      <button
+                        onClick={() => remixShape(own)}
+                        title="Roll this generator's design controls, keeping the colours and motion"
+                        className="mb-1.5 flex h-5 items-center gap-1 rounded-xs px-1.5 t-caption text-(--tx2) hover:bg-(--panel3) hover:text-(--tx)"
+                      >
+                        <Dices size={12} strokeWidth={2} />
+                        Remix shape
+                      </button>
+                    )}
+                  </div>
+                )}
+                {ps.options ? (
+                  <ChoiceRow spec={ps} value={Math.round(values[ps.key])} />
+                ) : (
+                  <SliderRow
+                    label={ps.label}
+                    hint={ps.hint}
+                    value={values[ps.key]}
+                    min={ps.min}
+                    max={ps.max}
+                    step={ps.step}
+                    format={
+                      ps.integer
+                        ? (v) => `${Math.round(v)}`
+                        : ps.step < 0.01
+                          ? (v) => v.toFixed(3)
+                          : (v) => v.toFixed(2)
+                    }
+                    onChange={(v) => useSignal.getState().setParam(ps.key, v)}
+                  />
+                )}
+              </div>
+            )
+          })}
         </>
       )}
     </Section>
   )
+}
+
+/**
+ * A control that is a choice, drawn as its words.
+ *
+ * Up to four fit one segmented row in this column; more wrap into a grid of
+ * three, which keeps "Octagon" and "Checker" readable rather than truncated.
+ */
+function ChoiceRow({ spec, value }: { spec: ParamSpec; value: number }) {
+  const opts = spec.options ?? []
+  const set = (v: number) => useSignal.getState().setParam(spec.key, v)
+  return (
+    <div className="py-0.5" title={spec.hint}>
+      <p className="mb-1 mt-1 t-caption text-(--tx3)">{spec.label}</p>
+      {opts.length <= 4 ? (
+        <Segments
+          compact
+          options={opts.map((label, i) => ({ id: String(i), label }))}
+          value={String(value)}
+          onChange={(id) => set(Number(id))}
+        />
+      ) : (
+        <div className="mb-1.5 grid grid-cols-3 gap-0.5">
+          {opts.map((label, i) => (
+            <MiniButton key={label} active={value === i} onClick={() => set(i)}>
+              {label}
+            </MiniButton>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Roll every control the generator marked, in one undo step. */
+function remixShape(specs: ParamSpec[]) {
+  edit('signal-remix-shape', (d) => {
+    for (const ps of specs) {
+      if (!ps.remix) continue
+      const [lo, hi] = ps.remix
+      const steps = Math.round((hi - lo) / ps.step)
+      d.source.params[ps.key] = Number((lo + Math.floor(Math.random() * (steps + 1)) * ps.step).toFixed(4))
+    }
+  })
 }
 
 function MotionGroup() {

@@ -188,6 +188,17 @@ export const PRESETS: Preset[] = [
   { id: 'y-ribbon', name: 'Ribbon', group: 'Type', kind: 'figure', source: 'text-wave', intensity: 55, scale: 5, speed: 0.8, ink: '#f7f8f8', paper: '#08090a', accent: '#5e6ad2', mix: 0, text: 'RIBBIT', fx: fx(['bloom', 0.25], ['vignette', 0.35]) },
   { id: 'y-marquee', name: 'Marquee', group: 'Type', kind: 'figure', source: 'type-cascade', intensity: 50, scale: 5, speed: 0.7, ink: '#ffcc00', paper: '#12060a', accent: '#ff4488', mix: 0, text: 'SIGNAL, DITHER, LOOP', fx: fx(['bloom', 0.3], ['scanlines', 0.25]) },
   { id: 'y-press', name: 'Letterpress', group: 'Type', kind: 'figure', source: 'text-wave', intensity: 45, scale: 6, speed: 0.5, ink: '#141414', paper: '#f2f0ea', accent: '#cc2222', mix: 0, text: 'RIBBIT', fx: fx(['grain', 0.25]) },
+
+  // ----- Rangoli: kolam traditions, each one a different corner of the same generator -----
+  { id: 'r-sikku', name: 'Sikku 7-1', group: 'Rangoli', kind: 'figure', source: 'rangoli', intensity: 0, scale: 4, speed: 0.5, ink: '#5b1a2e', paper: '#fbf8f4', accent: '#111111', mix: 0, params: { layout: 0, span: 7, pattern: 0, oneLine: 0, weight: 0.09, dot: 0.06, dotInk: 1, pulse: 0 } },
+  { id: 'r-mudra', name: 'Mudra Card', group: 'Rangoli', kind: 'figure', source: 'rangoli', intensity: 22, scale: 3.8, speed: 0.5, ink: '#fbf7ea', paper: '#7c9a2e', accent: '#c2185b', mix: 0, params: { layout: 1, span: 3, aspect: 2.5, pattern: 0, symmetry: 2, seed: 12, weight: 0.08, dot: 0.08, dotStyle: 1 }, fx: fx(['grain', 0.2]) },
+  { id: 'r-marigold', name: 'Marigold', group: 'Rangoli', kind: 'figure', source: 'rangoli', intensity: 35, scale: 4, speed: 0.5, ink: '#fffaf0', paper: '#f7941d', accent: '#c0392b', mix: 0, params: { layout: 2, span: 9, pattern: 1, seed: 41, weight: 0.1, dot: 0.07 } },
+  { id: 'r-kumkum', name: 'Kumkum', group: 'Rangoli', kind: 'figure', source: 'rangoli', intensity: 18, scale: 4, speed: 0.5, ink: '#f8ecd8', paper: '#6b0a0a', accent: '#f4b400', mix: 0, params: { layout: 0, span: 9, pattern: 4, seed: 3, weight: 0.085, dot: 0.07, fill: 1, fillAlpha: 0.3 }, fx: fx(['grain', 0.18]) },
+  { id: 'r-temple', name: 'Temple Floor', group: 'Rangoli', kind: 'figure', source: 'rangoli', intensity: 30, scale: 4, speed: 0.5, ink: '#f3e6cc', paper: '#1a0707', accent: '#d4a24c', mix: 0, params: { layout: 3, span: 11, pattern: 2, style: 1, cross: 1, weight: 0.13, dot: 0.06, dotInk: 1, dotStyle: 2 }, fx: fx(['vignette', 0.4]) },
+  { id: 'r-flour', name: 'Rice Flour', group: 'Rangoli', kind: 'figure', source: 'rangoli', intensity: 25, scale: 4, speed: 1, ink: '#fdf6e8', paper: '#8b3a1e', accent: '#e8b04b', mix: 0, params: { layout: 0, span: 9, pattern: 0, seed: 88, style: 4, weight: 0.11, dot: 0.06, trace: 0.6 }, fx: fx(['grain', 0.3]) },
+  { id: 'r-brahma', name: 'Brahma Mudi', group: 'Rangoli', kind: 'figure', source: 'rangoli', intensity: 40, scale: 4, speed: 0.8, ink: '#e9e4ff', paper: '#0e0d1a', accent: '#ff9e3d', mix: 0, params: { layout: 4, span: 13, pattern: 0, seed: 256, cross: 1, colour: 3, weight: 0.1, dot: 0.05, trace: 0.5 }, fx: fx(['bloom', 0.3], ['vignette', 0.35]) },
+  { id: 'r-alpana', name: 'Alpana', group: 'Rangoli', kind: 'figure', source: 'rangoli', intensity: 15, scale: 4, speed: 0.5, ink: '#fff4e4', paper: '#7a1f12', accent: '#f2c14e', mix: 0, params: { layout: 4, span: 13, hollow: 0.3, pattern: 5, style: 5, weight: 0.12, dot: 0.05, dotStyle: 3, dotInk: 1 }, fx: fx(['grain', 0.22]) },
+  { id: 'r-festival', name: 'Festival', group: 'Rangoli', kind: 'figure', source: 'rangoli', intensity: 55, scale: 4, speed: 0.8, ink: '#ffd166', paper: '#120a1f', accent: '#ef476f', mix: 0, params: { layout: 5, span: 11, pattern: 3, oneLine: 0, colour: 2, style: 3, evolve: 0.5, weight: 0.09, dot: 0.05, spin: 6 }, fx: fx(['bloom', 0.35]) },
 ]
 
 export const PRESET_GROUPS = [
@@ -203,6 +214,7 @@ export const PRESET_GROUPS = [
   'Dimensional',
   'Quiet',
   'Type',
+  'Rangoli',
 ] as const
 
 /**

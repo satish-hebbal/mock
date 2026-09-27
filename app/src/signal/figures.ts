@@ -20,6 +20,7 @@
 import { hexRgb, type RGB } from './quantize'
 import type { SignalInk, SignalMotion } from './types'
 import { fbm, rand, vnoise, param, type Params, type ParamSpec, type SourceParam } from './fields'
+import { RANGOLI_HELPERS, RANGOLI_PARAMS, rangoli } from './rangoli'
 
 export type FigureFn = (
   ctx: CanvasRenderingContext2D,
@@ -1266,6 +1267,15 @@ export const FIGURES: FigureSpec[] = [
     ],
     fn: isolines,
   },
+  {
+    id: 'rangoli',
+    label: 'Rangoli',
+    group: 'Constructed',
+    hint: 'Sikku kolam: one line looping round a grid of dots, never touching one.',
+    uses: BASE,
+    params: RANGOLI_PARAMS,
+    fn: rangoli,
+  },
 
   // ----- Points -----
   { id: 'dot-tunnel', label: 'Dot Tunnel', group: 'Points', hint: 'Spiral rings of dots winding away.', uses: BASE,
@@ -1321,7 +1331,7 @@ export const FIGURE_BY_ID = new Map(FIGURES.map((f) => [f.id, f]))
  * live here and had to go: a number has no name to look up at runtime, so a
  * body referencing one cannot be lifted out at all.
  */
-export const FIGURE_HELPERS: Function[] = [rgb, rgba, thash, thash2, rotate3D, ground, rand, vnoise, fbm]
+export const FIGURE_HELPERS: Function[] = [rgb, rgba, thash, thash2, rotate3D, ground, rand, vnoise, fbm, ...RANGOLI_HELPERS]
 
 export const FIGURE_GROUPS = ['Constructed', 'Points', 'Lines', 'Tiles', 'Type', 'Dimensional'] as const
 

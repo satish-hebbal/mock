@@ -106,6 +106,18 @@ export interface ParamSpec {
   hint?: string
   /** render as a whole number rather than to two places */
   integer?: boolean
+  /**
+   * Names for a control that is a choice rather than an amount.
+   *
+   * Stored as the option's index, so the document, the presets and the embed
+   * still carry nothing but numbers; only the panel draws it as a row of
+   * words instead of a slider nobody could read.
+   */
+  options?: string[]
+  /** a sub-heading to group under, for generators with more controls than a column wants flat */
+  section?: string
+  /** the range Remix shape may roll this control in; absent means it is left alone */
+  remix?: [number, number]
 }
 
 export interface FieldSpec {

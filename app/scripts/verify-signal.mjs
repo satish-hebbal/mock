@@ -285,6 +285,8 @@ function recorder() {
     textAlign: 'left',
     textBaseline: 'alphabetic',
     beginPath() {},
+    closePath() {},
+    setLineDash() {},
     moveTo: mark,
     lineTo: mark,
     arc: mark,
@@ -330,12 +332,34 @@ for (const list of [FIELD_HELPERS, FIGURE_HELPERS]) {
   }
 }
 
+/*
+ * Rangoli's One line promises a single unbroken stroke on any connected grid,
+ * which is the whole meaning of a Brahma mudi kolam. The join is a union-find
+ * pass whose correctness rests on an argument about smoothing crossings, so it
+ * is checked across every shape, design and symmetry rather than trusted.
+ */
+console.log('\n--- rangoli joins into one line ---')
+{
+  const { kolamWeave } = await R('src/signal/rangoli.ts')
+  let split = 0
+  let tried = 0
+  for (let layout = 0; layout < 6; layout++)
+    for (const span of [1, 2, 5, 8, 11])
+      for (let pattern = 0; pattern < 6; pattern++)
+        for (let sym = 0; sym < 4; sym++)
+          for (const folds of [0, 0.4]) {
+            tried++
+            if (kolamWeave(layout, span, 1, 0, pattern, sym, 1, 7, folds, 1).loops.length !== 1) split++
+          }
+  check('every connected grid comes out as one loop', split === 0, `${split} of ${tried} split`)
+}
+
 // ---------------------------------------------------------------------------
 
 console.log('\n--- the catalogue ---')
 const ids = SOURCES.map((s) => `${s.kind}:${s.id}`)
 check('every generator id is unique', new Set(ids).size === ids.length)
-check('sixty-eight generators', SOURCES.length === 68, `got ${SOURCES.length}`)
+check('sixty-nine generators', SOURCES.length === 69, `got ${SOURCES.length}`)
 check('every generator declares what it reads', SOURCES.every((s) => s.uses.length > 0))
 check('every generator has a hint', SOURCES.every((s) => s.hint.length > 8))
 check(

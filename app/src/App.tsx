@@ -14,7 +14,6 @@ import { useAscii } from './ascii/store'
 import { useSignal } from './signal/store'
 import { useInvoice } from './invoice/store'
 import { downloadJSON, pickInvoiceFile, printInvoice, readInvoiceFile } from './invoice/export'
-import { RECIPES } from './ascii/presets'
 import { PENS, PEN_ORDER } from './draw/pens'
 import { SHAPE_TOOLS } from './draw/shapeTools'
 import { ToolRail } from './components/ToolRail'
@@ -289,8 +288,10 @@ function useGlobalShortcuts() {
         a.setDialog(null)
       } else if (key === 'u') {
         pickMediaFile((f) => void a.importImage(f), false)
-      } else if (key === 'r') {
-        a.applyLook(RECIPES[Math.floor(Math.random() * RECIPES.length)].id)
+      } else if (key === 'r' && a.bitmap) {
+        a.shuffle()
+      } else if (key === '[' || key === ']') {
+        a.cycleStyle(key === '[' ? -1 : 1)
       } else if (key === 'i') {
         a.patch((d) => void (d.tone.invert = !d.tone.invert))
       }

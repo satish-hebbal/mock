@@ -22,6 +22,8 @@ import { renderAscii } from './render'
 import { CursorTrail } from './cursor'
 import { ASCII_NOTCH } from './notch'
 import { StarterRow } from './AsciiPresets'
+import { isProcess } from './styles'
+import { CanvasHandles } from './AsciiHandles'
 
 /** Air between the picture and the panel's walls, on the app's own 4pt step. */
 const GUTTER = 24
@@ -82,7 +84,7 @@ export function AsciiCanvas() {
   trail.current ??= new CursorTrail()
   const latest = useRef({ doc, bitmap, dispW, dispH })
   latest.current = { doc, bitmap, dispW, dispH }
-  const scatter = doc.cursor.mode === 'scatter' && doc.style !== 'dither'
+  const scatter = doc.cursor.mode === 'scatter' && !isProcess(doc.style)
 
   const paint = useRef(() => {})
   paint.current = () => {
@@ -98,9 +100,9 @@ export function AsciiCanvas() {
     const outW = Math.round(dispW * dpr)
     const now = performance.now()
     const t = trail.current!
-    const live = doc.cursor.mode === 'scatter' && doc.style !== 'dither'
+    const live = doc.cursor.mode === 'scatter' && !isProcess(doc.style)
     const field = live ? t.field(now, outW / Math.max(1, doc.size.width), doc.cursor) : undefined
-    const out = renderAscii(doc, bitmap, outW, Math.round(dispH * dpr), { field, reuse: true })
+    const out = renderAscii(doc, bitmap, outW, Math.round(dispH * dpr), { field, reuse: true, quality: 'preview' })
     canvas.width = out.canvas.width
     canvas.height = out.canvas.height
     canvas.getContext('2d')!.drawImage(out.canvas, 0, 0)
@@ -177,9 +179,11 @@ export function AsciiCanvas() {
               style={{ width: dispW, height: dispH }}
               className="block h-full w-full"
             />
+            <CanvasHandles width={dispW} height={dispH} />
           </div>
           <p className="absolute bottom-2 left-3 t-caption text-(--tx3) tabular-nums">
-            {grid.cols} × {grid.rows} cells · {doc.size.width} × {doc.size.height} px
+            {grid.cols > 0 && `${grid.cols} × ${grid.rows} cells · `}
+            {doc.size.width} × {doc.size.height} px
           </p>
         </>
       ) : (

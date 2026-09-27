@@ -45,13 +45,18 @@ const cell = (over) => ({
   col: 0,
   row: 0,
   ink: 0.6,
+  // edge strength, contour direction and tone-mapped brightness, which the
+  // renderer hands every cell and the flow, LED and neon painters read
+  edge: 0.3,
+  angle: 0.7,
+  lum: 0.4,
   color: 'rgb(255, 0, 0)',
   r: 255,
   g: 0,
   b: 0,
   ...over,
 })
-const env = { chars: ' .:-=#', jitter: 0, gap: 0, fine: undefined }
+const env = { chars: ' .:-=#', jitter: 0, gap: 0, fine: undefined, p: {}, cols: 4 }
 
 console.log('\n--- every painter emits well-formed markup ---')
 for (const [id, painter] of Object.entries(PAINTERS)) {

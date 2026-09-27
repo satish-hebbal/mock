@@ -17,8 +17,10 @@
  *   rather than shipping a file that quietly differs from the preview.
  */
 
+import { FX_BY_ID } from '../lib/postfx'
+import { prepareSource } from './layers'
 import { getStyle } from './styles'
-import { ditherPixels, glyphFontSize, makeCanvas, paintArt, paintBackdrop } from './render'
+import { ditherPixels, glyphFontSize, makeCanvas, paintArt, paintBackdrop, renderProcess } from './render'
 import { MONO, SvgSurface } from './surface'
 import { gridSize, type AsciiDoc } from './types'
 
@@ -38,6 +40,16 @@ export function svgOmissions(doc: AsciiDoc): string[] {
   if (doc.backdrop.mode === 'blurred' || doc.backdrop.mode === 'source') {
     out.push('the photo backdrop, which is embedded as an image')
   }
+  const extra = Object.entries(doc.finish ?? {})
+    .filter(([, v]) => v && v.amount > 0)
+    .map(([k]) => FX_BY_ID[k as keyof typeof FX_BY_ID]?.label)
+    .filter(Boolean)
+  if (extra.length) out.push(extra.join(', ').toLowerCase())
+  if (getStyle(doc.style).group === 'process' && doc.style !== 'dither') {
+    out.push(`${getStyle(doc.style).label}, which is embedded as an image`)
+  }
+  if (doc.reveal.mode !== 'off') out.push('the reveal')
+  if (doc.color.composite && doc.color.composite !== 'source-over') out.push('the art blend')
   return out
 }
 
@@ -175,7 +187,8 @@ function fxSvg(doc: AsciiDoc, w: number, h: number): { defs: string; body: strin
  * vector means: the `viewBox` carries the proportions and the consumer picks
  * the size. There is no 2x SVG.
  */
-export function renderAsciiSvg(doc: AsciiDoc, source: CanvasImageSource | null): string {
+export function renderAsciiSvg(doc: AsciiDoc, rawSource: CanvasImageSource | null): string {
+  const source = rawSource ? prepareSource(doc, rawSource) : null
   const w = doc.size.width
   const h = doc.size.height
   const spec = getStyle(doc.style)
@@ -189,6 +202,10 @@ export function renderAsciiSvg(doc: AsciiDoc, source: CanvasImageSource | null):
 
     if (doc.style === 'dither') {
       art = ditherSvg(doc, source, w, h)
+    } else if (spec.group === 'process') {
+      // a paint process is pixels by nature, so it travels as a picture
+      const raster = renderProcess(doc, source, w * 2, h * 2, 'export')
+      art = `<image x="0" y="0" width="${n(w)}" height="${n(h)}" href="${raster.toDataURL('image/png')}"/>`
     } else {
       const { cols, rows } = gridSize(doc, spec.square)
       const cw = w / cols

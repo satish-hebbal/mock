@@ -23,6 +23,14 @@ export interface CellGrid {
   lum: Float32Array
   /** 0..1 Sobel gradient magnitude per cell */
   edge: Float32Array
+  /**
+   * The direction the edge runs, in radians, per cell.
+   *
+   * Perpendicular to the gradient, because every style that asks for it wants
+   * to draw *along* the contour: a stroke laid across an edge reads as fur, one
+   * laid along it reads as a line drawing.
+   */
+  angle: Float32Array
   /** 0..1 coverage, so a transparent PNG does not paint its empty corners */
   alpha: Float32Array
 }
@@ -90,7 +98,8 @@ export function sampleGrid(source: CanvasImageSource, cols: number, rows: number
     alpha[i] = a
   }
 
-  return { cols, rows, rgb, lum, edge: sobel(lum, cols, rows), alpha }
+  const { edge, angle } = sobel(lum, cols, rows)
+  return { cols, rows, rgb, lum, edge, angle, alpha }
 }
 
 /**
@@ -101,8 +110,9 @@ export function sampleGrid(source: CanvasImageSource, cols: number, rows: number
  * resolution it finds the edges the finished picture actually has cells to
  * describe, which is the only thing "edge emphasis" can usefully act on.
  */
-function sobel(lum: Float32Array, cols: number, rows: number): Float32Array {
+function sobel(lum: Float32Array, cols: number, rows: number) {
   const out = new Float32Array(cols * rows)
+  const angle = new Float32Array(cols * rows)
   const at = (x: number, y: number) =>
     lum[Math.min(rows - 1, Math.max(0, y)) * cols + Math.min(cols - 1, Math.max(0, x))]
 
@@ -120,9 +130,10 @@ function sobel(lum: Float32Array, cols: number, rows: number): Float32Array {
       const gy = bl + 2 * bc + br - (tl + 2 * tc + tr)
       // the magnitude of a Sobel pair maxes out around 4 on 0..1 input
       out[y * cols + x] = Math.min(1, Math.hypot(gx, gy) / 2)
+      angle[y * cols + x] = Math.atan2(gy, gx) + Math.PI / 2
     }
   }
-  return out
+  return { edge: out, angle }
 }
 
 export interface ToneInput {

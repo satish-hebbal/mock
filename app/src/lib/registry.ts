@@ -39,6 +39,17 @@ export interface DeviceModel {
    * whose lid and base are separate sub-scenes).
    */
   rotationEuler?: [number, number, number]
+  /**
+   * Laptop-style: the display is on a lid hinged to a base. It faces in over
+   * the base rather than out of the body, and only turns about the vertical so
+   * the base stays level.
+   */
+  lid?: boolean
+  /**
+   * For a display mesh that also carries its bezel: how far in from each edge
+   * (top, right, bottom, left, as fractions of the mesh) the lit area starts.
+   */
+  screenInset?: [number, number, number, number]
 }
 
 export interface DeviceSpec {
@@ -101,11 +112,14 @@ const CATEGORY_FOR: Record<string, DeviceSpec['category']> = {
   watch: 'Watches',
 }
 
-const MODEL_DEVICES: DeviceSpec[] = deviceModels.models
-  // Only ship models whose screen mesh has been confirmed by rendering, an
-  // unverified one shows the screenshot on the wrong face (or not at all).
-  .filter((m) => m.verified)
-  .map((m) => ({
+type ManifestEntry = (typeof deviceModels.models)[number] & {
+  rotationEuler?: [number, number, number]
+  screenInset?: [number, number, number, number]
+  verified?: boolean
+}
+
+/** Every model in the manifest, verified or not. The render harness wants them all. */
+export const ALL_MODEL_DEVICES: DeviceSpec[] = (deviceModels.models as ManifestEntry[]).map((m) => ({
   id: m.id,
   name: m.name,
   category: CATEGORY_FOR[m.kind] ?? 'Frames',
@@ -118,9 +132,17 @@ const MODEL_DEVICES: DeviceSpec[] = deviceModels.models
     url: `/models/optimized/${m.file}`,
     screenMesh: m.screenMesh,
     fitHeight: m.fitHeight,
-    rotationEuler: (m as { rotationEuler?: [number, number, number] }).rotationEuler,
+    rotationEuler: m.rotationEuler,
+    lid: m.kind === 'laptop',
+    screenInset: m.screenInset,
   },
-  }))
+}))
+
+// Only ship models whose screen mesh has been confirmed by rendering, an
+// unverified one shows the screenshot on the wrong face (or not at all).
+const MODEL_DEVICES = ALL_MODEL_DEVICES.filter(
+  (d) => (deviceModels.models as ManifestEntry[]).find((m) => m.id === d.id)?.verified,
+)
 
 export const DEVICES: DeviceSpec[] = [
   {
@@ -354,6 +376,15 @@ export const DEVICES: DeviceSpec[] = [
  * in deviceModels.json and it shows up here on its own.
  */
 export const PICKABLE_DEVICES: DeviceSpec[] = DEVICES.filter((d) => d.model)
+
+/**
+ * The catalog picture for a device: a still of the model itself, rendered by
+ * scripts/render-device-thumbs.mjs. Null for the procedural bodies, which never
+ * reach the picker.
+ */
+export function deviceThumb(spec: DeviceSpec): string | null {
+  return spec.model ? `/device-thumbs/${spec.id}.webp` : null
+}
 
 export function isPickable(id: string): boolean {
   return PICKABLE_DEVICES.some((d) => d.id === id)

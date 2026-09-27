@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Blend, Grid3x3, Smartphone, Waves, type LucideIcon } from 'lucide-react'
+import { Blend, Grid3x3, Layers, Smartphone, Waves, type LucideIcon } from 'lucide-react'
 import { useStudio } from '../store'
 import { useAscii } from '../ascii/store'
 import { SECTIONS } from '../lib/sections'
@@ -20,9 +20,10 @@ const SHOTS_SECTIONS = [
   ['frame', 'Frame', Blend],
 ] as const
 
-/** ASCII splits the same way: what the picture is made of, then how it is finished. */
+/** ASCII splits the same way: what the picture is made of, what is done to it, then how it is finished. */
 const ASCII_SECTIONS = [
   ['art', 'Art', Grid3x3],
+  ['layers', 'Layers', Layers],
   ['look', 'Look', Blend],
 ] as const
 

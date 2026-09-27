@@ -31,6 +31,11 @@ export const START_W = 112
  * shape and twice the width of the two squares beside it, so a hairline was
  * separating things nothing could confuse in the first place.
  */
-const ROW_W = 2 * NOTCH_BUTTON + 3 * NOTCH_GAP + START_W + EXPORT_W
+/*
+ * Undo, redo and shuffle, then Start over and Export. Shuffle sits
+ * with the history buttons because it is the same kind of verb: it changes the
+ * whole look at once, and Undo is the button right beside it that takes it back.
+ */
+const ROW_W = 3 * NOTCH_BUTTON + 4 * NOTCH_GAP + START_W + EXPORT_W
 
 export const ASCII_NOTCH = notchForPill(ROW_W, NOTCH_BUTTON, 'corner')

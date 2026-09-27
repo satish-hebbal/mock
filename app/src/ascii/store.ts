@@ -21,9 +21,13 @@ import { coalesces, endEditRun } from '../lib/history'
 import { track } from '../lib/analytics'
 import { getPresetPhoto, loadPresetPhotoBlob } from '../lib/presetPhotos'
 import { ui } from '../lib/ui'
+import { getFilter } from './filters'
+import { GRADIENTS } from './gradients'
+import { defaults, type ParamValue } from './params'
 import { applyRecipe, RECIPES, type DeepPatch } from './presets'
-import { getStyle } from './styles'
-import { defaultAsciiDoc, defaultCursor, type AsciiDoc } from './types'
+import { RAMPS } from './ramps'
+import { getStyle, STYLES } from './styles'
+import { defaultAsciiDoc, normalizeDoc, type AsciiDoc, type AsciiStyleId } from './types'
 
 const DOC_KEY = 'ascii-current'
 const uid = () => crypto.randomUUID()
@@ -40,8 +44,79 @@ const clone = (d: AsciiDoc): AsciiDoc => JSON.parse(JSON.stringify(d)) as AsciiD
  */
 const MAX_DOC_EDGE = 1600
 
-export type AsciiSection = 'art' | 'look'
-export type AsciiDialog = 'export' | null
+export type AsciiSection = 'art' | 'layers' | 'look'
+export type AsciiDialog = 'export' | 'recipes' | null
+export type AsciiWorkspace = 'studio' | 'flow'
+
+/**
+ * A look somebody saved: the whole treatment and none of the picture.
+ *
+ * Everything that describes the photograph (which asset, its size, its name)
+ * is stripped on the way in, so applying a recipe to a different photograph
+ * restyles that photograph instead of swapping it back for the old one.
+ */
+export interface SavedLook {
+  id: string
+  name: string
+  at: number
+  look: Omit<AsciiDoc, 'assetId' | 'presetId' | 'size' | 'name' | 'version'>
+}
+
+const FAVS_KEY = 'ms-ascii-favs'
+const SAVED_KEY = 'ms-ascii-recipes'
+const WS_KEY = 'ms-ascii-workspace'
+
+function readLocal<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key)
+    return raw ? (JSON.parse(raw) as T) : fallback
+  } catch {
+    return fallback
+  }
+}
+
+function writeLocal(key: string, value: unknown) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value))
+  } catch {
+    /* private mode or full storage: the feature just does not persist */
+  }
+}
+
+/** The treatment of a document, without the picture. */
+export function lookOf(doc: AsciiDoc): SavedLook['look'] {
+  const { assetId: _a, presetId: _p, size: _s, name: _n, version: _v, ...look } = clone(doc)
+  return look
+}
+
+/**
+ * A look as a short string that pastes anywhere: a chat message, an issue, a
+ * post. Base64 of the JSON, with a prefix so a paste of something else is
+ * recognised and refused rather than half-applied.
+ */
+export function lookCode(doc: AsciiDoc): string {
+  const bytes = new TextEncoder().encode(JSON.stringify(lookOf(doc)))
+  let bin = ''
+  for (const b of bytes) bin += String.fromCharCode(b)
+  return 'rbt1.' + btoa(bin)
+}
+
+export function parseLookCode(code: string): SavedLook['look'] | null {
+  const t = code.trim()
+  if (!t.startsWith('rbt1.')) return null
+  try {
+    const bin = atob(t.slice(5))
+    const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0))
+    const look = JSON.parse(new TextDecoder().decode(bytes)) as SavedLook['look']
+    return look && typeof look === 'object' && 'style' in look ? look : null
+  } catch {
+    return null
+  }
+}
+
+function pick<T>(xs: readonly T[]): T {
+  return xs[Math.floor(Math.random() * xs.length)]
+}
 
 /** What the picture being imported is, for the document name and the event. */
 interface SourceMeta {
@@ -65,6 +140,11 @@ interface AsciiState {
   loadedId: string | null
   section: AsciiSection
   dialog: AsciiDialog
+  workspace: AsciiWorkspace
+  /** the layer whose settings are open and whose centre the canvas shows */
+  activeLayer: string | null
+  favs: AsciiStyleId[]
+  saved: SavedLook[]
 
   commit: (label?: string) => void
   undo: () => void
@@ -73,6 +153,22 @@ interface AsciiState {
   patch: (fn: (d: AsciiDoc) => void, label?: string) => void
   setStyle: (id: AsciiDoc['style']) => void
   applyLook: (id: string) => void
+  setStyleParam: (key: string, v: ParamValue) => void
+  addLayer: (kind: string) => void
+  removeLayer: (uid: string) => void
+  toggleLayer: (uid: string) => void
+  duplicateLayer: (uid: string) => void
+  moveLayer: (uid: string, to: number) => void
+  setLayerParam: (uid: string, key: string, v: ParamValue, label?: string) => void
+  setActiveLayer: (uid: string | null) => void
+  toggleFav: (id: AsciiStyleId) => void
+  saveLook: (name: string) => void
+  applySaved: (look: SavedLook['look']) => void
+  deleteSaved: (id: string) => void
+  renameSaved: (id: string, name: string) => void
+  shuffle: () => void
+  cycleStyle: (dir: 1 | -1) => void
+  setWorkspace: (w: AsciiWorkspace) => void
   reset: () => void
   startOver: () => void
 
@@ -103,6 +199,11 @@ export const useAscii = create<AsciiState>()(
     loadedId: null,
     section: 'art',
     dialog: null,
+    // Flow is not shipped yet, so every session opens in Studio
+    workspace: 'studio',
+    activeLayer: null,
+    favs: readLocal<AsciiStyleId[]>(FAVS_KEY, []),
+    saved: readLocal<SavedLook[]>(SAVED_KEY, []),
 
     commit: (label) => {
       if (coalesces(label)) return
@@ -161,7 +262,9 @@ export const useAscii = create<AsciiState>()(
         const was = getStyle(s.doc.style)
         s.doc.style = id
         if (spec.square !== was.square) s.doc.grid.aspect = spec.square ? 1 : 1.8
-        if (spec.group === 'raster' && was.group !== 'raster') {
+        if (spec.cell && spec.cell !== was.cell) {
+          s.doc.grid.cell = spec.cell
+        } else if (spec.group === 'raster' && was.group !== 'raster') {
           s.doc.grid.cell = Math.max(s.doc.grid.cell, 18)
         } else if (spec.group !== 'raster' && was.group === 'raster') {
           s.doc.grid.cell = Math.min(s.doc.grid.cell, 12)
@@ -180,6 +283,192 @@ export const useAscii = create<AsciiState>()(
       })
       track('studio_look_applied', { editor: 'ascii', recipe: id })
       persist(get().doc)
+    },
+
+    setStyleParam: (key, v) => {
+      get().commit(`ascii-sp-${key}`)
+      set((s) => {
+        const id = s.doc.style
+        const bag = (s.doc.styleParams[id] ??= {})
+        bag[key] = v
+      })
+      persist(get().doc)
+    },
+
+    addLayer: (kind) => {
+      const spec = getFilter(kind)
+      if (!spec) return
+      const layer = { uid: uid(), kind, on: true, params: defaults(spec.params) }
+      get().commit()
+      set((s) => {
+        s.doc.layers.push(layer)
+        s.activeLayer = layer.uid
+      })
+      track('studio_look_applied', { editor: 'ascii', layer: kind })
+      persist(get().doc)
+    },
+
+    removeLayer: (id) => {
+      get().commit()
+      set((s) => {
+        s.doc.layers = s.doc.layers.filter((l) => l.uid !== id)
+        if (s.activeLayer === id) s.activeLayer = null
+      })
+      persist(get().doc)
+    },
+
+    toggleLayer: (id) => {
+      get().commit()
+      set((s) => {
+        const l = s.doc.layers.find((x) => x.uid === id)
+        if (l) l.on = !l.on
+      })
+      persist(get().doc)
+    },
+
+    duplicateLayer: (id) => {
+      const src = get().doc.layers.find((l) => l.uid === id)
+      if (!src) return
+      const copy = { ...(JSON.parse(JSON.stringify(src)) as typeof src), uid: uid() }
+      get().commit()
+      set((s) => {
+        const i = s.doc.layers.findIndex((l) => l.uid === id)
+        s.doc.layers.splice(i + 1, 0, copy)
+        s.activeLayer = copy.uid
+      })
+      persist(get().doc)
+    },
+
+    moveLayer: (id, to) => {
+      const from = get().doc.layers.findIndex((l) => l.uid === id)
+      const n = get().doc.layers.length
+      const target = Math.max(0, Math.min(n - 1, to))
+      if (from < 0 || from === target) return
+      get().commit()
+      set((s) => {
+        const [l] = s.doc.layers.splice(from, 1)
+        s.doc.layers.splice(target, 0, l)
+      })
+      persist(get().doc)
+    },
+
+    setLayerParam: (id, key, v, label) => {
+      get().commit(label ?? `ascii-layer-${id}-${key}`)
+      set((s) => {
+        const l = s.doc.layers.find((x) => x.uid === id)
+        if (l) l.params[key] = v
+      })
+      persist(get().doc)
+    },
+
+    setActiveLayer: (id) => set((s) => void (s.activeLayer = id)),
+
+    toggleFav: (id) => {
+      set((s) => {
+        s.favs = s.favs.includes(id) ? s.favs.filter((f) => f !== id) : [...s.favs, id]
+      })
+      writeLocal(FAVS_KEY, get().favs)
+    },
+
+    saveLook: (name) => {
+      const entry: SavedLook = {
+        id: uid(),
+        name: name.trim() || 'My look',
+        at: Date.now(),
+        look: lookOf(get().doc),
+      }
+      set((s) => {
+        s.saved.unshift(entry)
+      })
+      writeLocal(SAVED_KEY, get().saved)
+      ui.toast('Recipe saved')
+    },
+
+    applySaved: (look) => {
+      get().commit()
+      set((s) => {
+        const keep = {
+          assetId: s.doc.assetId,
+          presetId: s.doc.presetId,
+          size: { ...s.doc.size },
+          name: s.doc.name,
+          version: 1 as const,
+        }
+        const next = { ...defaultAsciiDoc(), ...(JSON.parse(JSON.stringify(look)) as object), ...keep } as AsciiDoc
+        s.doc = normalizeDoc(next)
+      })
+      track('studio_look_applied', { editor: 'ascii', recipe: 'saved' })
+      persist(get().doc)
+    },
+
+    deleteSaved: (id) => {
+      set((s) => {
+        s.saved = s.saved.filter((r) => r.id !== id)
+      })
+      writeLocal(SAVED_KEY, get().saved)
+    },
+
+    renameSaved: (id, name) => {
+      set((s) => {
+        const r = s.saved.find((x) => x.id === id)
+        if (r) r.name = name
+      })
+      writeLocal(SAVED_KEY, get().saved)
+    },
+
+    /**
+     * A new look, rolled.
+     *
+     * Not uniformly random: a uniformly random document is almost always mud.
+     * The dice pick a style, then only the settings that style listens to, from
+     * the middle of ranges that are known to hold together, and leave tone
+     * alone because tone is about the photograph rather than the look.
+     */
+    shuffle: () => {
+      const style = pick(STYLES.filter((x) => x.id !== get().doc.style)).id
+      get().setStyle(style)
+      const spec = getStyle(style)
+      get().patch((d) => {
+        if (spec.ramp) d.ramp = pick(RAMPS.filter((r) => r.id !== 'custom')).id
+        d.color.mode = pick(['source', 'source', 'ink', 'duotone', 'gradient', 'spectrum'] as const)
+        d.color.gradient = pick(GRADIENTS).id
+        d.color.hue = Math.round(Math.random() * 360)
+        const [a, b] = pick([
+          ['#f7f8f8', '#5e6ad2'],
+          ['#ffd166', '#ef476f'],
+          ['#4dff88', '#003b1a'],
+          ['#ff4fd8', '#4fe3ff'],
+          ['#1b1f2a', '#f4efe6'],
+        ])
+        d.color.ink = a
+        d.color.ink2 = b
+        if (spec.params) {
+          const bag: Record<string, ParamValue> = {}
+          for (const p of spec.params) {
+            if (p.kind === 'range') {
+              const v = p.min + (p.max - p.min) * (0.25 + Math.random() * 0.5)
+              bag[p.key] = Math.round(v / p.step) * p.step
+            } else if (p.kind === 'choice') bag[p.key] = pick(p.options).id
+            else bag[p.key] = p.def
+          }
+          d.styleParams[style] = bag
+        }
+        d.backdrop.mode = pick(['paper', 'source', 'blurred', 'mesh'] as const)
+        d.backdrop.opacity = 0.2 + Math.random() * 0.3
+      })
+    },
+
+    cycleStyle: (dir) => {
+      const favs = get().favs
+      const list = favs.length > 1 ? STYLES.filter((x) => favs.includes(x.id)) : STYLES
+      const i = list.findIndex((x) => x.id === get().doc.style)
+      const next = list[(i + dir + list.length) % list.length]
+      if (next) get().setStyle(next.id)
+    },
+
+    setWorkspace: (w) => {
+      writeLocal(WS_KEY, w)
+      set((s) => void (s.workspace = w))
     },
 
     reset: () => {
@@ -342,16 +631,14 @@ export const useAscii = create<AsciiState>()(
       if (get().hydrated) return
       try {
         const saved = localStorage.getItem('ms-ascii-section')
-        if (saved === 'art' || saved === 'look') set((s) => void (s.section = saved))
+        if (saved === 'art' || saved === 'look' || saved === 'layers') set((s) => void (s.section = saved))
 
-        const doc = await loadJSON<AsciiDoc>(DOC_KEY)
-        if (doc && doc.version === 1) {
+        const loaded = await loadJSON<AsciiDoc>(DOC_KEY)
+        if (loaded && loaded.version === 1) {
           let bitmap: ImageBitmap | null = null
           let url: string | null = null
-          // written before presets existed: absent means "not from one"
-          doc.presetId = doc.presetId ?? null
-          // and before the cursor did anything
-          doc.cursor = doc.cursor ?? defaultCursor()
+          // fills every field added since the document was written
+          const doc = normalizeDoc(loaded)
           if (doc.assetId) {
             const blob = await loadAsset(doc.assetId)
             if (blob) {

@@ -26,28 +26,35 @@ const POSE: Record<string, [number, number]> = {
   watch: [6, -18],
 }
 
-/** A soft wallpaper, the same on every device so the tiles read as one set. */
+/*
+ * The wallpaper: one of the shipped Nature presets, the same on every device
+ * so the tiles read as one set. A real photograph rather than a drawn gradient,
+ * because a screen showing a picture is what makes a device read as switched on.
+ */
+const WALLPAPER = '/preset-bgs/nature/nature-29.webp'
+/** where the lit peak sits in the photo, so a narrow phone crop keeps it */
+const FOCUS = { x: 0.62, y: 0.4 }
+
+const photo = await new Promise<HTMLImageElement>((resolve, reject) => {
+  const img = new Image()
+  img.onload = () => resolve(img)
+  img.onerror = reject
+  img.src = WALLPAPER
+})
+
+/** The photo cover-cropped to the screen's aspect, centred on the peak as far as the edges allow. */
 function wallpaper(aspect: number) {
   const c = document.createElement('canvas')
-  c.height = 512
-  c.width = Math.round(512 * aspect)
+  c.height = 1024
+  c.width = Math.round(1024 * aspect)
   const g = c.getContext('2d')!
-  const base = g.createLinearGradient(0, 0, c.width, c.height)
-  base.addColorStop(0, '#4f5bd5')
-  base.addColorStop(0.55, '#8a5cd6')
-  base.addColorStop(1, '#e58a8a')
-  g.fillStyle = base
-  g.fillRect(0, 0, c.width, c.height)
-  const glow = (x: number, y: number, r: number, col: string) => {
-    const rg = g.createRadialGradient(x, y, 0, x, y, r)
-    rg.addColorStop(0, col)
-    rg.addColorStop(1, 'rgba(0,0,0,0)')
-    g.fillStyle = rg
-    g.fillRect(0, 0, c.width, c.height)
-  }
-  const m = Math.max(c.width, c.height)
-  glow(c.width * 0.8, c.height * 0.15, m * 0.55, 'rgba(255,214,170,0.55)')
-  glow(c.width * 0.15, c.height * 0.85, m * 0.6, 'rgba(60,40,160,0.55)')
+  const k = Math.max(c.width / photo.width, c.height / photo.height)
+  const w = photo.width * k
+  const h = photo.height * k
+  const clamp = (v: number, lo: number) => Math.min(0, Math.max(lo, v))
+  const x = clamp(c.width / 2 - FOCUS.x * w, c.width - w)
+  const y = clamp(c.height / 2 - FOCUS.y * h, c.height - h)
+  g.drawImage(photo, x, y, w, h)
   const t = new THREE.CanvasTexture(c)
   t.colorSpace = THREE.SRGBColorSpace
   return t

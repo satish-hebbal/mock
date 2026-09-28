@@ -3653,6 +3653,15 @@ button:hover > .inv-coin {
 .sg-tile[data-edge]:focus-visible .sg-tip {
   transform: translate(0, 0);
 }
+/*
+ * A pointer passing over the grid on its way somewhere else is not asking what
+ * a tile is, and a card flashing up under it every few tiles reads as noise.
+ * The card waits for the pointer to rest; leaving still hides it at once, and
+ * keyboard focus, which is always deliberate, still shows it straight away.
+ */
+.sg-tile:hover .sg-tip {
+  transition-delay: 1.5s;
+}
 .sg-tip-name {
   font-size: 12px;
   font-weight: 600;
@@ -3712,34 +3721,62 @@ button:hover > .inv-coin {
   pointer-events: none;
 }
 
-/* what's in the scene: one small tile per device, the picked one ringed */
-.dv-scene {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.dv-chip {
-  position: relative;
+/* what's in the scene: one row per device, the picked one filled */
+.dv-row {
   display: flex;
   align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  border-radius: 8px;
-  background: var(--field);
-  transition:
-    transform var(--dur-out) var(--ease-snappy),
-    background var(--dur-out) var(--ease-settle);
+  gap: 2px;
+  padding-right: 4px;
+  border-radius: 7px;
+  transition: background var(--dur-out) var(--ease-settle);
 }
-.dv-chip:hover {
-  background: var(--field-h);
-  transform: translateY(-1px);
+.dv-row:hover {
+  background: color-mix(in srgb, var(--field) 55%, transparent);
   transition-duration: var(--dur-in);
 }
-.dv-chip:active {
-  transform: scale(0.94);
+.dv-row[data-on] {
+  background: var(--field);
 }
-.dv-chip::after,
+.dv-row-main {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 4px;
+  border-radius: 7px;
+  font-size: 12px;
+  line-height: 16px;
+  text-align: left;
+  color: var(--tx2);
+  transition: color var(--dur-out) var(--ease-settle);
+}
+.dv-row:hover .dv-row-main,
+.dv-row[data-on] .dv-row-main {
+  color: var(--tx);
+}
+.dv-row-main:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1.5px var(--accent, #5e6ad2);
+}
+.dv-row-pic {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: var(--field);
+}
+.dv-row[data-on] .dv-row-pic {
+  background: var(--field-h);
+}
+.dv-row-n {
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--tx3);
+}
 .dv-tile-art::after {
   content: '';
   position: absolute;
@@ -3749,52 +3786,11 @@ button:hover > .inv-coin {
   pointer-events: none;
   transition: box-shadow var(--dur-out) var(--ease-settle);
 }
-.dv-chip[data-on]::after {
-  box-shadow: 0 0 0 1.5px var(--tx);
-}
-.dv-chip:focus-visible,
 .dv-tile:focus-visible {
   outline: none;
 }
-.dv-chip:focus-visible::after,
 .dv-tile:focus-visible .dv-tile-art::after {
   box-shadow: 0 0 0 1.5px var(--accent, #5e6ad2);
-}
-.dv-chip-n {
-  position: absolute;
-  right: 3px;
-  bottom: 2px;
-  font-size: 9px;
-  font-weight: 600;
-  line-height: 10px;
-  font-variant-numeric: tabular-nums;
-  color: var(--tx2);
-}
-/* the strip sits at the top of the panel, so its name opens below rather than
-   into the header */
-.dv-chip .sg-tip {
-  top: calc(100% + 7px);
-  bottom: auto;
-  transform: translate(-50%, -3px);
-}
-.dv-chip[data-edge='start'] .sg-tip {
-  left: 0;
-  transform: translate(0, -3px);
-}
-.dv-chip[data-edge='end'] .sg-tip {
-  left: auto;
-  right: 0;
-  transform: translate(0, -3px);
-}
-.dv-chip:hover .sg-tip,
-.dv-chip:focus-visible .sg-tip {
-  opacity: 1;
-  transform: translate(-50%, 0);
-  transition-duration: var(--dur-in);
-}
-.dv-chip[data-edge]:hover .sg-tip,
-.dv-chip[data-edge]:focus-visible .sg-tip {
-  transform: translate(0, 0);
 }
 
 /* the catalog: picture over name, three across */
@@ -3901,7 +3897,8 @@ button:hover > .inv-coin {
   color: var(--tx3);
 }
 @media (prefers-reduced-motion: reduce) {
-  .dv-chip,
+  .dv-row,
+  .dv-row-main,
   .dv-tile-art,
   .dv-pic,
   .dv-tile-add {

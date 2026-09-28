@@ -5,7 +5,6 @@ import {
   AppWindow,
   ArrowLeftRight,
   ChevronsLeft,
-  CircleMinus,
   Copy,
   ImagePlus,
   Link2,
@@ -17,6 +16,7 @@ import {
   Smartphone,
   Square,
   Tablet,
+  Trash2,
   Tv,
   Type,
   Unlink,
@@ -252,9 +252,6 @@ const ARRANGE = [
   { id: 'stack', label: 'Stack' },
 ] as const
 
-/** How many devices share a row of the scene strip, so a tip can open inward. */
-const SCENE_COLS = 5
-
 export function DevicesSection() {
   const devices = useStudio((s) => activeShot(s.project).scene.devices)
   const selectedId = useStudio((s) => s.selectedDeviceId)
@@ -262,7 +259,6 @@ export function DevicesSection() {
   const st = useStudio.getState
 
   const selected = devices.find((d) => d.id === selectedId) ?? devices[0]
-  const selectedName = selected ? getDevice(selected.modelId).name : ''
   const cats = DEVICE_CATEGORIES.filter((c) => PICKABLE_DEVICES.some((d) => d.category === c))
   const list = cat === 'All' ? PICKABLE_DEVICES : PICKABLE_DEVICES.filter((d) => d.category === cat)
   const inScene = new Set(devices.map((d) => d.modelId))
@@ -273,57 +269,49 @@ export function DevicesSection() {
   return (
     <>
       {/*
-       * What's in the scene, as the devices themselves. The name is there on
-       * the tip for the one you point at, and the two things you do to a
-       * device from here sit on the heading and act on the picked one.
+       * What's in the scene, one row per device. Each row names its device and
+       * carries its own duplicate and remove, so acting on the second phone is
+       * one click on that row rather than picking it first and then finding
+       * the buttons up on the heading, which read as acting on the whole list.
        */}
-      <Group
-        label="In scene"
-        action={
-          selected && (
-            <div className="-my-1 flex items-center gap-0.5">
-              <button
-                title={`Duplicate ${selectedName}`}
-                aria-label={`Duplicate ${selectedName}`}
-                onClick={() => st().duplicateDevice(selected.id)}
-                className={`${iconBtn} hover:text-(--tx)`}
-              >
-                <Copy size={12} strokeWidth={1.9} />
-              </button>
-              {devices.length > 1 && (
-                <button
-                  title={`Remove ${selectedName}`}
-                  aria-label={`Remove ${selectedName}`}
-                  onClick={() => st().removeDevice(selected.id)}
-                  className={`${iconBtn} hover:text-(--danger)`}
-                >
-                  <CircleMinus size={13} strokeWidth={1.9} />
-                </button>
-              )}
-            </div>
-          )
-        }
-      >
-        <div className="dv-scene">
+      <Group label="In scene">
+        <div className="flex flex-col gap-0.5">
           {devices.map((d, i) => {
             const spec = getDevice(d.modelId)
-            const col = i % SCENE_COLS
+            const on = d.id === selected?.id
             return (
-              <button
-                key={d.id}
-                onClick={() => st().selectDevice(d.id)}
-                aria-pressed={d.id === selected?.id}
-                aria-label={`${i + 1}. ${spec.name}`}
-                data-on={d.id === selected?.id || undefined}
-                data-edge={col === 0 ? 'start' : col >= SCENE_COLS - 2 ? 'end' : undefined}
-                className="dv-chip"
-              >
-                <DevicePic spec={spec} />
-                {devices.length > 1 && <span className="dv-chip-n">{i + 1}</span>}
-                <span className="sg-tip" aria-hidden>
-                  <span className="sg-tip-name">{spec.name}</span>
-                </span>
-              </button>
+              <div key={d.id} className="dv-row" data-on={on || undefined}>
+                <button
+                  onClick={() => st().selectDevice(d.id)}
+                  aria-pressed={on}
+                  className="dv-row-main"
+                >
+                  <span className="dv-row-pic">
+                    <DevicePic spec={spec} />
+                  </span>
+                  <span className="min-w-0 flex-1 truncate">{spec.name}</span>
+                  {devices.length > 1 && <span className="dv-row-n">{i + 1}</span>}
+                </button>
+                <button
+                  title={`Duplicate ${spec.name}`}
+                  aria-label={`Duplicate ${spec.name}`}
+                  onClick={() => st().duplicateDevice(d.id)}
+                  className={`${iconBtn} hover:text-(--tx)`}
+                >
+                  <Copy size={12} strokeWidth={1.9} />
+                </button>
+                {/* the last device can't go: an empty scene has nothing to frame */}
+                {devices.length > 1 && (
+                  <button
+                    title={`Remove ${spec.name}`}
+                    aria-label={`Remove ${spec.name}`}
+                    onClick={() => st().removeDevice(d.id)}
+                    className={`${iconBtn} hover:text-(--danger)`}
+                  >
+                    <Trash2 size={12} strokeWidth={1.9} />
+                  </button>
+                )}
+              </div>
             )
           })}
         </div>

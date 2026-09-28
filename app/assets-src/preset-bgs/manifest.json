@@ -79,7 +79,17 @@
     "Zebras.jpg": "nature-39",
     "download (16).jpg": "nature-40",
     "download (17).jpg": "nature-41",
-    "Antelope Canyon.jpg": null
+    "Antelope Canyon.jpg": null,
+    "bee.jpg": "nature-42",
+    "butterfly-1.jpg": "nature-43",
+    "cat.jpg": "nature-44",
+    "CD.jpg": "nature-45",
+    "deer-cat.jpg": "nature-46",
+    "lady-bug.jpg": "nature-47",
+    "lotus-under.jpg": "nature-48",
+    "pink-mantus.jpg": "nature-49",
+    "pond.jpg": "nature-50",
+    "small-monkey.jpg": "nature-51"
   },
   "table": {
     "160419.jpg": "table-01",
@@ -122,5 +132,15 @@
     "engin_akyurt-textile-1824172.jpg": "fabric-06",
     "flat-lay-tie-dye-fabric.jpg": "fabric-07",
     "virin000-textile-2918844.jpg": "fabric-08"
+  },
+  "dakshin": {
+    "astk-peackock.jpg": "dakshin-01",
+    "bharatanatyam-hands.jpg": "dakshin-02",
+    "brass-statue.jpg": "dakshin-03",
+    "eye-rings.jpg": "dakshin-04",
+    "Filter-coffee.jpg": "dakshin-05",
+    "kamala.jpg": "dakshin-06",
+    "Kesha-Vinyas.jpg": "dakshin-07",
+    "temple.jpg": "dakshin-08"
   }
 }

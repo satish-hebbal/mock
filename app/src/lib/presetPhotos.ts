@@ -5,7 +5,7 @@
 // render.ts, the same way an uploaded background image does, so nothing here
 // needs multiple crops for different aspect ratios.
 
-export type PresetPhotoCategory = 'abstract' | 'nature' | 'table' | 'anime' | 'fabric'
+export type PresetPhotoCategory = 'abstract' | 'nature' | 'table' | 'anime' | 'fabric' | 'dakshin'
 
 export interface PresetPhoto {
   id: string
@@ -30,8 +30,10 @@ export const PRESET_PHOTO_CATEGORIES: {
   count: number
 }[] = [
   { id: 'abstract', label: 'Abstract', count: 36 },
-  { id: 'nature', label: 'Nature', count: 41 },
+  { id: 'nature', label: 'Nature', count: 51 },
   { id: 'anime', label: 'Anime', count: 21 },
+  // South Indian craft and temple imagery: "dakshin" is south, one word
+  { id: 'dakshin', label: 'Dakshin', count: 8 },
   { id: 'table', label: 'Table', count: 7 },
   { id: 'fabric', label: 'Fabric', count: 8 },
 ]

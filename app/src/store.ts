@@ -582,16 +582,28 @@ export const useStudio = create<StudioState>()(
       get().commit('add-device')
       set((s) => {
         const spec = getDevice(modelId)
-        const n = cur(s.project).scene.devices.length
+        const devices = cur(s.project).scene.devices
+        const n = devices.length
+        /*
+         * A new device shows the screenshot already on screen: the one on the
+         * picked device, or failing that any in the scene. Starting it blank
+         * meant adding a laptop and removing the phone left a black display
+         * with the media still sitting in the panel, which reads as a bug.
+         */
+        const picked = devices.find((d) => d.id === s.selectedDeviceId)
+        const assetId =
+          (picked?.screen.assetId && s.assets[picked.screen.assetId] ? picked.screen.assetId : null) ??
+          devices.find((d) => d.screen.assetId && s.assets[d.screen.assetId])?.screen.assetId ??
+          null
         const dev: DeviceInstance = {
           id: `dev_${uid()}`,
           modelId,
           colorVariant: spec.colors[0]?.id ?? 'black',
           orientation: spec.screenAspect < 1 ? 'portrait' : 'landscape',
           transform: { position: [n * 1.3, 0, -n * 0.15], rotation: [0, 0, 0], scale: 1 },
-          screen: { assetId: null, fit: 'cover', scroll: 0 },
+          screen: { assetId, fit: 'cover', scroll: 0 },
         }
-        cur(s.project).scene.devices.push(dev)
+        devices.push(dev)
         s.selectedDeviceId = dev.id
       })
     },

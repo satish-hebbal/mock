@@ -24,7 +24,10 @@
 
 import { useEffect, useState, type ReactNode } from 'react'
 import {
+  ArrowDownToLine,
   ArrowRight,
+  ArrowUpToLine,
+  Copy,
   Circle,
   Diamond,
   Download,
@@ -41,6 +44,7 @@ import {
   Redo2,
   Square,
   StickyNote,
+  Trash2,
   Type,
   Undo2,
   type LucideIcon,
@@ -172,6 +176,37 @@ function Flyout({ children, onClose }: { children: ReactNode; onClose: () => voi
   )
 }
 
+/**
+ * What to do with the selection, where the thumb already is.
+ *
+ * The desktop deletes with a key and reaches the rest from a right-click menu,
+ * and a phone has neither, so a selection brings its own bar up over the
+ * bottom of the page: the same four actions the desktop menu leads with, with
+ * Delete set apart at the end in red. It goes away with the selection.
+ */
+function SelectionBar() {
+  const ids = useDraw((s) => s.selectedIds)
+  const editing = useDraw((s) => s.editingTextId)
+  if (!ids.length || editing) return null
+  const st = useDraw.getState
+  return (
+    <div className="m-fade pointer-events-none absolute inset-x-3 bottom-3 z-30 flex justify-center">
+      <div className="pointer-events-auto flex items-center gap-1 rounded-2xl border border-(--line) bg-(--raised)/95 p-1.5 shadow-[0_12px_32px_rgb(0_0_0/0.28)] backdrop-blur-md">
+        <TrayButton icon={Copy} label="Duplicate" onClick={() => st().duplicateSelection()} />
+        <TrayButton icon={ArrowUpToLine} label="Front" onClick={() => st().reorder('front')} />
+        <TrayButton icon={ArrowDownToLine} label="Back" onClick={() => st().reorder('back')} />
+        <span aria-hidden className="mx-0.5 h-8 w-px bg-(--line)" />
+        <TrayButton
+          icon={Trash2}
+          label={ids.length > 1 ? `Delete ${ids.length}` : 'Delete'}
+          danger
+          onClick={() => st().removeElements(ids)}
+        />
+      </div>
+    </div>
+  )
+}
+
 /** Zoom, only once it has moved: tap to go back to 100%. */
 function ZoomPill() {
   const zoom = useDraw((s) => s.viewport.zoom)
@@ -266,6 +301,7 @@ export function DrawMobile() {
             <PenTray />
             <ZoomPill />
             <FirstHint />
+            {tray === null && <SelectionBar />}
           </>
         )}
 

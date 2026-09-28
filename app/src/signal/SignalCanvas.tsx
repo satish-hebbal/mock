@@ -43,7 +43,11 @@ function useContainerSize(ref: React.RefObject<HTMLDivElement | null>) {
   return size
 }
 
-export function SignalCanvas() {
+/**
+ * `compact` is the phone's canvas: a slimmer gutter, and no transport or
+ * readout, since the phone floats its own controls over the picture.
+ */
+export function SignalCanvas({ compact = false }: { compact?: boolean }) {
   const size = useSignal((s) => s.doc.canvas)
   const wrap = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -51,8 +55,8 @@ export function SignalCanvas() {
   const [fps, setFps] = useState(0)
 
   const aspect = size.width / Math.max(1, size.height)
-  const boxW = Math.max(0, availW - 48)
-  const boxH = Math.max(0, availH - 72)
+  const boxW = Math.max(0, availW - (compact ? 24 : 48))
+  const boxH = Math.max(0, availH - (compact ? 24 : 72))
   const dispW = Math.max(1, Math.min(boxW, boxH * aspect))
   const dispH = Math.max(1, dispW / aspect)
 
@@ -149,17 +153,19 @@ export function SignalCanvas() {
   return (
     <div
       ref={wrap}
-      className="relative flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden rounded-lg border border-(--line) bg-(--panel)"
+      className={`relative flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden bg-(--panel) ${
+        compact ? 'h-full' : 'rounded-lg border border-(--line)'
+      }`}
     >
       <canvas ref={canvasRef} style={{ width: dispW, height: dispH }} className="block rounded-sm" />
 
-      <div className="absolute bottom-2 left-3 flex items-center gap-3">
+      {!compact && <div className="absolute bottom-2 left-3 flex items-center gap-3">
         <Transport />
         <p className="t-caption text-(--tx3) tabular-nums">
           {size.width} × {size.height} · {fps} fps
           {fit && previewPct < 100 ? ` · preview ${previewPct}%` : ''}
         </p>
-      </div>
+      </div>}
     </div>
   )
 }

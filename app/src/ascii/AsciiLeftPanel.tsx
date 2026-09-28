@@ -104,7 +104,7 @@ function HeaderIcon({
  * buttons in the body: they are things you do once in a while to the look as a
  * whole, and the body is for picking one.
  */
-function LooksGroup() {
+export function LooksGroup() {
   const saved = useAscii((s) => s.saved)
   const style = useAscii((s) => s.doc.style)
   const st = useAscii.getState
@@ -207,7 +207,7 @@ function LooksGroup() {
   )
 }
 
-function SourceGroup() {
+export function SourceGroup() {
   const url = useAscii((s) => s.url)
   const size = useAscii((s) => s.doc.size)
 
@@ -257,7 +257,7 @@ function SourceGroup() {
  * of them, a few rows for the rest. Titled with the style, so it is obvious
  * whose settings these are.
  */
-function StyleSettingsGroup() {
+export function StyleSettingsGroup() {
   const doc = useAscii((s) => s.doc)
   const spec = getStyle(doc.style)
   if (!spec.params?.length) return null
@@ -279,7 +279,7 @@ function StyleSettingsGroup() {
  * The name of a ramp tells you nothing and the characters tell you everything,
  * so each button is a sample of the set and the name waits on hover.
  */
-function CharactersGroup() {
+export function CharactersGroup() {
   const doc = useAscii((s) => s.doc)
   const spec = getStyle(doc.style)
   if (!spec.ramp) return null
@@ -344,7 +344,7 @@ function CharactersGroup() {
   )
 }
 
-function GridGroup() {
+export function GridGroup() {
   const doc = useAscii((s) => s.doc)
   const spec = getStyle(doc.style)
   if (spec.group === 'process') return null
@@ -388,7 +388,7 @@ function GridGroup() {
   )
 }
 
-function ToneGroup() {
+export function ToneGroup() {
   const tone = useAscii((s) => s.doc.tone)
   const cells = getStyle(useAscii((s) => s.doc.style)).group !== 'process'
   return (
@@ -467,7 +467,7 @@ function ToneGroup() {
   )
 }
 
-function DitherGroup() {
+export function DitherGroup() {
   const doc = useAscii((s) => s.doc)
   if (doc.style !== 'dither') return null
   const d = doc.dither
@@ -587,7 +587,7 @@ const COMPOSITES: { value: CompositeId; label: string }[] = [
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).replace('-', ' ')
 
-function ColorGroup() {
+export function ColorGroup() {
   const c = useAscii((s) => s.doc.color)
   const style = useAscii((s) => s.doc.style)
   const cells = getStyle(style).group !== 'process'
@@ -738,7 +738,7 @@ function ColorGroup() {
   )
 }
 
-function BackdropGroup() {
+export function BackdropGroup() {
   const bd = useAscii((s) => s.doc.backdrop)
   return (
     <Section title="Backdrop" icon={<ImageIcon {...iconProps} />} defaultOpen>

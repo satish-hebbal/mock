@@ -50,7 +50,8 @@ import {
   setSurfaceSize,
   useDraw,
 } from './store'
-import { FONT_STACKS, isLinear, isStroke, noteInk, paperIsDark, type DrawElement } from './types'
+import { FONT_STACKS, MAX_ZOOM, MIN_ZOOM, isLinear, isStroke, noteInk, paperIsDark, type DrawElement } from './types'
+import { useTouchUI } from '../lib/touch'
 import { useStudio } from '../store'
 
 /** How close counts as "on" a line, in screen pixels. */
@@ -103,6 +104,55 @@ export function DrawCanvas() {
   /** the element under the pointer right now, outside of React's knowledge */
   const live = useRef<DrawElement | null>(null)
   const gesture = useRef<Gesture>({ kind: 'none' })
+
+  /*
+   * Fingers.
+   *
+   * Everything below was written for one pointer, which on a touchscreen means
+   * a second finger arriving would start a second stroke on top of the first.
+   * Two fingers mean the view instead, the way they do in every drawing app on
+   * a phone: whatever the first finger had begun is taken back, and the pair
+   * pinches the zoom and drags the page. Once a pinch has happened, no finger
+   * draws again until every finger has lifted, so the last one off the glass
+   * does not leave a stray mark as it goes.
+   */
+  const touchUI = useTouchUI()
+  const touches = useRef(new Map<number, { x: number; y: number }>())
+  const pinch = useRef<{ dist: number; mid: { x: number; y: number }; zoom: number; scrollX: number; scrollY: number } | null>(null)
+  const pinchHold = useRef(false)
+  /** grips and hit tests are aimed with a fingertip, not a cursor tip */
+  const grab = touchUI ? HANDLE_SIZE * 2.5 : HANDLE_SIZE
+  const slop = touchUI ? HIT_SLOP * 2 : HIT_SLOP
+
+  const twoFingers = () => {
+    const [a, b] = [...touches.current.values()]
+    return { dist: Math.max(1, Math.hypot(b.x - a.x, b.y - a.y)), mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } }
+  }
+
+  const beginPinch = () => {
+    const s = useDraw.getState()
+    const g = gesture.current
+    // a move, resize or rotate committed before it started, so undo is exact
+    if (g.kind === 'move' || g.kind === 'resize' || g.kind === 'rotate') s.undo()
+    live.current = null
+    gesture.current = { kind: 'none' }
+    const { dist, mid } = twoFingers()
+    const vp = s.viewport
+    pinch.current = { dist, mid, zoom: vp.zoom, scrollX: vp.scrollX, scrollY: vp.scrollY }
+    pinchHold.current = true
+    invalidate()
+  }
+
+  const applyPinch = () => {
+    const P = pinch.current
+    if (!P) return
+    const { dist, mid } = twoFingers()
+    const zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, (P.zoom * dist) / P.dist))
+    // the scene point that was under the fingers' midpoint stays under it
+    const sceneX = P.mid.x / P.zoom - P.scrollX
+    const sceneY = P.mid.y / P.zoom - P.scrollY
+    useDraw.getState().setViewport({ zoom, scrollX: mid.x / zoom - sceneX, scrollY: mid.y / zoom - sceneY })
+  }
   const spaceDown = useRef(false)
   const pointer = useRef({ x: 0, y: 0, inside: false })
   /** where the last paste landed, so a second one does not hide under it */
@@ -330,7 +380,7 @@ export function DrawCanvas() {
   }
 
   /** How far outside a corner grip still counts as "rotate this", not "miss". */
-  const ROTATE_RING = HANDLE_SIZE + 10
+  const ROTATE_RING = grab + 10
 
   /**
    * Which grip is under the pointer, if any — a resize handle exactly on a
@@ -352,14 +402,14 @@ export function DrawCanvas() {
     for (const [id, [hx, hy]] of Object.entries(pos) as [ResizeHandleId, [number, number]][]) {
       const sxp = (hx + s.viewport.scrollX) * s.viewport.zoom
       const syp = (hy + s.viewport.scrollY) * s.viewport.zoom
-      if (Math.abs(px - sxp) <= HANDLE_SIZE && Math.abs(py - syp) <= HANDLE_SIZE) return { id }
+      if (Math.abs(px - sxp) <= grab && Math.abs(py - syp) <= grab) return { id }
     }
     for (const corner of CORNER_HANDLES) {
       const [hx, hy] = pos[corner]
       const sxp = (hx + s.viewport.scrollX) * s.viewport.zoom
       const syp = (hy + s.viewport.scrollY) * s.viewport.zoom
       const d = Math.hypot(px - sxp, py - syp)
-      if (d > HANDLE_SIZE && d <= ROTATE_RING) return { id: 'rotate', corner, angle }
+      if (d > grab && d <= ROTATE_RING) return { id: 'rotate', corner, angle }
     }
     return null
   }
@@ -367,7 +417,7 @@ export function DrawCanvas() {
   /** Topmost element under the pointer. */
   const elementAt = (scene: { x: number; y: number }) => {
     const s = useDraw.getState()
-    const tol = HIT_SLOP / s.viewport.zoom
+    const tol = slop / s.viewport.zoom
     for (let i = s.doc.elements.length - 1; i >= 0; i--) {
       const el = s.doc.elements[i]
       if (el.kind === 'erase' || el.locked) continue
@@ -396,6 +446,16 @@ export function DrawCanvas() {
   // ----- pointer -----
   const onPointerDown = (e: React.PointerEvent) => {
     if (fromOverlay(e)) return
+
+    if (e.pointerType === 'touch') {
+      touches.current.set(e.pointerId, localPoint(e))
+      if (touches.current.size >= 2) {
+        e.currentTarget.setPointerCapture(e.pointerId)
+        beginPinch()
+        return
+      }
+      if (pinchHold.current) return
+    }
 
     if (e.button === 1 || (e.button === 0 && (spaceDown.current || tool === 'hand'))) {
       const p = localPoint(e)
@@ -538,6 +598,14 @@ export function DrawCanvas() {
   }
 
   const onPointerMove = (e: React.PointerEvent) => {
+    if (e.pointerType === 'touch' && touches.current.has(e.pointerId)) {
+      touches.current.set(e.pointerId, localPoint(e))
+      if (pinch.current && touches.current.size >= 2) {
+        applyPinch()
+        return
+      }
+      if (pinchHold.current) return
+    }
     const s = useDraw.getState()
     const p = localPoint(e)
     pointer.current = { x: p.x, y: p.y, inside: true }
@@ -731,7 +799,15 @@ export function DrawCanvas() {
     invalidate()
   }
 
-  const onPointerUp = () => {
+  const onPointerUp = (e?: React.PointerEvent) => {
+    if (e?.pointerType === 'touch') {
+      touches.current.delete(e.pointerId)
+      if (pinchHold.current) {
+        if (touches.current.size < 2) pinch.current = null
+        if (touches.current.size === 0) pinchHold.current = false
+        return
+      }
+    }
     const s = useDraw.getState()
     const g = gesture.current
     gesture.current = { kind: 'none' }

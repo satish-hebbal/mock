@@ -497,6 +497,8 @@ export function createFrogs(layout: Layout, sitting: number, swimming: number, s
     const high = frogs.filter((f) => f.mode !== 'swim')
     let o = 0
     for (const f of [...low, ...high]) {
+      // the engine sizes the buffer for the most frogs a scene can seat; this only keeps a miscount from overrunning it
+      if (o + FLOATS_PER_FROG > out.length) break
       const anchor = f.mode === 'sit' ? pads[f.pad] : f.mode === 'leap' ? leapAnchor(f.leap!) : f
       out.set([f.x, f.y, f.heading, f.length, f.blink, f.puff, f.stretch, f.hop, anchor.x, anchor.y, f.seed, f.kind, f.wet, f.depth, 0, 0], o)
       o += FLOATS_PER_FROG

@@ -27,6 +27,7 @@ import {
 } from '../components/controls'
 import { NotchedFrame } from '../components/NotchedCanvas'
 import { NOTCH_PAD, notchForPill } from '../lib/notch'
+import { useTouchUI } from '../lib/touch'
 import { PRESETS, PRESET_GROUPS } from './presets'
 import { LookArt, SourceArt, Tile, TileGrid } from './SignalTiles'
 import { firstOf, groupsOf, paramsFor, sourcesOf, sourceUses, type ParamSpec } from './sources'
@@ -45,12 +46,13 @@ const edit = (label: string, fn: (d: SignalDoc) => void) => useSignal.getState()
 const sourceLabel = (kind: SourceKind, id: string) =>
   sourcesOf(kind).find((s) => s.id === id)?.label ?? id
 
-function LooksGroup() {
+export function LooksGroup() {
   const source = useSignal((s) => s.doc.source.id)
   const ink = useSignal((s) => s.doc.ink.ink)
   const paper = useSignal((s) => s.doc.ink.paper)
   const [group, setGroup] = useState<string>('House')
   const items = PRESETS.filter((p) => p.group === group)
+  const touch = useTouchUI()
 
   return (
     <Section
@@ -70,7 +72,15 @@ function LooksGroup() {
        * scrolling list of them is a worse way in than no list at all. The group
        * is picked first, which turns one impossible choice into two easy ones.
        */}
-      <div className="mb-2 flex flex-wrap gap-1">
+      {/* on a phone the groups are one line that scrolls sideways, so the
+          looks start in view rather than under three rows of chips */}
+      <div
+        className={
+          touch
+            ? '-mx-4 mb-3 flex gap-1.5 overflow-x-auto px-4 [scrollbar-width:none] *:shrink-0'
+            : 'mb-2 flex flex-wrap gap-1'
+        }
+      >
         {PRESET_GROUPS.map((g) => (
           <MiniButton key={g} active={group === g} onClick={() => setGroup(g)}>
             {g}
@@ -107,7 +117,7 @@ function LooksGroup() {
   )
 }
 
-function GeneratorGroup() {
+export function GeneratorGroup() {
   const kind = useSignal((s) => s.doc.source.kind)
   const id = useSignal((s) => s.doc.source.id)
   const current = sourcesOf(kind).find((s) => s.id === id)
@@ -183,7 +193,7 @@ function GeneratorGroup() {
  * gets its four coefficients, and the panel is drawn from that declaration
  * rather than from a list kept somewhere it could fall out of step.
  */
-function ShapeGroup() {
+export function ShapeGroup() {
   const source = useSignal((s) => s.doc.source)
   const spec = sourcesOf(source.kind).find((s) => s.id === source.id)
   const own = spec?.params ?? []
@@ -341,7 +351,7 @@ function remixShape(specs: ParamSpec[]) {
   })
 }
 
-function MotionGroup() {
+export function MotionGroup() {
   const kind = useSignal((s) => s.doc.source.kind)
   const id = useSignal((s) => s.doc.source.id)
   const motion = useSignal((s) => s.doc.motion)

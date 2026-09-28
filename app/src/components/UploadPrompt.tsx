@@ -1,4 +1,5 @@
 import { pickMediaFiles } from '../store'
+import { useTouchUI } from '../lib/touch'
 
 /*
  * The empty-state prompt: one line of instruction and the button that carries
@@ -14,9 +15,13 @@ import { pickMediaFiles } from '../store'
  * frame is genuinely empty and the prompt belongs in the centre of it.
  */
 export function UploadPrompt({ onFiles }: { onFiles: (files: File[]) => void }) {
+  // a phone has nothing to paste or drop from, and no room for the sentence
+  const touch = useTouchUI()
   return (
     <div className="pointer-events-auto flex items-center gap-3 rounded-full border border-(--line) bg-(--raised) py-2 pr-2 pl-5">
-      <span className="t-body text-(--tx2)">Upload media to get started (or paste / drop).</span>
+      <span className="t-body text-(--tx2)">
+        {touch ? 'Add a screenshot to start' : 'Upload media to get started (or paste / drop).'}
+      </span>
       {/*
         Pill, not the default `rounded-md` button: this one is nested inside a
         pill-shaped prompt, and the radius scale carries "pill/full" precisely

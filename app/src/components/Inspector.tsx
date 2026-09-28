@@ -126,7 +126,7 @@ function MediaTile({
   )
 }
 
-function MediaSection() {
+export function MediaSection() {
   const selectedDeviceId = useStudio((s) => s.selectedDeviceId)
   const device = useStudio(
     (s) =>
@@ -251,7 +251,7 @@ function MediaSection() {
 
 // ----- Camera -----
 
-function CameraSection() {
+export function CameraSection() {
   const cam = useStudio((s) => activeShot(s.project).scene.camera)
   const setAnimatable = useStudio((s) => s.setAnimatable)
 
@@ -303,7 +303,7 @@ function CameraSection() {
 
 // ----- Scene (background / environment / ground) -----
 
-function SceneSection() {
+export function SceneSection() {
   const bg = useStudio((s) => activeShot(s.project).scene.background)
   const env = useStudio((s) => activeShot(s.project).scene.environment)
   const ground = useStudio((s) => activeShot(s.project).scene.ground)
@@ -606,7 +606,7 @@ function ModeTile({
   )
 }
 
-function PortraitSection() {
+export function PortraitSection() {
   /*
    * The fallback is applied outside the selector on purpose. `portraitOf`
    * builds a fresh object when the field is missing, and zustand compares
@@ -707,7 +707,7 @@ function PortraitSection() {
   )
 }
 
-function EffectsSection() {
+export function EffectsSection() {
   const fx = useStudio((s) => activeShot(s.project).scene.effects)
   const setEffects = useStudio((s) => s.setEffects)
   const setGrade = useStudio((s) => s.setGrade)
@@ -741,7 +741,7 @@ function EffectsSection() {
 
 // ----- Devices -----
 
-function DevicesSection() {
+export function DevicesSection() {
   const devices = useStudio((s) => activeShot(s.project).scene.devices)
   const selectedId = useStudio((s) => s.selectedDeviceId)
   const st = useStudio.getState
@@ -878,7 +878,7 @@ function DeviceTransformRows({ deviceId }: { deviceId: string }) {
 
 // ----- Overlays -----
 
-function OverlaysSection() {
+export function OverlaysSection() {
   const overlays = useStudio((s) => activeShot(s.project).overlays)
   const selectedId = useStudio((s) => s.selectedOverlayId)
   const hasAnimation = useStudio((s) =>

@@ -120,7 +120,7 @@ export function UILayer() {
   return (
     <>
       {request && <RequestDialog request={request} />}
-      <div className="pointer-events-none fixed right-4 bottom-4 z-[70] flex flex-col items-end gap-2">
+      <div className="toast-stack pointer-events-none fixed right-4 bottom-4 z-[70] flex flex-col items-end gap-2">
         {toasts.map((t) => {
           const Icon = TOAST_ICON[t.kind]
           return (

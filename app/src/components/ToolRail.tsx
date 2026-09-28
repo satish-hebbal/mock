@@ -68,7 +68,7 @@ function RailDivider() {
  * The site mark, drawn inline rather than loaded as an image so it takes
  * currentColor and dims with the rest of the rail in either theme.
  */
-function SiteMark({ size = 16 }: { size?: number }) {
+export function SiteMark({ size = 16 }: { size?: number }) {
   return (
     <svg
       width={size}

@@ -1,3 +1,4 @@
+import { useTouchUI } from '../lib/touch'
 import { activeShot } from '../lib/sequence'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
@@ -105,8 +106,9 @@ function Group({
   action?: ReactNode
   children: ReactNode
 }) {
+  const touch = useTouchUI()
   return (
-    <div className={`px-3 py-3 ${divider ? 'border-b border-(--line) last:border-b-0' : ''}`}>
+    <div className={`${touch ? 'px-4 py-3.5' : 'px-3 py-3'} ${divider ? 'border-b border-(--line) last:border-b-0' : ''}`}>
       {label && (
         <div className="mb-1.5 flex items-center justify-between gap-2">
           <p className="t-eyebrow text-(--tx3) uppercase">{label}</p>
@@ -132,12 +134,13 @@ function Chip({
   title?: string
   full?: boolean
 }) {
+  const touch = useTouchUI()
   return (
     <button
       onClick={onClick}
       title={title}
       aria-pressed={active}
-      className={`inline-flex h-7 items-center gap-1.5 rounded-sm px-2.5 t-body-sm whitespace-nowrap transition-colors ${
+      className={`inline-flex ${touch ? 'h-10 px-3' : 'h-7'} items-center gap-1.5 rounded-sm px-2.5 t-body-sm whitespace-nowrap transition-colors ${
         full ? 'w-full justify-center' : ''
       } ${
         active
@@ -166,12 +169,13 @@ function ListRow({
   onClick: () => void
   title?: string
 }) {
+  const touch = useTouchUI()
   return (
     <button
       onClick={onClick}
       title={title ?? label}
       aria-pressed={active}
-      className={`flex h-8 w-full items-center gap-2 rounded-sm px-2 text-left t-body-sm transition-colors ${
+      className={`flex ${touch ? 'h-11' : 'h-8'} w-full items-center gap-2 rounded-sm px-2 text-left t-body-sm transition-colors ${
         active
           ? 'bg-(--sel) text-(--tx)'
           : 'text-(--tx2) hover:bg-(--field) hover:text-(--tx)'
@@ -251,7 +255,7 @@ const ARRANGE = [
 /** How many devices share a row of the scene strip, so a tip can open inward. */
 const SCENE_COLS = 5
 
-function DevicesSection() {
+export function DevicesSection() {
   const devices = useStudio((s) => activeShot(s.project).scene.devices)
   const selectedId = useStudio((s) => s.selectedDeviceId)
   const [cat, setCat] = useState<'All' | (typeof DEVICE_CATEGORIES)[number]>('All')
@@ -521,7 +525,7 @@ function atPreset(cam: CameraState, preset: CameraPreset): boolean {
   )
 }
 
-function CameraSection() {
+export function CameraSection() {
   const cam = useStudio((s) => activeShot(s.project).scene.camera)
   const st = useStudio.getState
   return (
@@ -640,7 +644,7 @@ function FramePreview({
   )
 }
 
-function FrameSection() {
+export function FrameSection() {
   const size = useStudio((s) => s.project.exportSize)
   const setExportSize = useStudio((s) => s.setExportSize)
   const background = useStudio((s) => activeShot(s.project).scene.background)
@@ -1096,7 +1100,7 @@ const SCENE_TABS = [
   { id: 'looks', label: 'Studio' },
 ] as const
 
-function BackgroundSection() {
+export function BackgroundSection() {
   const [tab, setTab] = useState<(typeof SCENE_TABS)[number]['id']>('backdrop')
   return (
     <>
@@ -1135,7 +1139,7 @@ function BackgroundSection() {
   )
 }
 
-function AddSection() {
+export function AddSection() {
   return (
     <Group label="Insert">
       <div className="flex flex-col gap-0.5">

@@ -128,7 +128,7 @@ function sheetSize(w: number, h: number) {
     : { width: (long * w) / h, height: long }
 }
 
-function DitherGroup() {
+export function DitherGroup() {
   const kind = useSignal((s) => s.doc.source.kind)
   const q = useSignal((s) => s.doc.quantize)
 
@@ -287,7 +287,7 @@ function PaletteStack({ activeId }: { activeId: string }) {
   )
 }
 
-function ColourGroup() {
+export function ColourGroup() {
   const ink = useSignal((s) => s.doc.ink)
   const kind = useSignal((s) => s.doc.source.kind)
   const [palettes, setPalettes] = useState(false)
@@ -413,7 +413,7 @@ function ColourGroup() {
  * picture once it is. The ones on sit above the library, because the chain you
  * are working on should not be scattered through the twenty you are not.
  */
-function FinishGroup() {
+export function FinishGroup() {
   const fx = useSignal((s) => s.doc.fx)
   const big = useSignal((s) => s.doc.canvas.width * s.doc.canvas.height) > 1_200_000
   const active = FX_ORDER.filter((f) => (fx[f.id]?.amount ?? 0) > 0)
@@ -535,7 +535,7 @@ function FinishGroup() {
   )
 }
 
-function CanvasGroup() {
+export function CanvasGroup() {
   const canvas = useSignal((s) => s.doc.canvas)
   const match = CANVAS_PRESETS.find((p) => p.width === canvas.width && p.height === canvas.height)
 
@@ -619,7 +619,7 @@ function CanvasGroup() {
   )
 }
 
-function SavedGroup() {
+export function SavedGroup() {
   const slots = useSignal((s) => s.slots)
   return (
     <Section

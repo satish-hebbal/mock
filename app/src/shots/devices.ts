@@ -121,16 +121,15 @@ export function devicePatchFor(d: DeviceSpec): { device: ShotsDeviceId; frame: S
 
 /**
  * Docs saved against the old placeholder catalog ('iphone', 'android', …).
- * Phones and tablets map onto the closest real frame; the drawn laptop, desktop
- * and watch had no equivalent asset, so those fall back to a bare screenshot
- * rather than silently becoming a phone.
+ * Each maps onto the closest real frame; the watch still has no asset, so it
+ * falls back to a bare screenshot rather than silently becoming a phone.
  */
 const LEGACY: Record<string, ShotsDeviceId> = {
   iphone: 'iphone-16-plus', // the old placeholder was 430×932
   android: 'iphone-16',
   ipad: 'ipad-pro-13',
-  macbook: NO_DEVICE,
-  imac: NO_DEVICE,
+  macbook: 'macbook-pro-16',
+  imac: 'imac-24',
   watch: NO_DEVICE,
 }
 

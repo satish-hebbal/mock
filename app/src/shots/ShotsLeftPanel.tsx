@@ -9,8 +9,10 @@ import {
   Focus,
   Image as ImageIcon,
   ImageUp,
+  Laptop,
   LayoutGrid,
   Link2,
+  Monitor,
   Palette,
   Pipette,
   Plus,
@@ -156,6 +158,8 @@ const DEVICE_TABS: { id: DeviceCategory | 'all'; label: string; icon: LucideIcon
   { id: 'all', label: 'All', icon: LayoutGrid },
   { id: 'phone', label: 'Phone', icon: Smartphone },
   { id: 'tablet', label: 'Tablet', icon: Tablet },
+  { id: 'laptop', label: 'Laptop', icon: Laptop },
+  { id: 'desktop', label: 'Desktop', icon: Monitor },
   { id: 'window', label: 'Window', icon: AppWindow },
 ]
 
@@ -301,7 +305,7 @@ export function DevicePicker() {
             {DEVICE_TABS.map((t) => {
               const active = tab === t.id
               /*
-               * Only "All" carries its name. Four labelled tabs need more width
+               * Only "All" carries its name. Six labelled tabs need more width
                * than a 280px panel has, and the categories are the ones whose
                * icons are unambiguous, so they keep the icon and hand the word
                * to the tooltip.

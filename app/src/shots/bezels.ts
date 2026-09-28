@@ -20,7 +20,7 @@
  * Adding a device is one row here plus the PNG: nothing else needs to change.
  */
 
-export type BezelCategory = 'phone' | 'tablet'
+export type BezelCategory = 'phone' | 'tablet' | 'laptop' | 'desktop'
 
 export interface Bezel {
   id: string
@@ -117,6 +117,121 @@ export const BEZELS: Bezel[] = [
     frame: { w: 1500, h: 1150 },
     screen: { x: 62, y: 59, w: 1376, h: 1032 },
     radius: 26,
+  },
+  {
+    id: 'ipad-pro-11',
+    label: 'iPad Pro 11"',
+    category: 'tablet',
+    src: '/bezzles/iPad%20Pro%2011.png',
+    frame: { w: 1320, h: 940 },
+    screen: { x: 55, y: 53, w: 1210, h: 834 },
+    radius: 29,
+  },
+  {
+    id: 'ipad-air-13',
+    label: 'iPad Air 13"',
+    category: 'tablet',
+    src: '/bezzles/iPad%20Air%2013.png',
+    frame: { w: 1490, h: 1150 },
+    screen: { x: 62, y: 63, w: 1366, h: 1024 },
+    radius: 17,
+  },
+  {
+    id: 'ipad-air-11',
+    label: 'iPad Air 11"',
+    category: 'tablet',
+    src: '/bezzles/iPad%20Air%2011.png',
+    frame: { w: 1310, h: 950 },
+    screen: { x: 65, y: 65, w: 1180, h: 820 },
+    radius: 19,
+  },
+  {
+    id: 'ipad-mini',
+    label: 'iPad mini',
+    category: 'tablet',
+    src: '/bezzles/iPad%20mini.png',
+    frame: { w: 1275, h: 890 },
+    screen: { x: 71, y: 73, w: 1133, h: 744 },
+    radius: 22,
+  },
+  {
+    id: 'ipad-a16', // not 'ipad': old docs use that for the placeholder the Pro 13 replaced
+    label: 'iPad',
+    category: 'tablet',
+    src: '/bezzles/iPad.png',
+    frame: { w: 1380, h: 1020 },
+    screen: { x: 100, y: 100, w: 1180, h: 820 },
+    radius: 24,
+  },
+  /*
+   * Macs and displays clip square. A MacBook's cutout rounds only its top
+   * corners, and a single radius can't say that: rounding all four would open
+   * a gap at the bottom where the hole is square. A square screenshot corner
+   * under a rounded hole is safe here, unlike on a phone, because the bezel
+   * around these screens is thick and opaque, so the corner lands on frame.
+   */
+  {
+    id: 'macbook-pro-16',
+    label: 'MacBook Pro 16"',
+    category: 'laptop',
+    src: '/bezzles/MacBook%20Pro%2016.png',
+    frame: { w: 2130, h: 1420 },
+    screen: { x: 201, y: 152, w: 1728, h: 1117 },
+    radius: 0,
+  },
+  {
+    id: 'macbook-pro-14',
+    label: 'MacBook Pro 14"',
+    category: 'laptop',
+    src: '/bezzles/MacBook%20Pro%2014.png',
+    frame: { w: 1930, h: 1270 },
+    screen: { x: 209, y: 144, w: 1512, h: 982 },
+    radius: 0,
+  },
+  {
+    id: 'macbook-air-15',
+    label: 'MacBook Air 15"',
+    category: 'laptop',
+    src: '/bezzles/MacBook%20Air%2015.png',
+    frame: { w: 1770, h: 1150 },
+    screen: { x: 164, y: 109, w: 1440, h: 932 },
+    radius: 0,
+  },
+  {
+    id: 'macbook-air-13',
+    label: 'MacBook Air 13"',
+    category: 'laptop',
+    src: '/bezzles/MacBook%20Air%2013.png',
+    frame: { w: 1700, h: 1120 },
+    screen: { x: 210, y: 144, w: 1280, h: 832 },
+    radius: 0,
+  },
+  {
+    id: 'macbook-neo',
+    label: 'MacBook Neo',
+    category: 'laptop',
+    src: '/bezzles/MacBook%20Neo.png',
+    frame: { w: 1610, h: 1050 },
+    screen: { x: 203, y: 148, w: 1204, h: 753 },
+    radius: 0,
+  },
+  {
+    id: 'imac-24',
+    label: 'iMac 24"',
+    category: 'desktop',
+    src: '/bezzles/iMac%2024.png',
+    frame: { w: 2380, h: 2025 },
+    screen: { x: 70, y: 75, w: 2240, h: 1260 },
+    radius: 0,
+  },
+  {
+    id: 'studio-display',
+    label: 'Studio Display',
+    category: 'desktop',
+    src: '/bezzles/Studio%20Display.png',
+    frame: { w: 2700, h: 2080 },
+    screen: { x: 70, y: 70, w: 2560, h: 1440 },
+    radius: 0,
   },
 ]
 

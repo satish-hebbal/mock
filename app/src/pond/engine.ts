@@ -49,7 +49,9 @@ export function createPond(el: PondElements, initial: { env: EnvName; light: boo
   let layout: Layout = buildLayout(width, height, SEED)
   const koi = createSchool(width, height, layout.unit)
   let clock = 30 // start the noise clock mid-flow so the first frame isn't suspiciously calm
-  let frogs = createFrogs(layout, 3, 2, derive(48271), clock)
+  const SITTING = 3
+  const SWIMMING = 2
+  let frogs = createFrogs(layout, SITTING, SWIMMING, derive(48271), clock)
   const flies = createFlies(12, derive(69621))
 
   let envName: EnvName = initial.env
@@ -68,7 +70,14 @@ export function createPond(el: PondElements, initial: { env: EnvName; light: boo
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
 
   const start = startingTier()
-  const renderer = start === 'poster' ? null : createRenderer(canvas, koi.count, frogs.count)
+  /*
+   * The frog buffer is sized for the most frogs a scene can hold, not for the
+   * first scene's. How many find a seat depends on the pads, so a pond laid out
+   * again (a phone's tall first layout, then the shorter one under the shore)
+   * can hold more frogs than it started with, and a buffer sized to the first
+   * count was overrun on the next frame.
+   */
+  const renderer = start === 'poster' ? null : createRenderer(canvas, koi.count, SITTING + SWIMMING)
   if (!renderer) {
     // a weak device, data saver, or no WebGL2: a still, painted pond and nothing running
     host.dataset.poster = ''
@@ -145,7 +154,7 @@ export function createPond(el: PondElements, initial: { env: EnvName; light: boo
   function rebuildScene(waterBottom: number) {
     layout = buildLayout(width, height, SEED, Math.min(height, waterBottom))
     koi.resize(width, layout.waterBottom, layout.unit)
-    frogs = createFrogs(layout, 3, 2, derive(48271), clock)
+    frogs = createFrogs(layout, SITTING, SWIMMING, derive(48271), clock)
     renderer!.resize(layout, TIERS[governor.tier])
   }
 

@@ -13,6 +13,7 @@
  * again. The pressed tile holds a spinner and the rest go quiet until it lands.
  */
 
+import { useTouchUI } from '../lib/touch'
 import { useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { MoreGrid, Swatch } from '../components/catalog'
@@ -47,13 +48,15 @@ function usePresetImport() {
 /** The featured row, for the empty canvas. */
 export function StarterRow() {
   const { pending, choose } = usePresetImport()
+  // on a phone the row fills the narrow column instead of a fixed 384px
+  const touch = useTouchUI()
 
   return (
-    <div className="flex flex-col items-center gap-2">
+    <div className={`flex flex-col items-center gap-2 ${touch ? 'w-full max-w-96' : ''}`}>
       <p className="t-caption text-(--tx3)">Or start from one of these</p>
       {/* the same 384px as the drop zone above it, three across, so the two
           offers read as one block rather than a panel and a stray row */}
-      <div className="grid w-96 max-w-full grid-cols-3 gap-2">
+      <div className={`grid grid-cols-3 gap-2 ${touch ? 'w-full' : 'w-96 max-w-full'}`}>
         {STARTERS.map((p) => (
           <button
             key={p.id}

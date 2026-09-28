@@ -32,54 +32,12 @@ import {
   TemplatesDialog,
 } from './components/dialogs'
 import { UILayer } from './components/ui'
-import { SmallScreen } from './components/SmallScreen'
+import { MobileApp } from './components/mobile/MobileApp'
 import { UploadPrompt } from './components/UploadPrompt'
 import { useIsDesktop } from './lib/breakpoint'
+import { usePlayback } from './lib/playback'
 import { modeFromLocation } from './lib/routes'
 import { ui } from './lib/ui'
-
-/**
- * rAF playback driver (PRD §5.4).
- *
- * Two clocks, one loop. In Shot it runs the take on screen and wraps at its
- * end, which is what you want while animating one move. In Film it runs the
- * compiled running time and hands the playhead from shot to shot as it crosses
- * each cut, so play is a preview of the file the exporter would write, blends
- * and all.
- */
-function usePlayback() {
-  const playing = useStudio((s) => s.playing)
-  useEffect(() => {
-    if (!playing) return
-    let raf = 0
-    let last = performance.now()
-    const tick = (now: number) => {
-      const s = useStudio.getState()
-      const dt = now - last
-      last = now
-
-      const sequence = s.scrubMode === 'sequence' && s.project.shots.length > 1
-      const span = sequence ? sequenceDuration(s.project) : activeShot(s.project).durationMs
-      const at = sequence ? globalTimeOf(s) : s.timeMs
-
-      let t = at + dt
-      if (t >= span) {
-        if (s.loop) t = span > 0 ? t % span : 0
-        else {
-          if (sequence) s.setGlobalTime(span)
-          else s.setTime(span)
-          s.setPlaying(false)
-          return
-        }
-      }
-      if (sequence) s.setGlobalTime(t)
-      else s.setTime(t)
-      raf = requestAnimationFrame(tick)
-    }
-    raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
-  }, [playing])
-}
 
 /*
  * Input types with no free-text state of their own (a colour swatch, a
@@ -905,9 +863,10 @@ function Editor() {
 /*
  * The gate sits above the editor rather than inside it, so on a phone none of
  * Editor's hooks ever run: no hydrate, no rAF playback loop, no window
- * listeners, no WebGL context. Crossing the breakpoint (rotating a tablet,
- * dragging a window wider) mounts the real thing.
+ * listeners, no WebGL context. The phone gets its own shell, where every tool
+ * has a layout of its own. Crossing the breakpoint (rotating a tablet,
+ * dragging a window wider) mounts the other one.
  */
 export default function App() {
-  return useIsDesktop() ? <Editor /> : <SmallScreen />
+  return useIsDesktop() ? <Editor /> : <MobileApp />
 }

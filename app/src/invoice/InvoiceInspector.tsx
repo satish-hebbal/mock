@@ -493,7 +493,7 @@ function PaperCard({
   )
 }
 
-function LookGroup() {
+export function LookGroup() {
   const look = useInvoice((s) => s.doc.look)
   const logoUrl = useInvoice((s) => s.logoUrl)
   const st = useInvoice.getState
@@ -778,7 +778,7 @@ function DetailsGroup() {
  * status *is* on this document and a sentence describing it was a step
  * removed.
  */
-function StatusGroup() {
+export function StatusGroup() {
   const doc = useInvoice((s) => s.doc)
   const t = totals(doc)
   const { stamp } = doc

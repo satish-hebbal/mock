@@ -4058,3 +4058,184 @@ button:hover > .inv-coin {
     scroll-behavior: auto !important;
   }
 }
+
+/*
+ * ----- The phone shell -----
+ *
+ * Everything under `.m-app` is the layout in `components/mobile`. The rules
+ * here are the ones a finger needs and a pointer never did.
+ */
+
+/* the page itself must not rubber-band or pull-to-refresh under a sheet drag */
+html:has(.m-app),
+html:has(.m-app) body {
+  overscroll-behavior: none;
+}
+
+.m-app {
+  height: 100dvh;
+  /* no grey flash on every tap, and no 300ms wait for a double-tap zoom */
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  /* a long press is a hold (Start over), not a request to select the chrome */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.m-app input,
+.m-app textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}
+/* iOS zooms the whole page into any field set under 16px, and never zooms back */
+.m-app input,
+.m-app textarea,
+.m-app select {
+  font-size: 16px;
+}
+
+/* a press answers at once, with a little give, and lets go on the settle curve */
+.m-press {
+  transition:
+    transform var(--dur-out) var(--ease-settle),
+    background-color var(--dur-out) var(--ease-smooth),
+    opacity var(--dur-out) var(--ease-smooth);
+}
+.m-press:active {
+  transform: scale(0.96);
+  transition-duration: 60ms;
+}
+
+/* a sheet or a page arriving fades up rather than cutting in */
+.m-fade {
+  animation: m-fade-in 220ms var(--ease-settle) both;
+}
+@keyframes m-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+/*
+ * Signal's tiles name themselves on hover, and a finger has no hover. So on a
+ * phone the name is always there, set on a shade along the tile's bottom edge,
+ * and the lift that answered the pointer is gone.
+ */
+.m-app .sg-tile:hover {
+  transform: none;
+}
+.m-app .sg-tile:hover::after {
+  box-shadow: 0 0 0 1.5px transparent;
+}
+.m-app .sg-tile[data-on]::after {
+  box-shadow: 0 0 0 2px var(--tx);
+}
+.m-app .sg-tip,
+.m-app .sg-tile[data-edge] .sg-tip {
+  top: auto;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 1;
+  width: auto;
+  max-width: none;
+  padding: 12px 5px 4px;
+  border-radius: 0 0 6px 6px;
+  background: linear-gradient(to top, rgb(0 0 0 / 0.62), transparent);
+  color: #fff;
+  box-shadow: none;
+  opacity: 1;
+  transform: none;
+  font-size: 10px;
+  line-height: 1.2;
+  text-align: center;
+}
+.m-app .sg-tip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.m-app .sg-tip-hint {
+  display: none;
+}
+
+/*
+ * Dialogs rise from the bottom edge as sheets, the shape a phone already uses
+ * for a choice that sits over the work, and where the buttons land under the
+ * thumb instead of in the middle of the screen.
+ */
+.m-app .overlay-scrim {
+  align-items: flex-end;
+  padding: 0;
+}
+.m-app .dialog-panel {
+  max-width: none;
+  max-height: 88dvh;
+  border-bottom: 0;
+  border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
+  padding-bottom: calc(20px + env(safe-area-inset-bottom));
+}
+
+/* toasts drop under the top bar, clear of the dock and the thumb */
+.m-app .toast-stack {
+  top: calc(env(safe-area-inset-top) + 60px);
+  bottom: auto;
+  left: 12px;
+  right: 12px;
+  align-items: center;
+}
+
+/* the pond's weather glyphs grow to a fingertip on the phone home */
+.m-app .pond-weather {
+  top: 10px;
+  right: 10px;
+  padding: 4px;
+}
+.m-app .pond-weather button {
+  width: 36px;
+  height: 36px;
+}
+
+/*
+ * The Studio and Shots seam, on the phone home.
+ *
+ * The desktop gates it behind 64rem because below that its row stacks into a
+ * column, where there is no neighbour to interlock with. The phone home keeps
+ * the pair side by side in two columns, so it gets the same cut, from the same
+ * outlines, with a smaller step to suit the narrower cards.
+ */
+@supports (clip-path: shape(from 0 0, line to 1px 1px, close)) {
+  .m-app .tool-step-in,
+  .m-app .tool-step-out {
+    border-radius: 0;
+    clip-path: var(--tool-clip);
+  }
+  .m-app .tool-step-in .tool-card-fill,
+  .m-app .tool-step-out .tool-card-fill {
+    inset: 0;
+    border-radius: 0;
+    clip-path: var(--tool-clip-fill);
+  }
+  .m-app .tool-step-in {
+    margin-right: calc(var(--tool-step) / -2);
+    padding-right: calc(var(--tool-pad) + var(--tool-step));
+  }
+  .m-app .tool-step-out {
+    margin-left: calc(var(--tool-step) / -2);
+    padding-left: calc(var(--tool-pad) + var(--tool-step));
+  }
+}
+
+/* the frog's seat on the phone pond: the same glass as the weather pill, so the
+   two corners read as a pair across the top of the water */
+.pond-mark {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 9999px;
+  background: rgb(8 9 10 / 0.42);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08);
+  backdrop-filter: blur(8px);
+}

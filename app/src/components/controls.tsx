@@ -1,10 +1,11 @@
 import { activeShot } from '../lib/sequence'
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown, ChevronRight, Info } from 'lucide-react'
 import { useStudio } from '../store'
 import { endEditRun } from '../lib/history'
 import { KF_MARK } from '../lib/marks'
+import { BareSections, SheetActions, useTouchUI } from '../lib/touch'
 
 /*
  * Panel primitives, modelled on Figma's right rail: sentence-case section
@@ -49,6 +50,9 @@ export function Section({
 }) {
   const [open, setOpen] = useState(defaultOpen)
   const ref = useRef<HTMLElement>(null)
+  const touch = useTouchUI()
+  const bare = useContext(BareSections)
+  const slot = useContext(SheetActions)
 
   useEffect(() => {
     if (!openWhen) return
@@ -65,13 +69,22 @@ export function Section({
     return () => clearTimeout(t)
   }, [openWhen])
 
+  if (bare) {
+    return (
+      <section ref={ref} className="px-4 pb-4">
+        {actions && slot && createPortal(actions, slot)}
+        {children}
+      </section>
+    )
+  }
+
   return (
     <section ref={ref} className="border-b border-(--line)">
-      <div className="flex items-center gap-1 pr-2 pl-3">
+      <div className={`flex items-center gap-1 pr-2 ${touch ? 'pl-4' : 'pl-3'}`}>
         <button
           onClick={() => setOpen(!open)}
           aria-expanded={open}
-          className="flex flex-1 items-center gap-2 py-2.5 text-left"
+          className={`flex flex-1 items-center gap-2 text-left ${touch ? 'min-h-12 py-3' : 'py-2.5'}`}
         >
           {icon && <span className="shrink-0 text-(--tx2)">{icon}</span>}
           <span className="t-body-sm font-semibold text-(--tx)">{title}</span>
@@ -85,7 +98,9 @@ export function Section({
         <button
           onClick={() => setOpen(!open)}
           aria-label={open ? `Collapse ${title}` : `Expand ${title}`}
-          className="flex h-6 w-6 items-center justify-center rounded-xs text-(--tx3) hover:bg-(--panel3) hover:text-(--tx)"
+          className={`flex items-center justify-center rounded-xs text-(--tx3) hover:bg-(--panel3) hover:text-(--tx) ${
+            touch ? 'h-10 w-10' : 'h-6 w-6'
+          }`}
         >
           <ChevronDown size={13} className={`transition-transform ${open ? '' : '-rotate-90'}`} />
         </button>
@@ -116,7 +131,7 @@ export function Section({
         <div className="min-h-0 overflow-hidden" inert={!open}>
           {/* padding lives inside the clipped box, so it collapses with it
               rather than leaving a stubborn gap when the section is shut */}
-          <div className="px-3 pb-3">{children}</div>
+          <div className={touch ? 'px-4 pb-4' : 'px-3 pb-3'}>{children}</div>
         </div>
       </div>
     </section>
@@ -154,15 +169,25 @@ const EDGE = 8
 export function InfoTip({ children, label = 'What is this?' }: { children: ReactNode; label?: string }) {
   const ref = useRef<HTMLButtonElement>(null)
   const bubble = useRef<HTMLDivElement>(null)
-  const [at, setAt] = useState<{ x: number; y: number; flip: boolean } | null>(null)
+  const [at, setAt] = useState<{ x: number; y: number; flip: boolean; below?: boolean } | null>(null)
   /** how far the bubble had to move to stay on screen, in pixels */
   const [lift, setLift] = useState(0)
 
+  const touch = useTouchUI()
   const open = () => {
     const r = ref.current?.getBoundingClientRect()
     if (!r) return
-    const flip = r.right + 248 > window.innerWidth
     setLift(0)
+    /*
+     * On a phone there is no room beside the dot on either side, so the bubble
+     * drops under it instead, slid along to stay inside the screen.
+     */
+    if (touch) {
+      const x = Math.min(Math.max(EDGE, r.right - 240), window.innerWidth - EDGE - 240)
+      setAt({ x, y: r.bottom + 6, flip: false, below: true })
+      return
+    }
+    const flip = r.right + 248 > window.innerWidth
     setAt({ x: flip ? r.left - 8 : r.right + 8, y: r.top + r.height / 2, flip })
   }
   const close = () => setAt(null)
@@ -174,7 +199,7 @@ export function InfoTip({ children, label = 'What is this?' }: { children: React
    * text in it, so it is measured and nudged before the browser paints.
    */
   useLayoutEffect(() => {
-    if (!at) return
+    if (!at || at.below) return
     const h = bubble.current?.offsetHeight ?? 0
     const top = at.y - h / 2
     const lowest = Math.max(EDGE, window.innerHeight - EDGE - h)
@@ -190,13 +215,23 @@ export function InfoTip({ children, label = 'What is this?' }: { children: React
       e.stopImmediatePropagation()
       close()
     }
+    /*
+     * A tap anywhere else puts it away. Blur cannot be relied on for that:
+     * Safari never focuses a button it was tapped on, so it never blurs one
+     * either, and the bubble would stay up until the next scroll.
+     */
+    const onDown = (e: PointerEvent) => {
+      if (!ref.current?.contains(e.target as Node)) close()
+    }
     window.addEventListener('keydown', onKey, true)
     // a scroll moves the button out from under a bubble measured against the
     // old position, so the honest thing is to drop it rather than chase it
     window.addEventListener('scroll', close, true)
+    window.addEventListener('pointerdown', onDown, true)
     return () => {
       window.removeEventListener('keydown', onKey, true)
       window.removeEventListener('scroll', close, true)
+      window.removeEventListener('pointerdown', onDown, true)
     }
   }, [at])
 
@@ -207,16 +242,23 @@ export function InfoTip({ children, label = 'What is this?' }: { children: React
         type="button"
         aria-label={label}
         aria-expanded={!!at}
-        onPointerEnter={open}
-        onPointerLeave={close}
-        onFocus={open}
+        /*
+         * Hover is a mouse's idea. A finger fires enter and leave around every
+         * tap, which opened the bubble on the way down and the click then shut
+         * it again, so a tap looked like it did nothing.
+         */
+        onPointerEnter={(e) => e.pointerType === 'mouse' && open()}
+        onPointerLeave={(e) => e.pointerType === 'mouse' && close()}
+        onFocus={touch ? undefined : open}
         onBlur={close}
         onClick={(e) => {
           e.stopPropagation()
           if (at) close()
           else open()
         }}
-        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-xs text-(--tx3) transition-colors hover:text-(--tx)"
+        className={`flex shrink-0 items-center justify-center rounded-xs text-(--tx3) transition-colors hover:text-(--tx) ${
+          touch ? 'h-10 w-10' : 'h-6 w-6'
+        }`}
       >
         <Info size={13} strokeWidth={1.9} />
       </button>
@@ -228,7 +270,9 @@ export function InfoTip({ children, label = 'What is this?' }: { children: React
             style={{
               left: at.x,
               top: at.y,
-              transform: `translate(${at.flip ? '-100%' : '0'}, calc(-50% + ${lift}px))`,
+              transform: at.below
+                ? undefined
+                : `translate(${at.flip ? '-100%' : '0'}, calc(-50% + ${lift}px))`,
             }}
             className="pointer-events-none fixed z-[60] max-w-[240px] rounded-md border border-(--line) bg-(--raised) px-2.5 py-2 t-caption leading-snug text-(--tx2) shadow-lg"
           >
@@ -253,6 +297,7 @@ export function SubHeading({ children, icon }: { children: ReactNode; icon?: Rea
 // ----- keyframe diamond -----
 
 export function KFDiamond({ target }: { target: string }) {
+  const touch = useTouchUI()
   const timeMs = useStudio((s) => s.timeMs)
   const hasTrack = useStudio((s) => activeShot(s.project).keyframes.some((k) => k.target === target))
   const hasHere = useStudio((s) =>
@@ -287,7 +332,8 @@ export function KFDiamond({ target }: { target: string }) {
       aria-label={hasTrack ? (hasHere ? 'Remove keyframe' : 'Add keyframe at playhead') : 'Animate this property'}
       aria-pressed={hasTrack}
       title={hasTrack ? (hasHere ? 'Remove keyframe' : 'Add keyframe at playhead') : 'Animate this property'}
-      className="flex h-4 w-4 shrink-0 items-center justify-center"
+      // a fingertip gets a target the size of a fingertip round the same mark
+      className={`flex shrink-0 items-center justify-center ${touch ? '-ml-2 h-10 w-8' : 'h-4 w-4'}`}
     >
       <span
         className={`${KF_MARK} ${
@@ -339,6 +385,7 @@ export function SliderRow({
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
   const scrubbing = useRef(false)
+  const touch = useTouchUI()
   const pct = Math.min(100, Math.max(0, ((value - min) / (max - min)) * 100))
   const dec = decimalsFor(step)
 
@@ -373,7 +420,61 @@ export function SliderRow({
    * reached, and the arrow keys and the typed value are still there for the
    * rest. So: no lock, and no banner.
    */
+  /*
+   * A finger, in a panel that scrolls.
+   *
+   * The mouse scrub above cannot work here. `movementX` is zero or missing for
+   * touch in Safari, and taking the pointer on contact would steal every
+   * vertical swipe that happened to start on a slider, which in a column of
+   * sliders is most of them. So the gesture waits to see which way it is
+   * going: up or down belongs to the page (`touch-action: pan-y` lets the
+   * browser have it, and it cancels us), sideways belongs to the slider.
+   *
+   * The drag is relative, not absolute. Putting a finger down never jumps the
+   * value to where it landed, because on a 40px-tall row that is where the
+   * finger lands while scrolling too. The track's full width is the full range,
+   * so the handle stays under the finger that is moving it.
+   */
+  const onTouchDown = (e: React.PointerEvent) => {
+    if (editing) return
+    const el = e.currentTarget as HTMLElement
+    const width = Math.max(1, el.getBoundingClientRect().width)
+    const startX = e.clientX
+    const startY = e.clientY
+    const startV = value
+    let phase: 'wait' | 'drag' = 'wait'
+
+    const onMove = (ev: PointerEvent) => {
+      const dx = ev.clientX - startX
+      const dy = ev.clientY - startY
+      if (phase === 'wait') {
+        if (Math.abs(dy) > 8 && Math.abs(dy) > Math.abs(dx)) return end()
+        if (Math.abs(dx) < 6) return
+        phase = 'drag'
+        scrubbing.current = true
+        el.setPointerCapture(ev.pointerId)
+      }
+      onChange(clamp(startV + (dx / width) * (max - min)))
+    }
+    const onUp = () => {
+      const tapped = phase === 'wait'
+      end()
+      if (tapped) startEdit()
+    }
+    const end = () => {
+      el.removeEventListener('pointermove', onMove)
+      el.removeEventListener('pointerup', onUp)
+      el.removeEventListener('pointercancel', end)
+      if (phase === 'drag') endEditRun()
+      scrubbing.current = false
+    }
+    el.addEventListener('pointermove', onMove)
+    el.addEventListener('pointerup', onUp)
+    el.addEventListener('pointercancel', end)
+  }
+
   const onPointerDown = (e: React.PointerEvent) => {
+    if (touch && e.pointerType !== 'mouse') return onTouchDown(e)
     if (editing || e.button !== 0) return
     const startV = value
     const perPx = (max - min) / 180
@@ -447,17 +548,21 @@ export function SliderRow({
          * handle both have a token that moves the right way in both, and two
          * things moving is already more than enough signal.
          */
-        className="group relative h-7 flex-1 cursor-ew-resize overflow-hidden rounded-sm bg-(--field) transition-colors select-none hover:bg-(--field-h) focus:ring-2 focus:ring-(--focus) focus:outline-none"
+        className={`group relative flex-1 overflow-hidden bg-(--field) transition-colors select-none hover:bg-(--field-h) focus:ring-2 focus:ring-(--focus) focus:outline-none ${
+          touch ? 'h-11 touch-pan-y rounded-md' : 'h-7 cursor-ew-resize rounded-sm'
+        }`}
       >
         <div
           className="pointer-events-none absolute inset-y-0 left-0 rounded-sm bg-(--sel)"
           style={{ width: `${pct}%` }}
         />
         <div
-          className="pointer-events-none absolute top-1/2 h-3 w-0.5 -translate-y-1/2 rounded-full bg-(--tx2) transition-colors group-hover:bg-(--tx)"
+          className={`pointer-events-none absolute top-1/2 w-0.5 -translate-y-1/2 rounded-full transition-colors group-hover:bg-(--tx) ${
+            touch ? 'h-5 bg-(--tx)' : 'h-3 bg-(--tx2)'
+          }`}
           style={{ left: `calc(${pct}% - 6px)` }}
         />
-        <div className="absolute inset-0 flex items-center justify-between gap-2 px-2.5">
+        <div className={`absolute inset-0 flex items-center justify-between gap-2 ${touch ? 'px-3.5' : 'px-2.5'}`}>
           <span className="flex min-w-0 items-center gap-1.5 t-body-sm text-(--tx2)">
             {icon && <span className="shrink-0">{icon}</span>}
             <span className="truncate">{label}</span>
@@ -465,6 +570,7 @@ export function SliderRow({
           {editing ? (
             <input
               autoFocus
+              inputMode="decimal"
               onFocus={(e) => e.currentTarget.select()}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
@@ -538,6 +644,7 @@ export function Segments<T extends string>({
   /** a shorter, smaller-type row for a toggle that's a detail, not a main setting */
   compact?: boolean
 }) {
+  const touch = useTouchUI()
   return (
     <div
       className={`relative grid gap-0.5 rounded-sm bg-(--field) p-0.5 ${compact ? 'mb-1.5' : 'mb-2'}`}
@@ -552,7 +659,7 @@ export function Segments<T extends string>({
           aria-label={o.label}
           title={o.label}
           className={`relative z-10 flex items-center justify-center gap-1 truncate rounded-xs px-1.5 transition-colors ${
-            compact ? 'h-5 t-caption' : 'h-6 t-body-sm'
+            touch ? (compact ? 'h-9 t-body-sm' : 'h-10 t-body-sm') : compact ? 'h-5 t-caption' : 'h-6 t-body-sm'
           } ${value === o.id ? 'text-(--tx)' : 'text-(--tx2) hover:text-(--tx)'}`}
         >
           {o.icon ?? o.label}
@@ -574,13 +681,14 @@ export function IconToggle({
   active?: boolean
   onClick: () => void
 }) {
+  const touch = useTouchUI()
   return (
     <button
       onClick={onClick}
       aria-pressed={active}
       aria-label={label}
       title={label}
-      className={`flex h-6 w-6 items-center justify-center rounded-xs transition-colors ${
+      className={`flex items-center justify-center rounded-xs transition-colors ${touch ? 'h-10 w-10' : 'h-6 w-6'} ${
         active
           ? 'bg-(--sel) text-(--tx)'
           : 'text-(--tx2) hover:bg-(--panel3) hover:text-(--tx)'
@@ -593,14 +701,7 @@ export function IconToggle({
 
 // ----- dropdown (replaces native <select>, which can't be themed) -----
 
-export function Dropdown<T extends string | number>({
-  value,
-  options,
-  onChange,
-  title,
-  className = '',
-  align = 'left',
-}: {
+interface DropdownProps<T extends string | number> {
   value: T
   /** an `icon` is drawn ahead of the label, in the trigger and the list alike */
   options: { value: T; label: string; icon?: ReactNode }[]
@@ -609,7 +710,58 @@ export function Dropdown<T extends string | number>({
   className?: string
   /** which edge the menu lines up with when it would overflow a narrow panel */
   align?: 'left' | 'right'
-}) {
+}
+
+export function Dropdown<T extends string | number>(props: DropdownProps<T>) {
+  return useTouchUI() ? <NativeDropdown {...props} /> : <PointerDropdown {...props} />
+}
+
+/*
+ * On a phone the platform's own picker is the better list: it is thumb-sized,
+ * scrolls with inertia, and on iOS it is a wheel at the bottom of the screen
+ * rather than a menu hanging off a row in a sheet that is itself scrolling.
+ * The trigger is still ours, so the row looks like every other field, with the
+ * real select laid invisibly over it to catch the tap.
+ */
+function NativeDropdown<T extends string | number>({
+  value,
+  options,
+  onChange,
+  title,
+  className = '',
+}: DropdownProps<T>) {
+  const current = options.find((o) => o.value === value)
+  return (
+    <div className={`relative ${className}`}>
+      <div className="flex h-11 w-full items-center gap-2 rounded-md bg-(--field) px-3 t-body-sm text-(--tx)">
+        {current?.icon && <span className="shrink-0 text-(--tx2)">{current.icon}</span>}
+        <span className="min-w-0 flex-1 truncate text-left">{current?.label ?? '—'}</span>
+        <ChevronDown size={14} className="shrink-0 text-(--tx3)" />
+      </div>
+      <select
+        aria-label={title}
+        value={options.findIndex((o) => o.value === value)}
+        onChange={(e) => onChange(options[Number(e.target.value)].value)}
+        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+      >
+        {options.map((o, i) => (
+          <option key={String(o.value)} value={i}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  )
+}
+
+function PointerDropdown<T extends string | number>({
+  value,
+  options,
+  onChange,
+  title,
+  className = '',
+  align = 'left',
+}: DropdownProps<T>) {
   const [open, setOpen] = useState(false)
   const [dropUp, setDropUp] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -694,13 +846,16 @@ export function ColorRow({
   value: string
   onChange: (v: string) => void
 }) {
+  const touch = useTouchUI()
   return (
     <label
       title={label}
-      className="relative my-0.5 flex h-7 items-center gap-2 rounded-sm bg-(--field) px-2 hover:bg-(--field-h)"
+      className={`relative my-0.5 flex items-center gap-2 bg-(--field) hover:bg-(--field-h) ${
+        touch ? 'h-11 rounded-md px-3' : 'h-7 rounded-sm px-2'
+      }`}
     >
       <span
-        className="relative h-4 w-4 shrink-0 overflow-hidden rounded-md"
+        className={`relative shrink-0 overflow-hidden rounded-md ${touch ? 'h-6 w-6' : 'h-4 w-4'}`}
       >
         <input
           type="color"
@@ -747,15 +902,18 @@ export function Disclosure({
   actions?: ReactNode
   children: ReactNode
 }) {
+  const touch = useTouchUI()
   return (
     <div className="mb-1">
       {/* the header is a SubHeading that grew a caret, so a foldable group and
           a plain one still read as the same rank in the panel */}
-      <div className="mb-1.5 flex h-6 items-center gap-1">
+      <div className={`mb-1.5 flex items-center gap-1 ${touch ? 'h-10' : 'h-6'}`}>
         <button
           onClick={() => onToggle(!open)}
           aria-expanded={open}
-          className="flex h-6 min-w-0 flex-1 items-center gap-1.5 t-caption text-(--tx2) hover:text-(--tx)"
+          className={`flex min-w-0 flex-1 items-center gap-1.5 t-caption text-(--tx2) hover:text-(--tx) ${
+            touch ? 'h-10' : 'h-6'
+          }`}
         >
           <ChevronRight
             size={11}
@@ -785,12 +943,15 @@ export function MiniButton({
   active?: boolean
   title?: string
 }) {
+  const touch = useTouchUI()
   return (
     <button
       onClick={onClick}
       title={title}
       aria-pressed={active}
-      className={`inline-flex h-7 items-center justify-center gap-1.5 truncate rounded-sm px-2 t-body-sm transition-colors ${
+      className={`inline-flex items-center justify-center gap-1.5 truncate t-body-sm transition-colors ${
+        touch ? 'h-10 rounded-md px-3' : 'h-7 rounded-sm px-2'
+      } ${
         active
           ? 'bg-(--sel) text-(--tx)'
           : 'bg-(--field) text-(--tx2) hover:bg-(--field-h) hover:text-(--tx)'

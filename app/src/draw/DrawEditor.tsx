@@ -26,7 +26,7 @@ import { NotchedCanvas } from '../components/NotchedCanvas'
 import { copyToClipboard, download, exportSize } from './export'
 import { useDraw } from './store'
 
-function DrawExportDialog() {
+export function DrawExportDialog() {
   const doc = useDraw((s) => s.doc)
   const images = useDraw((s) => s.images)
   const close = () => useDraw.getState().setDialog(null)

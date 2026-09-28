@@ -45,7 +45,11 @@ function useContainerSize(ref: React.RefObject<HTMLDivElement | null>) {
   return size
 }
 
-export function AsciiCanvas() {
+/**
+ * `compact` is the phone's canvas: no toolbar pocket to keep clear of, a
+ * slimmer gutter, no readout, and an empty state that fits a narrow screen.
+ */
+export function AsciiCanvas({ compact = false }: { compact?: boolean }) {
   const doc = useAscii((s) => s.doc)
   const bitmap = useAscii((s) => s.bitmap)
   const wrap = useRef<HTMLDivElement>(null)
@@ -69,8 +73,8 @@ export function AsciiCanvas() {
    * of its own canvas. The readout in the bottom-left gets clear air out of it.
    */
   const aspect = doc.size.width / Math.max(1, doc.size.height)
-  const boxW = Math.max(0, availW - 2 * GUTTER)
-  const boxH = Math.max(0, availH - 2 * BAND)
+  const boxW = Math.max(0, availW - 2 * (compact ? 12 : GUTTER))
+  const boxH = Math.max(0, availH - 2 * (compact ? 12 : BAND))
   const dispW = Math.max(1, Math.min(boxW, boxH * aspect))
   const dispH = Math.max(1, dispW / aspect)
 
@@ -181,10 +185,12 @@ export function AsciiCanvas() {
             />
             <CanvasHandles width={dispW} height={dispH} />
           </div>
-          <p className="absolute bottom-2 left-3 t-caption text-(--tx3) tabular-nums">
-            {grid.cols > 0 && `${grid.cols} × ${grid.rows} cells · `}
-            {doc.size.width} × {doc.size.height} px
-          </p>
+          {!compact && (
+            <p className="absolute bottom-2 left-3 t-caption text-(--tx3) tabular-nums">
+              {grid.cols > 0 && `${grid.cols} × ${grid.rows} cells · `}
+              {doc.size.width} × {doc.size.height} px
+            </p>
+          )}
         </>
       ) : (
         /*
@@ -198,10 +204,10 @@ export function AsciiCanvas() {
          * image with every control live. The drop zone keeps the top spot
          * because your own picture is still the point of the tool.
          */
-        <div className="flex flex-col items-center gap-5">
+        <div className={`flex flex-col items-center gap-5 ${compact ? 'w-full px-5' : ''}`}>
           <button
             onClick={() => pickMediaFile((f) => void useAscii.getState().importImage(f), false)}
-            className="media-drop relative flex h-56 w-96 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-(--line) text-(--tx3) transition-colors hover:border-(--tx3) hover:text-(--tx2)"
+            className={`media-drop relative flex flex-col ${compact ? 'h-44 w-full max-w-96' : 'h-56 w-96'} items-center justify-center gap-2 rounded-lg border border-dashed border-(--line) text-(--tx3) transition-colors hover:border-(--tx3) hover:text-(--tx2)`}
           >
             <span className="media-glow" aria-hidden />
             <span className="media-ripple" aria-hidden>
@@ -210,7 +216,9 @@ export function AsciiCanvas() {
               ))}
             </span>
             <ImagePlus className="media-plus" size={20} strokeWidth={1.75} />
-            <span className="t-body-sm">Drop an image here, paste one, or click to browse</span>
+            <span className="t-body-sm">
+              {compact ? 'Choose a photo' : 'Drop an image here, paste one, or click to browse'}
+            </span>
           </button>
           <StarterRow />
         </div>

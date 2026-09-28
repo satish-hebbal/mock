@@ -18,13 +18,12 @@ import { bgCss } from './backgroundCss'
 import { paintOrder } from './types'
 import type { ShotsDoc, ShotsGobo, ShotsImage } from './types'
 
-function useFitRect(outer: React.RefObject<HTMLDivElement | null>, aspect: number) {
+function useFitRect(outer: React.RefObject<HTMLDivElement | null>, aspect: number, pad = 28) {
   const [rect, setRect] = useState({ width: 640, height: 400 })
   useEffect(() => {
     const el = outer.current
     if (!el) return
     const ro = new ResizeObserver(() => {
-      const pad = 28
       const availW = Math.max(80, el.clientWidth - pad * 2)
       const availH = Math.max(80, el.clientHeight - pad * 2)
       let w = availW
@@ -37,7 +36,7 @@ function useFitRect(outer: React.RefObject<HTMLDivElement | null>, aspect: numbe
     })
     ro.observe(el)
     return () => ro.disconnect()
-  }, [outer, aspect])
+  }, [outer, aspect, pad])
   return rect
 }
 
@@ -548,10 +547,11 @@ export function ShotsPreview({ doc, effects = true }: { doc: ShotsDoc; effects?:
   )
 }
 
-export function ShotsCanvas() {
+/** `compact` is the phone's canvas, with a slimmer gutter round the frame. */
+export function ShotsCanvas({ compact = false }: { compact?: boolean }) {
   const doc = useShots((s) => s.doc)
   const outerRef = useRef<HTMLDivElement>(null)
-  const rect = useFitRect(outerRef, doc.size.width / doc.size.height)
+  const rect = useFitRect(outerRef, doc.size.width / doc.size.height, compact ? 14 : 28)
 
   /*
    * The empty-state prompt's own size, watched rather than assumed. The pill

@@ -67,10 +67,10 @@ interface Props {
   /**
    * When to fetch the animation. 'mount' is right where the frog is part of the
    * furniture. 'contact' holds the runtime back until a pointer actually
-   * touches the frog, which is what <SmallScreen /> wants: it is a dead end for
-   * someone on a phone, and ~815KB of runtime and wasm is a lot to spend on
-   * a screen whose whole message is "come back on a laptop". Poke the frog and
-   * it wakes; read the note and leave and it never costs anything.
+   * touches the frog, which is what the phone home screen wants: ~815KB of
+   * runtime and wasm is a lot to spend on a phone for a mascot in the corner of
+   * a launcher. Poke the frog and it wakes; pick a tool and leave and it never
+   * costs anything.
    */
   awaken?: 'mount' | 'contact'
 }

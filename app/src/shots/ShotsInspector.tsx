@@ -120,7 +120,7 @@ function PosBtn({
  * left: those describe *what* the shot contains, this nudges *where* it sits
  * once it's there, the same split Frame and Placement already draw.
  */
-function PositionSection({ n }: { n: number }) {
+export function PositionSection({ n }: { n: number }) {
   const align = useShots((s) => s.alignScreens)
   const distribute = useShots((s) => s.distributeScreens)
   const matchHeights = useShots((s) => s.matchHeights)
@@ -167,7 +167,7 @@ function PositionSection({ n }: { n: number }) {
   )
 }
 
-function PlacementSection() {
+export function PlacementSection() {
   const img = useShots((s) => selectedShotsImage(s.doc))
   const setImage = useShots((s) => s.setImage)
   if (!img) return null
@@ -223,7 +223,7 @@ function PlacementSection() {
  * Placement moves one screen inside it, and because a preview is the first
  * thing you want to see, not something to scroll to.
  */
-function FrameSection() {
+export function FrameSection() {
   const zoom = useShots((s) => s.doc.zoom ?? 1)
   const setZoom = useShots((s) => s.setZoom)
   return (
@@ -255,7 +255,7 @@ function FrameSection() {
  * Flat or tilted, per screen. Kept out of Frame: the camera is one thing for the
  * whole shot, while this is a property of the screen you have selected.
  */
-function TiltSection() {
+export function TiltSection() {
   const img = useShots((s) => selectedShotsImage(s.doc))
   const setImage = useShots((s) => s.setImage)
   if (!img) return null

@@ -44,6 +44,7 @@ import { MESH_PRESETS, meshCss, reshuffleMesh } from '../lib/meshGradient'
 import { SIZE_PRESETS, presetLabel } from '../lib/presets'
 import { ColorRow, SegmentThumb, Segments, SliderRow } from '../components/controls'
 import { MoreGrid, Swatch } from '../components/catalog'
+import { useTouchUI } from '../lib/touch'
 import { useStudio } from '../store'
 import { ui } from '../lib/ui'
 import { MAX_SHOTS, selectedShotsImage, type PortraitMode } from './types'
@@ -78,8 +79,9 @@ function GroupLabel({ children, action }: { children: ReactNode; action?: ReactN
 }
 
 function Group({ label, children, action }: { label?: string; children: ReactNode; action?: ReactNode }) {
+  const touch = useTouchUI()
   return (
-    <div className="px-3 py-3">
+    <div className={touch ? 'px-4 py-3.5' : 'px-3 py-3'}>
       {label && <GroupLabel action={action}>{label}</GroupLabel>}
       {children}
     </div>
@@ -257,7 +259,7 @@ function ChromeThumb({ frame, box }: { frame: ShotsFrame; box: number }) {
   )
 }
 
-function DevicePicker() {
+export function DevicePicker() {
   const img = useShots((s) => selectedShotsImage(s.doc))
   const setImage = useShots((s) => s.setImage)
   const [open, setOpen] = useState(false)
@@ -381,7 +383,7 @@ function DevicePicker() {
  * "this one" are the same thing and the control would only raise a question
  * it does not answer.
  */
-function ApplyScopeRow() {
+export function ApplyScopeRow() {
   const n = useShots((s) => s.doc.images.length)
   const applyToAll = useShots((s) => s.applyToAll)
   const setApplyToAll = useShots((s) => s.setApplyToAll)
@@ -416,7 +418,7 @@ function ApplyScopeRow() {
 
 // ----- Mockup · media -----
 
-function MediaGroup() {
+export function MediaGroup() {
   const images = useShots((s) => s.doc.images)
   const selectedId = useShots((s) => s.doc.selectedId)
   const assets = useShots((s) => s.assets)
@@ -679,7 +681,7 @@ function MediaGroup() {
  * A generic diagram would be cheaper and would misrepresent every shot that
  * isn't a bare white phone.
  */
-function LayoutGroup() {
+export function LayoutGroup() {
   const images = useShots((s) => s.doc.images)
   const doc = useShots((s) => s.doc)
   /*
@@ -876,7 +878,7 @@ function shadowPresetId(s: { blur: number; y: number; opacity: number }): string
   return hit?.id ?? null
 }
 
-function ShadowGroup() {
+export function ShadowGroup() {
   const img = useShots((s) => selectedShotsImage(s.doc))
   const setShadow = useShots((s) => s.setShadow)
   const [openLight, setOpenLight] = useState(false)
@@ -986,7 +988,7 @@ function ShadowGroup() {
  */
 const STYLE_TILE_CARD_W = 150
 
-function StyleGroup() {
+export function StyleGroup() {
   const img = useShots((s) => selectedShotsImage(s.doc))
   const setImage = useShots((s) => s.setImage)
   if (!img) return null
@@ -1030,7 +1032,7 @@ function StyleGroup() {
 
 // ----- Mockup · finish (glow / border / reflection) -----
 
-function FinishGroup() {
+export function FinishGroup() {
   const img = useShots((s) => selectedShotsImage(s.doc))
   const setImage = useShots((s) => s.setImage)
   const setBorder = useShots((s) => s.setBorder)
@@ -1232,7 +1234,7 @@ function SizePicker({
   )
 }
 
-function CanvasGroup() {
+export function CanvasGroup() {
   const size = useShots((s) => s.doc.size)
   const setSize = useShots((s) => s.setSize)
   const [w, setW] = useState(size.width)
@@ -1340,7 +1342,7 @@ function ShadowSceneTile({
   )
 }
 
-function ShadowSceneGroup() {
+export function ShadowSceneGroup() {
   const gobo = useShots((s) => s.doc.gobo)
   const setGobo = useShots((s) => s.setGobo)
   if (!gobo) return null
@@ -1466,7 +1468,7 @@ const PORTRAIT_MODES: { id: PortraitMode; label: string; icon: ReactNode; title:
   },
 ]
 
-function PortraitGroup() {
+export function PortraitGroup() {
   /*
    * The fallback is applied outside the selector on purpose. `portraitOf`
    * builds a fresh object when the field is missing, and zustand compares
@@ -1599,7 +1601,7 @@ const BG_TILES: { id: ShotsBgType; label: string; icon: LucideIcon }[] = [
   { id: 'wallpaper', label: 'Presets', icon: Wallpaper },
 ]
 
-function BackgroundGroup() {
+export function BackgroundGroup() {
   const bg = useShots((s) => s.doc.background)
   const palette = useShots((s) => selectedShotsImage(s.doc)?.palette ?? NO_PALETTE)
   const setBackground = useShots((s) => s.setBackground)
@@ -1858,7 +1860,7 @@ function BackgroundGroup() {
   )
 }
 
-function EffectsGroup() {
+export function EffectsGroup() {
   const bg = useShots((s) => s.doc.background)
   const setBackground = useShots((s) => s.setBackground)
   const effectsOn = bg.blur > 0 || bg.brightness !== 1 || bg.vignette > 0 || bg.noise > 0

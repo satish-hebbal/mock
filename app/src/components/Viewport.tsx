@@ -495,10 +495,24 @@ function useCameraGestures(container: React.RefObject<HTMLDivElement | null>) {
     const el = container.current
     if (!el) return
 
-    let mode: 'orbit' | 'pan' | null = null
+    let mode: 'orbit' | 'pan' | 'pinch' | null = null
     let startX = 0
     let startY = 0
     let start = { tiltX: 0, tiltY: 0, panX: 0, panY: 0 }
+
+    /*
+     * Two fingers, on a touchscreen: pinch is the wheel and the pair's midpoint
+     * is the right-drag, so zoom and pan happen together the way a map does it.
+     * Once a pinch has started the view is the fingers' until they have all
+     * lifted, so the last one off does not swing the camera round on its way.
+     */
+    const touches = new Map<number, { x: number; y: number }>()
+    let pinchStart = { dist: 1, x: 0, y: 0, zoom: 1, panX: 0, panY: 0 }
+    let pinchHold = false
+    const pair = () => {
+      const [a, b] = [...touches.values()]
+      return { dist: Math.max(1, Math.hypot(b.x - a.x, b.y - a.y)), x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
+    }
 
     const sampled = () => {
       const s = useStudio.getState()
@@ -532,6 +546,19 @@ function useCameraGestures(container: React.RefObject<HTMLDivElement | null>) {
        * lands on an overlay belongs to the overlay, full stop.
        */
       if ((e.target as Element | null)?.closest?.('[data-overlay]')) return
+      if (e.pointerType === 'touch') {
+        touches.set(e.pointerId, { x: e.clientX, y: e.clientY })
+        el.setPointerCapture(e.pointerId)
+        if (touches.size >= 2) {
+          const p = pair()
+          const cam = activeShot(useStudio.getState().project).scene.camera
+          pinchStart = { dist: p.dist, x: p.x, y: p.y, zoom: cam.zoom, panX: cam.panX, panY: cam.panY }
+          mode = 'pinch'
+          pinchHold = true
+          return
+        }
+        if (pinchHold) return
+      }
       mode = e.button === 0 ? 'orbit' : 'pan'
       startX = e.clientX
       startY = e.clientY
@@ -540,7 +567,21 @@ function useCameraGestures(container: React.RefObject<HTMLDivElement | null>) {
     }
 
     const onPointerMove = (e: PointerEvent) => {
-      if (!mode || rt.gizmoDragging) return
+      if (e.pointerType === 'touch' && touches.has(e.pointerId)) {
+        touches.set(e.pointerId, { x: e.clientX, y: e.clientY })
+        if (mode === 'pinch' && touches.size >= 2) {
+          const p = pair()
+          const s = useStudio.getState()
+          const zoom = clampCamera('zoom', pinchStart.zoom * (p.dist / pinchStart.dist))
+          s.setAnimatable('camera.zoom', Number(zoom.toFixed(3)), 'gesture-zoom')
+          const k = (7 / Math.max(0.2, zoom)) * 0.0016
+          s.setAnimatable('camera.panX', clampCamera('panX', pinchStart.panX - (p.x - pinchStart.x) * k), 'gesture-pan')
+          s.setAnimatable('camera.panY', clampCamera('panY', pinchStart.panY + (p.y - pinchStart.y) * k), 'gesture-pan')
+          return
+        }
+        if (pinchHold) return
+      }
+      if (!mode || mode === 'pinch' || rt.gizmoDragging) return
       const dx = e.clientX - startX
       const dy = e.clientY - startY
       const s = useStudio.getState()
@@ -556,7 +597,12 @@ function useCameraGestures(container: React.RefObject<HTMLDivElement | null>) {
     }
 
     const endDrag = (e: PointerEvent) => {
-      if (mode && el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId)
+      if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId)
+      if (e.pointerType === 'touch') {
+        touches.delete(e.pointerId)
+        if (touches.size === 0) pinchHold = false
+        if (mode === 'pinch' && touches.size >= 2) return
+      }
       mode = null
     }
 
@@ -601,13 +647,13 @@ function useFitRect(
   outer: React.RefObject<HTMLDivElement | null>,
   aspect: number,
   reserveTop = 0,
+  pad = 24,
 ) {
   const [rect, setRect] = useState({ width: 640, height: 360 })
   useEffect(() => {
     const el = outer.current
     if (!el) return
     const ro = new ResizeObserver(() => {
-      const pad = 24
       const availW = Math.max(80, el.clientWidth - pad * 2)
       const availH = Math.max(80, el.clientHeight - reserveTop - pad * 2)
       let w = availW
@@ -620,13 +666,17 @@ function useFitRect(
     })
     ro.observe(el)
     return () => ro.disconnect()
-  }, [outer, aspect, reserveTop])
+  }, [outer, aspect, reserveTop, pad])
   return rect
 }
 
 // ----- main viewport -----
 
-export function Viewport() {
+/**
+ * `compact` is the phone's viewport: no notch above it to keep clear of, a
+ * slimmer gutter, and gesture hints worded for fingers.
+ */
+export function Viewport({ compact = false }: { compact?: boolean }) {
   const background = useStudio((s) => activeShot(s.project).scene.background)
   const bgImageUrl = useStudio((s) => {
     const id = activeShot(s.project).scene.background.imageAssetId
@@ -643,7 +693,7 @@ export function Viewport() {
 
   const outerRef = useRef<HTMLDivElement>(null)
   const frameRef = useRef<HTMLDivElement>(null)
-  const rect = useFitRect(outerRef, exportSize.width / exportSize.height, NOTCH.depth)
+  const rect = useFitRect(outerRef, exportSize.width / exportSize.height, compact ? 0 : NOTCH.depth, compact ? 12 : 24)
   useCameraGestures(frameRef)
 
   /*
@@ -722,12 +772,12 @@ export function Viewport() {
   return (
     <div
       ref={outerRef}
-      style={{ paddingTop: NOTCH.depth }}
+      style={{ paddingTop: compact ? 0 : NOTCH.depth }}
       className="relative flex h-full w-full items-center justify-center overflow-hidden"
     >
       <div
         ref={frameRef}
-        className="relative overflow-hidden rounded-lg"
+        className="relative touch-none overflow-hidden rounded-lg"
         style={{ width: rect.width, height: rect.height }}
         onPointerDown={(e) => {
           /*
@@ -828,13 +878,17 @@ export function Viewport() {
       {/* gesture hints, shown until the user's first orbit/zoom/pan, then never again */}
       {hintsVisible && (
         <div
-          className={`pointer-events-none absolute bottom-3 left-4 flex gap-2 t-caption tracking-widest text-(--tx3) transition-opacity duration-300 ${
+          className={`pointer-events-none absolute flex gap-2 t-caption tracking-widest text-(--tx3) transition-opacity duration-300 ${
+            // on a phone the bottom edge belongs to the floating buttons, so the
+            // hints sit up top, clear of the Frame button in the other corner
+            compact ? 'top-3 right-16 left-3 flex-wrap' : 'bottom-3 left-4'
+          } ${
             hintsFading ? 'opacity-0' : 'opacity-100'
           }`}
         >
           <span className="rounded-xs bg-(--raised) px-1.5 py-0.5">DRAG · ORBIT</span>
-          <span className="rounded-xs bg-(--raised) px-1.5 py-0.5">SCROLL · ZOOM</span>
-          <span className="rounded-xs bg-(--raised) px-1.5 py-0.5">R-DRAG · PAN</span>
+          <span className="rounded-xs bg-(--raised) px-1.5 py-0.5">{compact ? 'PINCH · ZOOM' : 'SCROLL · ZOOM'}</span>
+          <span className="rounded-xs bg-(--raised) px-1.5 py-0.5">{compact ? 'TWO FINGERS · PAN' : 'R-DRAG · PAN'}</span>
         </div>
       )}
     </div>

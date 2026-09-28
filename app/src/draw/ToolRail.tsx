@@ -18,6 +18,7 @@
  * whether you can change tools without looking.
  */
 
+import { useTouchUI } from '../lib/touch'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   Check,
@@ -93,15 +94,16 @@ const Rule = () => (
  * one line and a swatch you have to scroll to find is a swatch nobody uses.
  */
 function Sheets({ swatches, current }: { swatches: string[]; current: string }) {
+  const touch = useTouchUI()
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
+    <div className={`flex flex-wrap items-center ${touch ? 'gap-2.5' : 'gap-1.5'}`}>
       {swatches.map((c) => (
         <button
           key={c}
           onClick={() => useDraw.getState().setBackground(c)}
           title={SHEET_NAMES[c] ?? c}
           aria-label={SHEET_NAMES[c] ?? c}
-          className={`h-6 w-6 shrink-0 rounded-sm border transition-transform hover:scale-110 ${
+          className={`${touch ? 'h-9 w-9 rounded-md' : 'h-6 w-6 rounded-sm'} shrink-0 border transition-transform hover:scale-110 ${
             current.toLowerCase() === c.toLowerCase() ? 'is-picked' : 'border-(--line)'
           }`}
           style={{ background: c }}
@@ -111,12 +113,15 @@ function Sheets({ swatches, current }: { swatches: string[]; current: string }) 
   )
 }
 
-const Row = ({ label, children }: { label: string; children: ReactNode }) => (
-  <div className="mb-2.5">
-    <p className="mb-1.5 t-caption text-(--tx3)">{label}</p>
-    {children}
-  </div>
-)
+function Row({ label, children }: { label: string; children: ReactNode }) {
+  const touch = useTouchUI()
+  return (
+    <div className={touch ? 'mb-4' : 'mb-2.5'}>
+      <p className={`t-caption text-(--tx3) ${touch ? 'mb-2' : 'mb-1.5'}`}>{label}</p>
+      {children}
+    </div>
+  )
+}
 
 function Seg<T extends string>({
   value,
@@ -127,6 +132,7 @@ function Seg<T extends string>({
   options: { id: T; label: string }[]
   onChange: (v: T) => void
 }) {
+  const touch = useTouchUI()
   return (
     <div
       className="grid gap-0.5 rounded-sm bg-(--field) p-0.5"
@@ -136,7 +142,7 @@ function Seg<T extends string>({
         <button
           key={o.id}
           onClick={() => onChange(o.id)}
-          className={`h-6 truncate rounded-xs px-1 t-caption transition-colors ${
+          className={`${touch ? 'h-10 t-body-sm' : 'h-6 t-caption'} truncate rounded-xs px-1 transition-colors ${
             value === o.id ? 'bg-(--sel) text-(--tx)' : 'text-(--tx2) hover:text-(--tx)'
           }`}
         >
@@ -144,6 +150,176 @@ function Seg<T extends string>({
         </button>
       ))}
     </div>
+  )
+}
+
+/**
+ * The paper, the grid, the eraser and how the tray carries itself.
+ *
+ * The desktop shows it in the menu cut into the canvas; the phone shows the
+ * same controls in a sheet from More. One component, so the two can never
+ * offer different settings.
+ */
+export function CanvasSettings({ onClear }: { onClear?: () => void }) {
+  const grid = useDraw((s) => s.doc.grid)
+  const background = useDraw((s) => s.doc.background)
+  const tray = useDraw((s) => s.tray)
+  const gauge = useDraw((s) => s.trayGauge)
+  const inkMode = useDraw((s) => s.inkMode)
+  const eraserMode = useDraw((s) => s.eraserMode)
+  const touch = useTouchUI()
+  const st = useDraw.getState
+
+  const solid = background !== 'transparent' && background !== 'checker'
+  const surface = solid ? 'solid' : background === 'transparent' ? 'transparent' : 'checker'
+
+  return (
+    <>
+      <Row label="Paper">
+        <Sheets swatches={PAPER_SWATCHES} current={background} />
+      </Row>
+
+      {/*
+       * The dark end, as its own row rather than five more chips on the end
+       * of the light one. They behave differently enough to be worth
+       * naming: the ink turns to chalk, the grid inverts, and a drawing
+       * made on one looks like a different kind of drawing.
+       */}
+      <Row label="Board">
+        <div className="flex items-center gap-1.5">
+          <Sheets swatches={BOARD_SWATCHES} current={background} />
+          <label
+            className={`relative shrink-0 cursor-pointer overflow-hidden border border-(--line) ${touch ? 'h-9 w-9 rounded-md' : 'h-6 w-6 rounded-sm'}`}
+            title="Custom sheet colour"
+            style={{ background: solid ? background : 'var(--field)' }}
+          >
+            <input
+              type="color"
+              value={/^#[0-9a-f]{6}$/i.test(background) ? background : '#ffffff'}
+              onChange={(e) => st().setBackground(e.target.value)}
+              aria-label="Custom sheet colour"
+              className="absolute inset-0 cursor-pointer opacity-0"
+            />
+          </label>
+        </div>
+      </Row>
+
+      <Row label="Surface">
+        <Seg
+          value={surface}
+          /* back to the sheet you were on, not to white */
+          onChange={(v) => st().setBackground(v === 'solid' ? st().lastSheet : v)}
+          options={[
+            { id: 'solid', label: 'Solid' },
+            { id: 'transparent', label: 'None' },
+            { id: 'checker', label: 'Checker' },
+          ]}
+        />
+      </Row>
+
+      {/* ruled, dotted, or nothing: the three anyone actually wants */}
+      <Row label="Grid">
+        <Seg
+          value={grid}
+          onChange={(v: GridStyle) => st().setGrid(v)}
+          options={[
+            { id: 'off' as const, label: 'Off' },
+            { id: 'lines' as const, label: 'Lines' },
+            { id: 'dots' as const, label: 'Dots' },
+          ]}
+        />
+      </Row>
+
+      <div className="mb-2.5 h-px bg-(--line)" />
+
+      <Row label="Eraser">
+        <Seg
+          value={eraserMode}
+          onChange={(v) => st().setEraserMode(v)}
+          options={[
+            { id: 'area' as const, label: 'Area' },
+            { id: 'object' as const, label: 'Objects' },
+          ]}
+        />
+      </Row>
+
+      {/* a phone's tray always stands on the left edge, so there is no choice to offer */}
+      {!touch && (
+        <Row label="Tray">
+          <Seg
+            value={tray.placement}
+            onChange={(v) => st().setTray({ placement: v, offset: null })}
+            options={[
+              { id: 'bottom' as const, label: 'Bottom' },
+              { id: 'left' as const, label: 'Left' },
+            ]}
+          />
+        </Row>
+      )}
+
+      <Row label="Depth">
+        <Seg
+          value={tray.depth}
+          onChange={(v) => st().setTray({ depth: v })}
+          options={[
+            { id: 'flat' as const, label: 'Flat' },
+            { id: 'soft' as const, label: 'Soft' },
+            { id: 'regular' as const, label: 'Reg' },
+            { id: 'strong' as const, label: 'Strong' },
+          ]}
+        />
+      </Row>
+
+      {/*
+       * "auto keeps the highlighter on its own and shares the rest", which
+       * is the only one of the three anybody wants by default.
+       */}
+      <Row label="Ink follows">
+        <Seg
+          value={inkMode}
+          onChange={(v) => st().setInkMode(v)}
+          options={[
+            { id: 'auto' as const, label: 'Auto' },
+            { id: 'shared' as const, label: 'All' },
+            { id: 'per-tool' as const, label: 'Each' },
+          ]}
+        />
+      </Row>
+
+      <div className="mb-2.5 flex gap-1">
+        <button
+          onClick={() => st().setTrayGauge(!gauge)}
+          aria-pressed={gauge}
+          title="Print the current size on each barrel"
+          className={`flex ${touch ? 'h-10' : 'h-7'} flex-1 items-center justify-center gap-1 rounded-sm t-caption transition-colors ${
+            gauge ? 'bg-(--sel) text-(--tx)' : 'bg-(--field) text-(--tx2) hover:text-(--tx)'
+          }`}
+        >
+          {gauge && <Check size={12} />}
+          Gauge
+        </button>
+        <button
+          onClick={() => st().setTray({ offset: null })}
+          title="Put the tray back on its edge"
+          className={`${touch ? 'h-10' : 'h-7'} flex-1 rounded-sm bg-(--field) t-caption text-(--tx2) transition-colors hover:text-(--tx)`}
+        >
+          Re-seat
+        </button>
+      </div>
+
+      <div className="mb-2.5 h-px bg-(--line)" />
+
+      <button
+        onClick={() => {
+          onClear?.()
+          st().clear()
+        }}
+        className={`flex ${touch ? 'h-11' : 'h-7'} w-full items-center gap-2 rounded-sm px-2 t-caption text-(--tx2) transition-colors hover:bg-(--panel3) hover:text-(--danger)`}
+      >
+        <Trash2 size={13} />
+        Reset the canvas
+      </button>
+    </>
   )
 }
 
@@ -158,13 +334,6 @@ function Seg<T extends string>({
 function MoreMenu({ depth }: { depth: number }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
-  const grid = useDraw((s) => s.doc.grid)
-  const background = useDraw((s) => s.doc.background)
-  const tray = useDraw((s) => s.tray)
-  const gauge = useDraw((s) => s.trayGauge)
-  const inkMode = useDraw((s) => s.inkMode)
-  const eraserMode = useDraw((s) => s.eraserMode)
-  const st = useDraw.getState
 
   useEffect(() => {
     if (!open) return
@@ -178,9 +347,6 @@ function MoreMenu({ depth }: { depth: number }) {
     }
   }, [open])
 
-  const solid = background !== 'transparent' && background !== 'checker'
-  const surface = solid ? 'solid' : background === 'transparent' ? 'transparent' : 'checker'
-
   return (
     <div ref={ref} className="relative shrink-0">
       <Btn label="Canvas & tray settings" active={open} onClick={() => setOpen((v) => !v)}>
@@ -192,147 +358,7 @@ function MoreMenu({ depth }: { depth: number }) {
           className="absolute z-50 w-60 rounded-lg border border-(--line) bg-(--raised) p-3 shadow-xl"
           style={{ top: depth - NOTCH_PAD + 8, right: -NOTCH_PAD }}
         >
-          <Row label="Paper">
-            <Sheets swatches={PAPER_SWATCHES} current={background} />
-          </Row>
-
-          {/*
-           * The dark end, as its own row rather than five more chips on the end
-           * of the light one. They behave differently enough to be worth
-           * naming: the ink turns to chalk, the grid inverts, and a drawing
-           * made on one looks like a different kind of drawing.
-           */}
-          <Row label="Board">
-            <div className="flex items-center gap-1.5">
-              <Sheets swatches={BOARD_SWATCHES} current={background} />
-              <label
-                className="relative h-6 w-6 shrink-0 cursor-pointer overflow-hidden rounded-sm border border-(--line)"
-                title="Custom sheet colour"
-                style={{ background: solid ? background : 'var(--field)' }}
-              >
-                <input
-                  type="color"
-                  value={/^#[0-9a-f]{6}$/i.test(background) ? background : '#ffffff'}
-                  onChange={(e) => st().setBackground(e.target.value)}
-                  aria-label="Custom sheet colour"
-                  className="absolute inset-0 cursor-pointer opacity-0"
-                />
-              </label>
-            </div>
-          </Row>
-
-          <Row label="Surface">
-            <Seg
-              value={surface}
-              /* back to the sheet you were on, not to white */
-              onChange={(v) => st().setBackground(v === 'solid' ? st().lastSheet : v)}
-              options={[
-                { id: 'solid', label: 'Solid' },
-                { id: 'transparent', label: 'None' },
-                { id: 'checker', label: 'Checker' },
-              ]}
-            />
-          </Row>
-
-          {/* ruled, dotted, or nothing: the three anyone actually wants */}
-          <Row label="Grid">
-            <Seg
-              value={grid}
-              onChange={(v: GridStyle) => st().setGrid(v)}
-              options={[
-                { id: 'off' as const, label: 'Off' },
-                { id: 'lines' as const, label: 'Lines' },
-                { id: 'dots' as const, label: 'Dots' },
-              ]}
-            />
-          </Row>
-
-          <div className="mb-2.5 h-px bg-(--line)" />
-
-          <Row label="Eraser">
-            <Seg
-              value={eraserMode}
-              onChange={(v) => st().setEraserMode(v)}
-              options={[
-                { id: 'area' as const, label: 'Area' },
-                { id: 'object' as const, label: 'Objects' },
-              ]}
-            />
-          </Row>
-
-          <Row label="Tray">
-            <Seg
-              value={tray.placement}
-              onChange={(v) => st().setTray({ placement: v, offset: null })}
-              options={[
-                { id: 'bottom' as const, label: 'Bottom' },
-                { id: 'left' as const, label: 'Left' },
-              ]}
-            />
-          </Row>
-
-          <Row label="Depth">
-            <Seg
-              value={tray.depth}
-              onChange={(v) => st().setTray({ depth: v })}
-              options={[
-                { id: 'flat' as const, label: 'Flat' },
-                { id: 'soft' as const, label: 'Soft' },
-                { id: 'regular' as const, label: 'Reg' },
-                { id: 'strong' as const, label: 'Strong' },
-              ]}
-            />
-          </Row>
-
-          {/*
-           * "auto keeps the highlighter on its own and shares the rest", which
-           * is the only one of the three anybody wants by default.
-           */}
-          <Row label="Ink follows">
-            <Seg
-              value={inkMode}
-              onChange={(v) => st().setInkMode(v)}
-              options={[
-                { id: 'auto' as const, label: 'Auto' },
-                { id: 'shared' as const, label: 'All' },
-                { id: 'per-tool' as const, label: 'Each' },
-              ]}
-            />
-          </Row>
-
-          <div className="mb-2.5 flex gap-1">
-            <button
-              onClick={() => st().setTrayGauge(!gauge)}
-              aria-pressed={gauge}
-              title="Print the current size on each barrel"
-              className={`flex h-7 flex-1 items-center justify-center gap-1 rounded-sm t-caption transition-colors ${
-                gauge ? 'bg-(--sel) text-(--tx)' : 'bg-(--field) text-(--tx2) hover:text-(--tx)'
-              }`}
-            >
-              {gauge && <Check size={12} />}
-              Gauge
-            </button>
-            <button
-              onClick={() => st().setTray({ offset: null })}
-              title="Put the tray back on its edge"
-              className="h-7 flex-1 rounded-sm bg-(--field) t-caption text-(--tx2) transition-colors hover:text-(--tx)"
-            >
-              Re-seat
-            </button>
-          </div>
-
-          <div className="mb-2.5 h-px bg-(--line)" />
-
-          <button
-            onClick={() => {
-              setOpen(false)
-              st().clear()
-            }}
-            className="flex h-7 w-full items-center gap-2 rounded-sm px-2 t-caption text-(--tx2) transition-colors hover:bg-(--panel3) hover:text-(--danger)"
-          >
-            <Trash2 size={13} />
-            Reset the canvas
-          </button>
+          <CanvasSettings onClear={() => setOpen(false)} />
         </div>
       )}
     </div>

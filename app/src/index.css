@@ -4239,3 +4239,17 @@ html:has(.m-app) body {
   box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08);
   backdrop-filter: blur(8px);
 }
+
+/*
+ * The pen tray under a finger. It owns every touch that starts on it, or the
+ * browser reads a drag as a pan and cancels it halfway; and while a hold has
+ * picked it up it rises a little, so the hand can feel that it is carrying it.
+ */
+.m-app .dw-bar {
+  touch-action: none;
+}
+/* shadow and light only: the tray's own transition already animates its size
+   and scale for the morph, and must be left exactly as it is */
+.m-app .dw-bar[data-lifted] {
+  filter: brightness(1.08) drop-shadow(0 14px 22px rgb(0 0 0 / 0.38));
+}

@@ -9,8 +9,9 @@
  *   The dock      the tools you switch between constantly, in one row along
  *                 the bottom edge: select, draw, shapes, text, erase. The five
  *                 shapes share one slot (the dock shows whichever you used
- *                 last) and the rarer tools sit behind More, both opening as a
- *                 small tray right above the button that opened them.
+ *                 last) and the rarer tools and the page settings sit behind
+ *                 More, both opening as a small tray right above the button
+ *                 that opened them.
  *   The pen tray  the same pens-in-a-cup the desktop has, standing on the left
  *                 edge where it goes when the canvas is narrow. It already
  *                 turns into the palette and the size controls, and rolls up
@@ -28,6 +29,7 @@ import {
   Diamond,
   Download,
   Eraser,
+  Grid3x3,
   Hand,
   Image as ImageIcon,
   Lock,
@@ -39,7 +41,6 @@ import {
   Redo2,
   Square,
   StickyNote,
-  Trash2,
   Type,
   Undo2,
   type LucideIcon,
@@ -54,6 +55,8 @@ import {
 import { DrawCanvas } from './DrawCanvas'
 import { PenTray } from './PenTray'
 import { DrawExportDialog } from './DrawEditor'
+import { CanvasSettings } from './ToolRail'
+import { Dialog } from '../components/Overlay'
 import { useDraw } from './store'
 import type { DrawTool } from './types'
 
@@ -229,6 +232,7 @@ export function DrawMobile() {
   const theme = useStudio((s) => s.theme)
   const [tray, setTray] = useState<Tray>(null)
   const [lastShape, setLastShape] = useState<DrawTool>('rect')
+  const [pageOpen, setPageOpen] = useState(false)
   const st = useDraw.getState
 
   useEffect(() => {
@@ -275,6 +279,14 @@ export function DrawMobile() {
 
         {tray === 'more' && (
           <Flyout onClose={() => setTray(null)}>
+            <TrayButton
+              icon={Grid3x3}
+              label="Page"
+              onClick={() => {
+                setTray(null)
+                setPageOpen(true)
+              }}
+            />
             <TrayButton icon={StickyNote} label="Note" on={tool === 'note'} onClick={() => pick('note')} />
             <TrayButton
               icon={ImageIcon}
@@ -292,16 +304,6 @@ export function DrawMobile() {
               onClick={() => {
                 st().setToolLocked(!locked)
                 ui.toast(locked ? 'Tools go back to Select after each shape' : 'The tool stays picked after each shape')
-              }}
-            />
-            <TrayButton
-              icon={Trash2}
-              label="Clear"
-              danger
-              onClick={() => {
-                setTray(null)
-                st().clear()
-                ui.toast('Page cleared. Undo brings it back')
               }}
             />
           </Flyout>
@@ -336,6 +338,12 @@ export function DrawMobile() {
       </nav>
 
       {dialog === 'export' && <DrawExportDialog />}
+      {/* the paper, grid and tray settings the desktop keeps in its canvas menu */}
+      {pageOpen && (
+        <Dialog title="Page" onClose={() => setPageOpen(false)}>
+          <CanvasSettings onClear={() => setPageOpen(false)} />
+        </Dialog>
+      )}
     </div>
   )
 }

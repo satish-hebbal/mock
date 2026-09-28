@@ -517,7 +517,17 @@ export function PenTray() {
    */
   const onPointerDown = (e: React.PointerEvent) => {
     if (!tray.draggable) return
-    if (!collapsed && (e.target as HTMLElement).closest('button, input, [role="slider"], label')) return
+    const onControl =
+      !collapsed && !!(e.target as HTMLElement).closest('button, input, [role="slider"], label')
+    /*
+     * A finger picks the tray up by holding it, anywhere on it, pens included.
+     * A pointer can aim at the gaps between the pens; a fingertip covers a pen
+     * wherever it lands, and an open tray is nearly all pens, so without this
+     * there was nowhere left on it to grab. A tap still picks the pen; only a
+     * press held still for a moment lifts the tray instead.
+     */
+    const hold = onControl && e.pointerType !== 'mouse'
+    if (onControl && !hold) return
     dragMoved.current = false
     const shell = shellRef.current!
     const parent = shell.parentElement!
@@ -525,13 +535,28 @@ export function PenTray() {
     const sr = shell.getBoundingClientRect()
     const grabX = e.clientX - sr.left
     const grabY = e.clientY - sr.top
-    dragging.current = true
-    shell.setPointerCapture(e.pointerId)
-    const move = (ev: PointerEvent) => {
-      // a few pixels of slop, so a slightly shaky click still counts as a click
-      if (Math.abs(ev.clientX - e.clientX) + Math.abs(ev.clientY - e.clientY) > 4) {
-        dragMoved.current = true
+    let armed = !hold
+    let timer = 0
+    const lift = () => {
+      armed = true
+      dragging.current = true
+      shell.setPointerCapture(e.pointerId)
+      if (hold) {
+        shell.dataset.lifted = ''
+        navigator.vibrate?.(8)
       }
+    }
+    if (hold) timer = window.setTimeout(lift, 320)
+    else lift()
+    const move = (ev: PointerEvent) => {
+      const travel = Math.abs(ev.clientX - e.clientX) + Math.abs(ev.clientY - e.clientY)
+      // moving before the hold lands means the finger meant something else
+      if (!armed) {
+        if (travel > 8) finish()
+        return
+      }
+      // a few pixels of slop, so a slightly shaky click still counts as a click
+      if (travel > 4) dragMoved.current = true
       if (!dragMoved.current) return
       st().setTray({
         offset: {
@@ -540,11 +565,31 @@ export function PenTray() {
         },
       })
     }
-    const up = () => {
+    const finish = () => {
+      clearTimeout(timer)
       dragging.current = false
-      shell.releasePointerCapture(e.pointerId)
+      delete shell.dataset.lifted
+      if (shell.hasPointerCapture(e.pointerId)) shell.releasePointerCapture(e.pointerId)
       shell.removeEventListener('pointermove', move)
       shell.removeEventListener('pointerup', up)
+      shell.removeEventListener('pointercancel', finish)
+    }
+    const up = () => {
+      const wasArmed = armed
+      finish()
+      /*
+       * A tray that was carried somewhere must not also press the pen it was
+       * carried by. The click that follows the lift is swallowed, and the
+       * guard is taken down again straight after in case no click comes.
+       */
+      if (hold && wasArmed) {
+        const swallow = (ev: Event) => {
+          ev.stopPropagation()
+          ev.preventDefault()
+        }
+        shell.addEventListener('click', swallow, { capture: true, once: true })
+        setTimeout(() => shell.removeEventListener('click', swallow, { capture: true }), 60)
+      }
       /*
        * Unrolling is handled here rather than left to the button underneath.
        * Capturing the pointer for the drag redirects the compatibility mouse
@@ -555,6 +600,7 @@ export function PenTray() {
     }
     shell.addEventListener('pointermove', move)
     shell.addEventListener('pointerup', up)
+    shell.addEventListener('pointercancel', finish)
   }
 
   const goto = (f: TrayFace) => st().setTrayFace(face === f ? 'tools' : f)

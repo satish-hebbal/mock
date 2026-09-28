@@ -6,7 +6,9 @@
  * flat texture has no subject, and a grid of characters cut from one is grey
  * noise with a grain to it. What survives the treatment is a picture with a
  * shape in it and some distance between its darkest and lightest parts, so the
- * three categories below are the ones offered, in the order they read best.
+ * categories below are the ones offered, in the order they read best. Dakshin
+ * earns its place the same way: temple towers, carved stone and hands against
+ * black are all silhouette and contrast.
  *
  * `STARTERS` is the short row the empty canvas shows. Six, because it sits
  * under a drop zone and is meant to be scanned in one look rather than
@@ -22,6 +24,7 @@ export const ASCII_PRESET_CATEGORIES: { id: PresetPhotoCategory; label: string }
   { id: 'anime', label: 'Anime' },
   { id: 'nature', label: 'Nature' },
   { id: 'abstract', label: 'Abstract' },
+  { id: 'dakshin', label: 'Dakshin' },
 ]
 
 const STARTER_IDS = [

@@ -3653,6 +3653,16 @@ button:hover > .inv-coin {
 .sg-tile[data-edge]:focus-visible .sg-tip {
   transform: translate(0, 0);
 }
+/*
+ * A pointer passing over the grid on its way somewhere else is not asking what
+ * a tile is, and a card flashing up under it every few tiles reads as noise.
+ * The card waits for the pointer to rest; leaving still hides it at once, and
+ * keyboard focus, which is always deliberate, still shows it straight away.
+ */
+.sg-tile:hover .sg-tip,
+.dv-chip:hover .sg-tip {
+  transition-delay: 1.5s;
+}
 .sg-tip-name {
   font-size: 12px;
   font-weight: 600;

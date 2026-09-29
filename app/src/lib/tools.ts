@@ -127,6 +127,7 @@ export const TOOLS: Tool[] = [
     name: 'ASCII',
     tagline: 'Images as text or dither.',
     icon: Grid3x3,
+    beta: true,
     tint: ['158, 118, 226', '196, 150, 244'],
     // violet-blue into orchid, magenta thrown hard right
     aurora: {
@@ -143,6 +144,7 @@ export const TOOLS: Tool[] = [
     name: 'Signal',
     tagline: 'Dithered motion loops.',
     icon: Waves,
+    beta: true,
     tint: ['58, 168, 208', '110, 208, 236'],
     // cobalt into cyan, landing on aqua green. Next to Studio's indigo it needs
     // the green end to stay a separate card rather than a second blue one

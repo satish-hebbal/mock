@@ -557,7 +557,7 @@ export function MediaGroup() {
           <span className="flex h-8 w-8 items-center justify-center rounded-full bg-(--field) text-(--tx2)">
             <Plus size={16} strokeWidth={2} />
           </span>
-          <span className="t-body-sm text-(--tx2)">Drop media or click to choose</span>
+          <span className="t-body-sm text-(--tx2)">Drop a screenshot or click to choose</span>
           <span className="t-caption text-(--tx3)">Images &amp; videos</span>
         </button>
         <button

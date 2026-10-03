@@ -76,7 +76,7 @@ export const TOOLS: Tool[] = [
   {
     id: 'studio',
     name: '3D Studio',
-    tagline: 'Film a screen in 3D.',
+    tagline: '3D mockup videos.',
     icon: Boxes,
     tint: ['94, 106, 210', '130, 143, 255'],
     // indigo climbing into periwinkle, cut by a cyan lobe on the left
@@ -92,7 +92,7 @@ export const TOOLS: Tool[] = [
   {
     id: 'shots',
     name: 'Shots',
-    tagline: 'Screens on a backdrop.',
+    tagline: 'Screenshot mockups.',
     icon: ImageIcon,
     tint: ['224, 138, 62', '236, 186, 96'],
     // the one warm card: burnt orange under amber, gold breaking right. The
@@ -109,7 +109,7 @@ export const TOOLS: Tool[] = [
   {
     id: 'draw',
     name: 'Draw',
-    tagline: 'A whiteboard with pens.',
+    tagline: 'Online whiteboard.',
     icon: PenLine,
     tint: ['64, 176, 140', '96, 200, 176'],
     // deep teal into emerald, with lime as the break. The one green in six
@@ -125,7 +125,7 @@ export const TOOLS: Tool[] = [
   {
     id: 'ascii',
     name: 'ASCII',
-    tagline: 'Images as text or dither.',
+    tagline: 'Images to ASCII art.',
     icon: Grid3x3,
     beta: true,
     tint: ['158, 118, 226', '196, 150, 244'],
@@ -142,7 +142,7 @@ export const TOOLS: Tool[] = [
   {
     id: 'signal',
     name: 'Signal',
-    tagline: 'Dithered motion loops.',
+    tagline: 'Animated backgrounds.',
     icon: Waves,
     beta: true,
     tint: ['58, 168, 208', '110, 208, 236'],
@@ -160,7 +160,7 @@ export const TOOLS: Tool[] = [
   {
     id: 'invoice',
     name: 'Invoice',
-    tagline: 'Invoices, ready to send.',
+    tagline: 'Make PDF invoices.',
     icon: ReceiptText,
     beta: true,
     tint: ['212, 78, 140', '240, 132, 184'],

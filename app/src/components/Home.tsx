@@ -103,7 +103,7 @@ export function Home() {
               the tools keep the row centred in the space over it. */}
           <div className="mt-10 flex flex-col items-center text-center">
             <h1 className="t-headline text-(--tx)">Ribbit</h1>
-            <p className="mt-1 t-body text-(--tx2)">A personal toolkit for visual work.</p>
+            <p className="mt-1 t-body text-(--tx2)">Free tools for mockups, visuals and invoices. No sign-up.</p>
             <span className="mt-1 t-caption tabular-nums text-(--tx3)">v{__APP_VERSION__}</span>
           </div>
         </div>

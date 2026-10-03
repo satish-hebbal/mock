@@ -20,7 +20,7 @@ export function UploadPrompt({ onFiles }: { onFiles: (files: File[]) => void }) 
   return (
     <div className="pointer-events-auto flex items-center gap-3 rounded-full border border-(--line) bg-(--raised) py-2 pr-2 pl-5">
       <span className="t-body text-(--tx2)">
-        {touch ? 'Add a screenshot to start' : 'Upload media to get started (or paste / drop).'}
+        {touch ? 'Add a screenshot to start' : 'Drop or paste a screenshot to start'}
       </span>
       {/*
         Pill, not the default `rounded-md` button: this one is nested inside a

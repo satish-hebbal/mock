@@ -37,6 +37,7 @@ import { UploadPrompt } from './components/UploadPrompt'
 import { useIsDesktop } from './lib/breakpoint'
 import { usePlayback } from './lib/playback'
 import { modeFromLocation } from './lib/routes'
+import { TOOLS } from './lib/tools'
 import { ui } from './lib/ui'
 
 /*
@@ -731,6 +732,13 @@ function useRouting() {
     window.addEventListener('popstate', onPop)
     return () => window.removeEventListener('popstate', onPop)
   }, [])
+
+  // the tab names the tool and its job, so a row of Ribbit tabs can be told apart
+  const mode = useStudio((s) => s.mode)
+  useEffect(() => {
+    const tool = TOOLS.find((t) => t.id === mode)
+    document.title = tool ? `${tool.name}: ${tool.tagline.replace(/\.$/, '')} | Ribbit` : 'Ribbit: free mockup and visual tools'
+  }, [mode])
 }
 
 function StudioLayout() {

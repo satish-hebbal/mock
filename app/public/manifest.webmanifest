@@ -1,7 +1,7 @@
 {
-  "name": "Mockup Studio",
-  "short_name": "Mockup Studio",
-  "description": "Cinematic 3D device mockups & motion video, 100% in your browser.",
+  "name": "Ribbit",
+  "short_name": "Ribbit",
+  "description": "Free tools for mockups, visuals and invoices. Runs in your browser, no sign-up.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

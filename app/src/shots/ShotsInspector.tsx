@@ -19,7 +19,6 @@ import {
   RotateCw,
   Squircle,
   StretchVertical,
-  Upload,
   Wand2,
   type LucideIcon,
 } from 'lucide-react'
@@ -294,18 +293,16 @@ export function TiltSection() {
   )
 }
 
+/*
+ * The canvas already asks for a screenshot, and so does the media well on the
+ * left. A third ask here made an empty editor read as a form with four fields
+ * saying the same thing, so this one only says what the panel is for.
+ */
 function EmptyState() {
   return (
-    <div className="px-3 py-6 text-center">
-      <span className="mx-auto mb-2 flex h-9 w-9 items-center justify-center rounded-full bg-(--field) text-(--tx2)">
-        <Upload size={16} strokeWidth={1.75} />
-      </span>
-      <p className="t-body-sm text-(--tx2)">No screen yet</p>
-      <p className="mt-1 t-caption leading-snug text-(--tx3)">
-        Add one from <span className="text-(--tx2)">Mockup → Media</span> on the left, or drop a
-        screenshot onto the canvas.
-      </p>
-    </div>
+    <p className="px-3 py-6 text-center t-caption leading-snug text-(--tx3)">
+      Frame, position and tilt controls appear here once there is a screenshot.
+    </p>
   )
 }
 

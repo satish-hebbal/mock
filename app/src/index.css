@@ -228,11 +228,17 @@
    *           where it reads as a hard cut with a long tail rather than as a
    *           fade. `smooth` is the worst of the three at this: it is an
    *           exponential out, so a 340ms fade on it is 90% finished in 60ms.
+   *
+   *   exit    the mirror of settle: starts slow and leaves at full speed. For a
+   *           thing going back off the edge it came from. Decelerating out of
+   *           view spends the end of the animation creeping across the last few
+   *           pixels, which is the part nobody can see, so the close feels late.
    */
   --ease-settle: cubic-bezier(0.22, 0.9, 0.16, 1);
   --ease-smooth: cubic-bezier(0.19, 1, 0.22, 1);
   --ease-snappy: cubic-bezier(0.175, 0.885, 0.32, 1.1);
   --ease-bloom: cubic-bezier(0.4, 0, 0.6, 1);
+  --ease-exit: cubic-bezier(0.7, 0, 0.84, 0);
 
   /*
    * Hover arrives faster than it leaves.
@@ -424,6 +430,62 @@ body {
   to {
     transform: translateY(0);
   }
+}
+@keyframes sheet-lift {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-101%);
+  }
+}
+@keyframes sheet-content-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/*
+ * How the sheet moves, and why it costs so little to.
+ *
+ * The sheet is a blur over the whole width of the window, and a moving blur is
+ * worked out again on every frame of the move. That is affordable only while
+ * what is under it holds still, so the 3D view, the pond and Signal's canvas
+ * all park for as long as the sheet is on screen, its exit included, and the
+ * blur is 24px rather than 40: under a panel this opaque the two look the same
+ * and the smaller one is roughly half the work.
+ *
+ * In, it travels on settle and the cards trail it by a beat, coming down the
+ * last 6px as they fade up, so the sheet reads as having weight rather than
+ * as one flat picture sliding. The fade is on bloom because an opacity change
+ * on an exponential curve is a cut with a tail.
+ *
+ * Out is faster and accelerates away on exit. The scrim lifts at once, so the
+ * page is back before the sheet has finished leaving.
+ */
+.app-sheet {
+  animation: sheet-drop 320ms var(--ease-settle) both;
+  will-change: transform;
+}
+.app-sheet-body {
+  animation: sheet-content-in 260ms var(--ease-bloom) 70ms both;
+}
+.app-sheet-scrim {
+  animation: scrim-in 220ms var(--ease-bloom) both;
+}
+.app-sheet-root[data-closing] {
+  pointer-events: none;
+}
+.app-sheet-root[data-closing] .app-sheet {
+  animation: sheet-lift 190ms var(--ease-exit) both;
+}
+.app-sheet-root[data-closing] .app-sheet-scrim {
+  animation: overlay-scrim-out 150ms var(--ease-smooth) both;
 }
 /*
  * The quick-snap shutter. The band starts fully off the left edge and leaves
@@ -895,6 +957,9 @@ body {
   [style*="sheet-drop"],
   [class*="sheet-drop"],
   [class*="scrim-in"],
+  .app-sheet,
+  .app-sheet-body,
+  .app-sheet-scrim,
   [style*="attract-in"] {
     animation: none !important;
   }

@@ -28,6 +28,8 @@ export type PondElements = {
 export type Pond = {
   setEnvironment(name: EnvName): void
   setLight(light: boolean): void
+  /** hold the last frame while something is drawn over the pond, such as the app menu */
+  setPaused(paused: boolean): void
   dispose(): void
 }
 
@@ -65,6 +67,7 @@ export function createPond(el: PondElements, initial: { env: EnvName; light: boo
   let lastInput = performance.now()
   let awakeUntil = 0
   let frozen = false
+  let paused = false
   let disposed = false
   let shoreD = ''
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
@@ -81,7 +84,7 @@ export function createPond(el: PondElements, initial: { env: EnvName; light: boo
   if (!renderer) {
     // a weak device, data saver, or no WebGL2: a still, painted pond and nothing running
     host.dataset.poster = ''
-    return { setEnvironment() {}, setLight() {}, dispose() {} }
+    return { setEnvironment() {}, setLight() {}, setPaused() {}, dispose() {} }
   }
   const governor = createGovernor(renderer.gl, typeof start === 'number' ? start : 1, (tier) => {
     if (tier === 'frozen') {
@@ -159,7 +162,7 @@ export function createPond(el: PondElements, initial: { env: EnvName; light: boo
   }
 
   function canRun(now: number) {
-    if (disposed || frozen || document.hidden) return false
+    if (disposed || frozen || paused || document.hidden) return false
     return !reducedMotion.matches || now < awakeUntil
   }
 
@@ -339,6 +342,16 @@ export function createPond(el: PondElements, initial: { env: EnvName; light: boo
     setLight(light) {
       renderer.setTheme(light)
       drawOnce()
+    },
+    /*
+     * The app menu blurs whatever is under it, so every frame the pond draws
+     * there is a frame the blur has to be worked out again, and the sheet's
+     * slide is what pays for it. A held frame looks the same under a blur.
+     */
+    setPaused(next) {
+      paused = next
+      if (paused) stop()
+      else wake()
     },
     dispose() {
       disposed = true

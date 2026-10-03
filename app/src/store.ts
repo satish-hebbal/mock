@@ -106,6 +106,8 @@ interface StudioState {
   shotsSection: ShotsSection
   /** app menu sheet dropped down from the top (tools, theme, shortcuts) */
   sheetOpen: boolean
+  /** the sheet is on screen, which outlasts `sheetOpen` by its exit; what animates behind it parks on this */
+  sheetCovering: boolean
   /** right inspector panel visible */
   panelOpen: boolean
   /** bottom timeline expanded past its transport bar (collapsed by default) */
@@ -256,6 +258,7 @@ interface StudioState {
   /** move to a section without the toggle-shut behaviour, for the swipe pager */
   setShotsSection: (id: ShotsSection) => void
   setSheetOpen: (v: boolean) => void
+  setSheetCovering: (v: boolean) => void
   setPanelOpen: (v: boolean) => void
   setTimelineOpen: (v: boolean) => void
   setGizmo: (m: GizmoMode) => void
@@ -344,6 +347,7 @@ export const useStudio = create<StudioState>()(
     ),
     shotsSection: (localStorage.getItem('ms-shots-section') as ShotsSection | null) ?? 'mockup',
     sheetOpen: false,
+    sheetCovering: false,
     panelOpen: localStorage.getItem('ms-panel') !== 'closed',
     timelineOpen: localStorage.getItem('ms-timeline') === 'open',
     gizmo: 'off',
@@ -1254,6 +1258,7 @@ export const useStudio = create<StudioState>()(
       })
     },
     setSheetOpen: (v) => set((s) => void (s.sheetOpen = v)),
+    setSheetCovering: (v) => set((s) => void (s.sheetCovering = v)),
     setPanelOpen: (v) => {
       localStorage.setItem('ms-panel', v ? 'open' : 'closed')
       set((s) => void (s.panelOpen = v))

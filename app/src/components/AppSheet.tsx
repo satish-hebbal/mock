@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Home as HomeIcon, Keyboard, Moon, Sun, X, type LucideIcon } from 'lucide-react'
 import { useStudio, type AppMode } from '../store'
 import { TOOLS, toolGlow, toolTint } from '../lib/tools'
@@ -43,17 +43,36 @@ export function AppSheet() {
   const st = useStudio.getState
 
   /*
-   * Park the render loop while the sheet is over the canvas. The 3D view draws
-   * continuously, and it sits directly behind a backdrop-filter, so every
-   * frame invalidates the blur and forces the compositor to redo it, which is
-   * what makes hovering in here feel a beat late. Nothing behind the sheet
-   * needs to animate while it's open.
+   * On screen outlasts open: closing flips `open` at once, so Escape and the
+   * logo answer immediately, and the sheet stays mounted until its exit has
+   * played. The timer is the floor under `onAnimationEnd`, which never fires
+   * when reduced motion has switched the animation off.
+   */
+  const [shown, setShown] = useState(open)
+  if (open && !shown) setShown(true)
+  const closing = shown && !open
+  useEffect(() => {
+    if (!closing) return
+    const t = window.setTimeout(() => setShown(false), 260)
+    return () => clearTimeout(t)
+  }, [closing])
+
+  /*
+   * Park everything that animates behind the sheet for as long as it is on
+   * screen. The 3D view, the pond and Signal's canvas all sit under a
+   * backdrop-filter, so every frame they draw invalidates the blur and forces
+   * the compositor to redo it, which is what made the slide drop frames and
+   * hovering in here feel a beat late. A held frame looks the same blurred.
    */
   useEffect(() => {
-    if (!open) return
+    if (!shown) return
     rt.setFrameloop?.('never')
-    return () => rt.setFrameloop?.('always')
-  }, [open])
+    st().setSheetCovering(true)
+    return () => {
+      rt.setFrameloop?.('always')
+      st().setSheetCovering(false)
+    }
+  }, [shown, st])
 
   // Escape closes the sheet before the global handler gets to clear a selection
   useEffect(() => {
@@ -67,7 +86,7 @@ export function AppSheet() {
     return () => window.removeEventListener('keydown', onKey, true)
   }, [open, st])
 
-  if (!open) return null
+  if (!shown) return null
 
   const close = () => st().setSheetOpen(false)
   const go = (m: AppMode) => {
@@ -76,17 +95,18 @@ export function AppSheet() {
   }
 
   return (
-    <div className="fixed inset-0 z-50" onMouseDown={close}>
-      <div className="absolute inset-0 animate-[scrim-in_160ms_ease-out] bg-black/35" />
+    <div className="app-sheet-root fixed inset-0 z-50" data-closing={closing || undefined} onMouseDown={close}>
+      <div className="app-sheet-scrim absolute inset-0 bg-black/35" />
       <div
         onMouseDown={(e) => e.stopPropagation()}
-        className="absolute inset-x-0 top-0 animate-[sheet-drop_240ms_cubic-bezier(0.2,0.85,0.25,1)] border-b border-(--line) bg-(--raised)/72 px-6 pt-5 pb-6 backdrop-blur-2xl backdrop-saturate-150"
+        onAnimationEnd={(e) => closing && e.target === e.currentTarget && setShown(false)}
+        className="app-sheet absolute inset-x-0 top-0 border-b border-(--line) bg-(--raised)/80 px-6 pt-5 pb-6 backdrop-blur-xl backdrop-saturate-150"
       >
-        <div className="mx-auto max-w-5xl xl:max-w-6xl">
+        <div className="app-sheet-body mx-auto max-w-5xl xl:max-w-6xl">
           <div className="mb-4 flex items-center gap-2.5">
             <img src="/frog-logo.svg" alt="" width={22} height={22} />
             <span className="t-body font-semibold text-(--tx)">Ribbit</span>
-            <span className="t-body-sm text-(--tx3)">a personal toolkit for visual work</span>
+            <span className="t-body-sm text-(--tx3)">free tools, no sign-up</span>
           </div>
 
           <p className="mb-2 t-eyebrow text-(--tx3) uppercase">

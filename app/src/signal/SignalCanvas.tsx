@@ -26,6 +26,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Pause, Play, RotateCcw } from 'lucide-react'
 import { useSignal } from './store'
+import { useStudio } from '../store'
 import { renderSignal } from './render'
 
 function useContainerSize(ref: React.RefObject<HTMLDivElement | null>) {
@@ -112,6 +113,12 @@ export function SignalCanvas({ compact = false }: { compact?: boolean }) {
     const tick = (now: number) => {
       raf = requestAnimationFrame(tick)
       if (hidden) return
+      // under the app menu's blur a moving pattern costs the sheet its frames, so
+      // hold still, and restart the clock on return rather than jump ahead
+      if (useStudio.getState().sheetCovering) {
+        lastFrame = 0
+        return
+      }
 
       const s = useSignal.getState()
       const cap = s.doc.canvas.fpsCap

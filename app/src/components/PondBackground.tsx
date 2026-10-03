@@ -2,6 +2,7 @@ import { useEffect, useRef, type RefObject } from 'react'
 import { Cloud, CloudRain, Sun, Sunset, type LucideIcon } from 'lucide-react'
 import type { EnvName } from '../pond/environments'
 import type { Pond } from '../pond/engine'
+import { useStudio } from '../store'
 
 /**
  * The live pond behind the home page.
@@ -48,6 +49,7 @@ export function PondBackground({ contentRef, env, light }: { contentRef: RefObje
         },
         latest.current,
       )
+      pondRef.current.setPaused(useStudio.getState().sheetCovering)
     })
     return () => {
       cancelled = true
@@ -58,6 +60,9 @@ export function PondBackground({ contentRef, env, light }: { contentRef: RefObje
 
   useEffect(() => pondRef.current?.setEnvironment(env), [env])
   useEffect(() => pondRef.current?.setLight(light), [light])
+  // the app menu blurs the pond; see `setPaused`
+  const covered = useStudio((s) => s.sheetCovering)
+  useEffect(() => pondRef.current?.setPaused(covered), [covered])
 
   return (
     <div ref={hostRef} className="pond-host" aria-hidden="true">
